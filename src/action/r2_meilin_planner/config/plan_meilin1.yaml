@@ -1,0 +1,57 @@
+# # 直接描述 robot_interfaces/msg/Plan 的内容
+# # 发布节点固定读取该文件，并发布到 /r2_planner/plan
+notes: "meilin plan from yaml"
+
+steps:
+  - type: MOVE
+    from_id: 0
+    target_id: 2
+    prep_pose: {x: 2.7, y: -2.97, theta: 0.0}
+    abs_dh: 0.2
+    stair_dir: UP
+
+  # - type: PICK
+  #   from_id: 2
+  #   target_id: 5
+  #   prep_pose: {x: 3.9, y: -3.0, theta: 0.0}
+  #   grasp_yaw: 0.0
+  #   cube_x: 4.6
+  #   cube_y: -3.1
+  #   block_height: 0.37
+
+#   - type: MOVE
+#     from_id: 2
+#     target_id: 5
+#     prep_pose: {x: 3.9, y: -2.97, theta: 0.0}
+#     abs_dh: 0.2
+#     stair_dir: UP
+
+#   - type: MOVE
+#     from_id: 5
+#     target_id: 8
+#     prep_pose: {x: 5.1, y: -2.97, theta: 0.0}
+#     abs_dh: 0.2
+#     stair_dir: UP
+
+#   - type: MOVE
+#     from_id: 8
+#     target_id: 9
+#     prep_pose: {x: 6.3, y: -2.97, theta: 1.57}
+#     abs_dh: 0.2
+#     stair_dir: DOWN
+
+#   - type: MOVE
+#     from_id: 9
+#     target_id: 12
+#     prep_pose: {x: 6.3, y: -1.72, theta: 0.0}
+#     abs_dh: 0.2
+#     stair_dir: DOWN
+
+#   - type: MOVE
+#     from_id: 12
+#     target_id: 13
+#     prep_pose: {x: 7.5, y: -1.72, theta: 0.0}
+#     abs_dh: 0.2
+#     stair_dir: DOWN
+
+

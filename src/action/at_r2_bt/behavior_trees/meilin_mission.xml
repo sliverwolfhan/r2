@@ -1,0 +1,152 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <!-- ================== 主树 ==================
+       每轮：先 Pop 出当前步，再 Peek 偷看下一步（写到 next_* 黑板键），
+       然后路由到 MOVE/PICK/PUSH 子树。 -->
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <GetPlan node="{node}"
+               topic="/r2_planner/plan"
+               plan="{plan}"
+               num_steps="{num_steps}"/>
+
+      <Repeat num_cycles="{num_steps}">
+        <Sequence>
+          <PopNextStep plan="{plan}"
+                       step_type="{step_type}"
+                       target_id="{target_id}"
+                       from_id="{from_id}"
+                       prep_x="{prep_x}"
+                       prep_y="{prep_y}"
+                       prep_yaw="{prep_yaw}"
+                       grasp_yaw="{grasp_yaw}"
+                       abs_dh="{abs_dh}"
+                       stair_dir="{stair_dir}"
+                       cube_x="{cube_x}"
+                       cube_y="{cube_y}"
+                       block_height="{block_h}"/>
+
+          <!-- Pop 已经把当前步从 plan 队首移走，
+               PeekNextStep 看到的就是真正的"下一步"。 -->
+          <PeekNextStep plan="{plan}"
+                        next_step_type="{next_step_type}"
+                        next_target_id="{next_target_id}"
+                        next_from_id="{next_from_id}"
+                        next_cube_x="{next_cube_x}"
+                        next_cube_y="{next_cube_y}"
+                        next_block_height="{next_block_height}"/>
+
+          <Switch3 variable="{step_type}"
+                   case_1="MOVE"
+                   case_2="PICK"
+                   case_3="PUSH">
+            <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
+            <SubTree ID="PickAtBlock" _autoremap="true"/>
+            <SubTree ID="PushAtBlock" _autoremap="true"/>
+            <AlwaysFailure/>
+          </Switch3>
+        </Sequence>
+      </Repeat>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ================== MOVE 子树 ==================
+       1) 串行：先导航到 prep 点；
+       2) 并行：楼梯腿（爬/下楼或不动）和 机械臂腿（按下一步是否 PICK 决定）。
+       机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
+  <BehaviorTree ID="MoveBetweenBlocks">
+    <Sequence>
+      <PublishGoal node="{node}"
+                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                   frame_id="map"
+                   goal="{nav_goal}"/>
+      <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
+                        
+      <!-- <DelayMs delay_msec="4000">
+        <AlwaysSuccess/>
+      </DelayMs> -->
+
+      <ParallelAll max_failures="1">
+        <!-- 楼梯腿 -->
+        <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+          <ClimbStair   node="{node}" height="{abs_dh}"/>
+          <DescendStair node="{node}" height="{abs_dh}"/>
+          <AlwaysSuccess/>
+        </Switch2>
+
+        <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体） -->
+        <ForceSuccess>
+          <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+            <Sequence>
+              <SelectArmPrepName next_from_id="{next_from_id}"
+                                 next_target_id="{next_target_id}"
+                                 arm_prep_name="{arm_prep_name}"/>
+              <DelayMs delay_msec="4000">
+                <AlwaysSuccess/>
+              </DelayMs>
+              <ArmMoveNamed node="{node}"
+                            pose_name="{arm_prep_name}"
+                            server_name="robotic_task"
+                            task_id="1"/>
+            </Sequence>
+            <AlwaysSuccess/>
+            <AlwaysSuccess/>
+          </Switch2>
+        </ForceSuccess>
+      </ParallelAll>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ================== PICK 子树 ==================
+       和 MOVE 一样先把机器人摆到 prep_pose 上对齐到 target 那一侧，再伸臂抓。 -->
+  <BehaviorTree ID="PickAtBlock">
+    <Sequence>
+      <!-- <PublishGoal node="{node}"
+                   x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
+                   frame_id="map"
+                   goal="{nav_goal}"/> -->
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
+      <ArmTask node="{node}"
+               task_id="2"
+               server_name="robotic_task"
+               base_frame="base_link"
+               target_frame="target_object"
+               map_frame="map"
+               tf_timeout="1.0"
+               cube_x="{cube_x}"
+               cube_y="{cube_y}"
+               block_height="{block_h}"
+               grasp_height="{block_h}"
+               goal_data="{arm_goal_data}"
+               err_code="{arm_err_code}"
+               reason="{arm_reason}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ================== PUSH 子树 ================== -->
+  <BehaviorTree ID="PushAtBlock">
+    <Sequence>
+      <PublishGoal node="{node}"
+                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                   frame_id="map"
+                   goal="{nav_goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <ArmTask node="{node}"
+               task_id="3"
+               server_name="robotic_task"
+               base_frame="base_footprint"
+               target_frame="target_object"
+               map_frame="map"
+               tf_timeout="5.0"
+               cube_x="{cube_x}"
+               cube_y="{cube_y}"
+               block_height="{block_h}"
+               grasp_height="0.0"
+               goal_data="{arm_goal_data}"
+               err_code="{arm_err_code}"
+               reason="{arm_reason}"/>
+    </Sequence>
+  </BehaviorTree>
+
+</root>

@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="MultiGoalPatrol">
+      <!-- First goal -->
+       <!-- <PublishGoal node="{node}" x="8.7" y="-4.20" yaw="3.14" frame_id="map" goal="{goal}"/>
+       <PreSteerAlign node="{node}" vx="0.1" duration="0.1"/>  -->
+      <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="6.0"
+                wait_after_set="0.3"
+                goal_angle_threshold="2.0"/>
+
+      <Sequence name="ThroughNarrowGate">
+        <SetCostmapInflation node="{node}"
+                            local_radius="0.05"
+                            global_radius="0.15"
+                            local_cost_scaling_factor="5.0"
+                            global_cost_scaling_factor="5.0"/>
+        <PublishGoal node="{node}" x="1.3" y="-5.2" yaw="1.57" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="1.3" y="-5.35" yaw="1.57" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="1.3" y="-4.0" yaw="-1.57" frame_id="map" goal="{goal}"/>
+        <SetCostmapInflation node="{node}"
+                            local_radius="0.3"
+                            global_radius="0.3"
+                            local_cost_scaling_factor="1.0"
+                            global_cost_scaling_factor="4.0"/>
+      </Sequence>
+
+      <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="5.0"
+                wait_after_set="0.3"
+                goal_angle_threshold="0.3"/>
+      <!-- Second goal -->
+
+      <Sequence name="Climb1">
+        <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.3" publish_rate_hz="50"/>
+        <ClimbStair node="{node}" height="0.25"/>
+      </Sequence>
+      <!-- <PublishGoal node="{node}" x="3.8" y="-3.0" yaw="-1.57" frame_id="map" goal="{goal}"/> -->
+
+      <!-- Third goal -->
+      <Sequence name="Climb2">
+        <PublishGoal node="{node}" x="3.8" y="-3.0" yaw="-1.57"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.3" publish_rate_hz="50"/>
+        <ClimbStair node="{node}" height="0.25"/>
+      </Sequence>
+      <!-- Return to start -->
+       <!-- <PublishGoal node="{node}" x="2.0" y="5.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+      <!-- <PublishGoal node="{node}" x="6.2" y="-4.20" yaw="1.57" frame_id="map" goal="{goal}"/> -->
+      <Sequence name="Climb3">
+        <PublishGoal node="{node}" x="3.8" y="-4.2" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.3" publish_rate_hz="50"/>
+        <ClimbStair node="{node}" height="0.25"/>
+      </Sequence>
+      <!-- <PublishGoal node="{node}" x="6.2" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+      <Sequence name="Descend1">
+        <PublishGoal node="{node}" x="5.0" y="-4.2" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.2" publish_rate_hz="50"/>
+        <DescendStair node="{node}" height="0.21"/>
+      </Sequence>
+      <Sequence name="Descend2">
+        <PublishGoal node="{node}" x="6.2" y="-4.2" yaw="-0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.2" publish_rate_hz="50"/>
+        <DescendStair node="{node}" height="0.21"/>
+      </Sequence>
+      <Sequence name="Descend3">
+        <PublishGoal node="{node}" x="7.4" y="-4.2" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.2" publish_rate_hz="50"/>
+        <DescendStair node="{node}" height="0.21"/>
+      </Sequence>
+
+      <SetCostmapInflation node="{node}"
+                    local_radius="0.45"
+                    global_radius="0.45"
+                    local_cost_scaling_factor="1.0"
+                    global_cost_scaling_factor="4.0"/>
+      <SetMppiParams node="{node}"
+                    controller_node="/AT_R2/controller_server"
+                    plugin_prefix="FollowPath"
+                    goal_angle_weight="5.0"
+                    goal_angle_threshold="0.3"
+                    wait_after_set="0.3"
+                    wz_std="0.45"
+                    vx_std="0.45"
+                    vy_std="0.45"/>
+      <PublishGoal node="{node}" x="8.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="2.0" y="-1.2" yaw="0.0" frame_id="map" goal="{goal}"/>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

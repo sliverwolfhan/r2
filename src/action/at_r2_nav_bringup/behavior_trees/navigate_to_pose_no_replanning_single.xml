@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  navigate_to_pose_no_replanning_single.xml
+  单控制器版本：只规划一次路径，全程使用 MPPI (FollowPath)
+-->
+<root BTCPP_format="3"
+      main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode name="NavigateRecovery"
+                  number_of_retries="10">
+      <Sequence name="NavigateWithFixedPath">
+        <!-- 只在开始时规划一次，不循环重规划 -->
+        <RecoveryNode name="ComputePathToPose"
+                      number_of_retries="1">
+          <ComputePathToPose goal="{goal}"
+                             path="{path}"
+                             planner_id="GridBased"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Context"
+                              service_name="global_costmap/clear_entirely_global_costmap"/>
+        </RecoveryNode>
+
+        <RecoveryNode name="FollowPath"
+                      number_of_retries="10">
+          <FollowPath path="{path}"
+                      controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context"
+                              service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </Sequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+                                service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <BackUp backup_dist="0.05"
+                  backup_speed="0.1"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -1,0 +1,39 @@
+# colcon / ROS2 工作空间产物
+build/
+install/
+log/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 大文件 (PCD 点云、地图、bag 等)
+# 默认忽略所有 PCD，下面再用 ! 显式放行需要的文件
+*.pcd
+*.bag
+*.db3
+*.mcap
+
+# === 显式放行的 PCD 文件（< 100MB） ===
+!src/action/at_r2_nav_bringup/pcd/rc_2026_blue.pcd
+!src/action/at_r2_nav_bringup/pcd/rc_2026_blue1.pcd
+!src/action/at_r2_nav_bringup/pcd/rc_2026_red.pcd
+!src/action/at_r2_nav_bringup/pcd/ATRC_20261.pcd
+!src/action/at_r2_nav_bringup/pcd/ATRC_2026_lan.pcd
+!src/location/point_lio/PCD/scans.pcd
+!src/location/point_lio/PCD/scans1.pcd
+
+# 这两个 > 100MB 一定超 GitHub 限制，保持忽略
+# src/action/at_r2_nav_bringup/pcd/ATRC_2026.pcd  (129 MB)
+# src/location/point_lio/PCD/dixiashi.pcd        (219 MB)

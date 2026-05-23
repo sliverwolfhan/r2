@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="MultiGoalPatrol">
+      <!-- First goal -->
+      <!-- <Sequence name="Climb1">
+        <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.5"/>
+        <ClimbStair node="{node}" height="0.25"/>
+      </Sequence> -->
+      <!-- Second goal -->
+      <PublishGoal node="{node}" x="3.8" y="-0.6" yaw="1.57" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <PublishGoal node="{node}" x="5.0" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <PublishGoal node="{node}" x="6.2" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <PublishGoal node="{node}" x="7.4" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <PublishGoal node="{node}" x="2.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      <PublishGoal node="{node}" x="7.4" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+     <PublishGoal node="{node}" x="3.8" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
+      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+      
+      <!-- ArmTask example: TF first, fallback_data(7) + grasp_height -->
+      <ArmTask node="{node}"
+               task_id="2"
+               server_name="robotic_task"
+               base_frame="base_link"
+               target_frame="target_object"
+               tf_timeout="1.0"
+               fallback_data="-0.10;0.20;0.35;0.0;0.0;0.0;1.0"
+               grasp_height="0.41"
+               goal_data="{arm_goal_data}"
+               err_code="{arm_err_code}"
+               reason="{arm_reason}"/>
+
+      <!-- <Sequence name="Climb1">
+        <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+        <ClimbStair node="{node}" height="0.25"/>
+      </Sequence>
+      <PublishGoal node="{node}" x="3.8" y="-3.0" yaw="-1.57" frame_id="map" goal="{goal}"/> -->
+
+      <!-- Third goal -->
+       <!-- <PublishGoal node="{node}" x="3.0" y="2.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+
+      
+      <!-- Return to start -->
+       <!-- <PublishGoal node="{node}" x="2.0" y="5.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+
+    </Sequence>
+  </BehaviorTree>
+</root>

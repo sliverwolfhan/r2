@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  navigate_to_pose_no_replanning.xml
+  远距离使用 MPPI (FollowPath)，接近目标 1.0m 内切换到 PID Pursuit (PreciseApproach)
+-->
+<root BTCPP_format="3"
+      main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode name="NavigateRecovery"
+                  number_of_retries="10">
+      <Sequence name="NavigateWithFixedPath">
+        <!-- 只在开始时规划一次，不循环重规划 -->
+        <RecoveryNode name="ComputePathToPose"
+                      number_of_retries="1">
+          <ComputePathToPose goal="{goal}"
+                             path="{path}"
+                             planner_id="GridBased"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Context"
+                              service_name="global_costmap/clear_entirely_global_costmap"/>
+        </RecoveryNode>
+
+        <!-- 根据距离目标的远近切换控制器 -->
+        <RecoveryNode name="FollowPath"
+                      number_of_retries="10">
+          <ReactiveSequence name="ControllerSwitchSequence">
+            <!-- 离目标 > 1.0m 时选择 MPPI，否则选择 PreciseApproach -->
+            <ControllerSelector selected_controller="{selected_controller}"
+                                default_controller="FollowPath"
+                                topic_name="controller_selector"/>
+            <FollowPath path="{path}"
+                        controller_id="{selected_controller}"/>
+          </ReactiveSequence>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context"
+                              service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </Sequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+                                service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <BackUp backup_dist="1.0"
+                  backup_speed="1.0"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

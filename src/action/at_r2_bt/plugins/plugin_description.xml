@@ -1,0 +1,89 @@
+<library path="nav2_bt_publish_goal">
+  <class type="nav2_bt_publish_goal::PublishGoalAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Publishes a goal pose to /goal_pose topic and blackboard.
+      Reads x, y, yaw from XML parameters and creates a PoseStamped message.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::PreSteerAlignAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Publishes a small Twist on the navigation velocity topic at a fixed
+      rate (publish_rate_hz) for a short duration so swerve wheels can
+      pre-align before stair climb/descend. Sends a zero Twist when finished
+      or halted.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::SetCostmapInflationAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Updates inflation_layer.inflation_radius and
+      inflation_layer.cost_scaling_factor on nav2 local/global costmap nodes
+      at runtime via the SetParameters service.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::SetMppiParamsAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Sets selected nav2_mppi_controller parameters on controller_server at runtime
+      (parameter names plugin_prefix.key, e.g. FollowPath.batch_size) via SetParameters.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::ArmTaskAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Sends robot_interfaces/ArmTask action goal. Tries TF first (base_frame to target_frame);
+      if TF times out, uses cube_x/cube_y/block_height (in map_frame) and the live
+      base_frame to map_frame TF to compute the cube pose in base_frame, then
+      appends grasp_height.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::ArmMoveJointAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Sends robot_interfaces/ArmTask for joint-space move (default task_id=1): ports j1..j6 (rad).
+      If duration_sec is negative (default), goal.data has 6 values (arm_task uses trajectory_duration).
+      If duration_sec is non-negative, appends duration as 7th value.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::ArmMoveNamedAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Sends robot_interfaces/ArmTask for joint-space move (default task_id=1) using a
+      named pose looked up in arm_task/config/arm_position.yaml (port "name").
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::GetPlanAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Subscribes to a robot_interfaces/Plan topic (transient_local) and stores the
+      latest plan into the blackboard. Stays RUNNING until the first message
+      arrives; outputs num_steps for use by a Repeat decorator.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::PopNextStepAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Pops the front PlanStep from the shared plan vector and writes its fields
+      into independent blackboard keys (step_type, target_id, from_id, prep_x/y/yaw,
+      abs_dh, stair_dir, cube_x/y, block_height). Returns FAILURE when empty.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::PeekNextStepAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Reads (without popping) the front PlanStep of the shared plan vector and
+      writes selected fields with `next_*` prefix (next_step_type, next_from_id,
+      next_target_id, next_cube_x/y, next_block_height). Returns SUCCESS even
+      when the plan is empty (next_step_type = "NONE").
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::SelectArmPrepNameAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Reads block_blue.yaml and computes the named arm preparation pose for an
+      upcoming PICK based on (next_from_id, next_target_id): direction (front /
+      right) by sign of dy, height bucket by round(dh / 0.2). Outputs the name
+      string (pick_front_up400 / pick_front_up200 / pick_front_down200 /
+      pick_right_up200 / pick_right_down200) into arm_prep_name.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::IsPrepSkippableCondition" base_class_type="BT::ConditionNode">
+    <description>
+      Condition node. Reads current map->base TF and compares to (target_x,
+      target_y, target_yaw); returns SUCCESS only when |dx|, |dy| and the
+      wrapped yaw error are all within their tolerances. Used to skip the
+      navigation-to-prep-pose step when the robot is already there.
+    </description>
+  </class>
+</library>

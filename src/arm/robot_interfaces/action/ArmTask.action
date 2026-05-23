@@ -1,0 +1,10 @@
+#Goal
+int32 task_id
+float64[] data
+---
+#Result
+int32 err_code
+string reason       #失败原因
+---
+# Feedback
+string describe

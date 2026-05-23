@@ -1,0 +1,38 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+
+
+    dog_controller:
+      type: dog_controller/DogController
+
+dog_controller:
+  ros__parameters:
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+    command_interfaces:
+      - effort
+    state_interfaces:
+      - position
+      - velocity
+      - effort
+    joint1_kp: 200.0
+    joint1_kd: 8.0
+    joint2_kp: 200.0
+    joint2_kd: 8.0
+    joint3_kp: 200.0
+    joint3_kd: 8.0
+    joint4_kp: 20.0
+    joint4_kd: 0.8
+    joint5_kp: 20.0
+    joint5_kd: 0.8
+    joint6_kp: 5.0
+    joint6_kd: 0.1
+    joint_torque_filter_gate: 0.8
+    joint_omega_filter_gate: 0.8
+    command_effort_limit: 80.0

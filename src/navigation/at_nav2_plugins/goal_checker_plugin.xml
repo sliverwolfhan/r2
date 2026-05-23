@@ -1,0 +1,7 @@
+<class_libraries>
+  <library path="precise_goal_checker">
+    <class name="pb_nav2_plugins/PreciseGoalChecker" type="pb_nav2_plugins::PreciseGoalChecker" base_class_type="nav2_core::GoalChecker">
+      <description>Goal checker with separate x/y tolerance and velocity check.</description>
+    </class>
+  </library>
+</class_libraries>
