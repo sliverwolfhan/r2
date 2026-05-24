@@ -15,7 +15,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone <你的仓库地址> AT_RC
+git clone https://github.com/AT-RC/wulin_r2.git AT_RC
 cd AT_RC
 ```
 
