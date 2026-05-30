@@ -1,53 +1,136 @@
 <?xml version="1.0"?>
 <root BTCPP_format="4" main_tree_to_execute="GraspHead">
 
-  <!-- ================== 抓取主树 ==================
-       流程：
-       1. 导航到柜台前方预备点
-       2. 机械臂移动到准备位姿
-       3. 侧向贴靠柜台 (DockToWall)
-       4. 机械臂执行抓取
-       5. 机械臂收回
+  <!-- ================== 抓取武器头 + 对接主树 ==================
+       这套独立的"武器头爪子"通过话题 /AT_R2/head_gripper_cmd (Int32) 驱动:
+         1 = 准备抓取   2 = 抓取   3 = 抬起武器头   4 = 对接
+       流程:
+         1. 通知爪子"准备抓取" (head cmd=1)
+         2. 调参 + 导航到柜台前预备点 (PublishGoal)
+         3. 侧向 + 前向贴靠柜台 (DockToWall)
+         4. 通知爪子"抓取" (head cmd=2)
+         5. 通知爪子"抬起武器头" (head cmd=3)
+         6. 后退离开柜台 (DockToWall vx 负向)
+         7. 导航到与持杆机器人对接的位置 (PublishGoal)
+         8. 通知爪子"对接" (head cmd=4)
+
+       说明:
+       - PublishHeadCmd 默认 wait_done=false, 发完指令立即返回, 用其后的
+         导航/贴靠/DelayMs 留出执行时间。
+       - 若爪子节点会在 /AT_R2/head_gripper_done 上回发完成编号, 可将对应
+         步骤改为 wait_done="true" timeout="N" 实现真正的同步等待。
   -->
   <BehaviorTree ID="GraspHead">
     <Sequence>
 
-    <SetCostmapInflation node="{node}"
+      <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
+      <PublishHeadCmd node="{node}" command="1"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+
+      <!-- Step 2: 调参 + 导航到柜台前预备点 -->
+      <SetCostmapInflation node="{node}"
                     local_radius="0.05"
                     global_radius="0.15"
                     local_cost_scaling_factor="5.0"
                     global_cost_scaling_factor="5.0"/>
-      <!-- Step 1: 导航到柜台附近的预备点 -->
+      <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="10.0"
+               goal_angle_threshold="2.0"
+               vx_max="0.7"
+               vx_min="-0.7"
+               vy_max="0.7"
+               wz_max="4.0"
+               vx_std="0.3"
+               vy_std="0.3"
+               wz_std="0.4"
+               wait_after_set="0.3"/>
       <PublishGoal node="{node}"
-                   x="1.3" y="-5.38" yaw="3.12"
-                   frame_id="map"
-                   goal="{nav_goal}"/>
+                x="1.3" y="-5.25" yaw="3.12"
+                frame_id="map"
+                goal="{nav_goal}"/>
 
       <!-- Step 3: 侧向贴靠柜台
-           vy > 0 表示向左贴，vy < 0 表示向右贴，根据柜台方向调整
-           stall_threshold: 100ms内位移小于5mm认为被挡住
-           stall_duration: 连续被挡0.5秒确认贴住 -->
+           vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
+           stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
       <DockToWall node="{node}"
                   vy="0.1"
                   vx="0.0"
                   wz="0.0"
                   stall_threshold="0.008"
                   stall_duration="0.5"
-                  timeout="3.0"
+                  timeout="5.0"
                   publish_rate_hz="50.0"
                   cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                   odom_topic="/AT_R2/odometry"/>
 
-      <!-- <DockToWall node="{node}"
+      <!-- 前向贴靠柜台 -->
+      <DockToWall node="{node}"
                   vy="0.0"
                   vx="0.1"
                   wz="0.0"
                   stall_threshold="0.03"
-                  stall_duration="0.08"
+                  stall_duration="0.5"
                   timeout="2.0"
                   publish_rate_hz="50.0"
                   cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                  odom_topic="/AT_R2/odometry"/> -->
+                  odom_topic="/AT_R2/odometry"/>
+
+      <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间
+           若爪子有完成反馈, 改成: wait_done="true" timeout="10.0" 并删掉下面的 DelayMs -->
+      <PublishHeadCmd node="{node}" command="2"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="3000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- Step 5: 通知爪子抬起武器头, 留出抬起执行时间
+           抬起后再后退, 避免武器头还在柜台上就拖动 -->
+      <PublishHeadCmd node="{node}" command="3"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="3000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
+           timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
+      <DockToWall node="{node}"
+                  vy="0.0"
+                  vx="-0.15"
+                  wz="0.0"
+                  stall_threshold="0.30"
+                  stall_duration="10.0"
+                  timeout="1.5"
+                  publish_rate_hz="50.0"
+                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                  odom_topic="/AT_R2/odometry"/>
+
+      <!-- Step 7: 导航到与持杆机器人对接的位置
+           TODO: 把对接点坐标 (x, y, yaw) 改成实际值 -->
+      <SetCostmapInflation node="{node}"
+                    local_radius="0.30"
+                    global_radius="0.30"
+                    local_cost_scaling_factor="1.0"
+                    global_cost_scaling_factor="4.0"/>
+      <PublishGoal node="{node}"
+                x="0.0" y="0.0" yaw="0.0"
+                frame_id="map"
+                goal="{nav_goal}"/>
+
+      <!-- Step 8: 通知爪子执行对接
+           对接通常需要等做完, 这里默认仍用 wait_done=false + DelayMs;
+           若有完成反馈建议改 wait_done="true" timeout="15.0" -->
+      <PublishHeadCmd node="{node}" command="4"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="3000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
     </Sequence>
   </BehaviorTree>
 

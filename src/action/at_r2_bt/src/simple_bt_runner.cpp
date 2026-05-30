@@ -27,6 +27,7 @@
 #include "nav2_bt_publish_goal/is_prep_skippable_condition.hpp"
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
 #include "nav2_bt_publish_goal/delay_decorator.hpp"
+#include "nav2_bt_publish_goal/publish_head_cmd_action.hpp"
 
 int main(int argc, char** argv)
 {
@@ -89,6 +90,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
   factory.registerNodeType<nav2_bt_publish_goal::DockToWallAction>("DockToWall");
   factory.registerNodeType<nav2_bt_publish_goal::DelayDecorator>("DelayMs");
+  factory.registerNodeType<nav2_bt_publish_goal::PublishHeadCmdAction>("PublishHeadCmd");
   RCLCPP_INFO(node->get_logger(), "✓ PublishGoal 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ClimbStair 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DescendStair 节点已注册");
@@ -103,6 +105,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ PeekNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectArmPrepName 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ IsPrepSkippable 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ PublishHeadCmd 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
   std::string bt_file = "grasp_head.xml";

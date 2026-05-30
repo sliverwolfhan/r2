@@ -8,6 +8,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/select.h>
@@ -32,11 +33,15 @@ public:
         std::string cmd_vel_topic = "/" + robot_name_ + "/cmd_vel_nav2_result";
         std::string climb_stair_topic = "/" + robot_name_ + "/climb_stair";
         std::string descend_stair_topic = "/" + robot_name_ + "/descend_stair";
+        std::string head_gripper_topic = "/" + robot_name_ + "/head_gripper_cmd";
 
         // 创建发布者
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic, 10);
         climb_stair_pub_ = this->create_publisher<std_msgs::msg::Float64>(climb_stair_topic, 10);
         descend_stair_pub_ = this->create_publisher<std_msgs::msg::Float64>(descend_stair_topic, 10);
+        // 武器头爪子指令: latched(transient_local), 确保爪子节点稍晚连上也能收到最新指令
+        head_gripper_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            head_gripper_topic, rclcpp::QoS(1).transient_local().reliable());
 
         // 速度参数
         linear_speed_ = 0.1;   // m/s
@@ -63,6 +68,12 @@ public:
         RCLCPP_INFO(this->get_logger(), "   X - 上楼梯 400mm");
         RCLCPP_INFO(this->get_logger(), "   C - 下楼梯 200mm");
         RCLCPP_INFO(this->get_logger(), "   V - 下楼梯 400mm");
+        RCLCPP_INFO(this->get_logger(), "");
+        RCLCPP_INFO(this->get_logger(), "【武器头爪子 /head_gripper_cmd】");
+        RCLCPP_INFO(this->get_logger(), "   1 - 准备抓取");
+        RCLCPP_INFO(this->get_logger(), "   2 - 抓取");
+        RCLCPP_INFO(this->get_logger(), "   3 - 抬起武器头");
+        RCLCPP_INFO(this->get_logger(), "   4 - 对接");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【参数调节】");
         RCLCPP_INFO(this->get_logger(), "   [/] - 移动速度 -/+10%%");
@@ -175,6 +186,20 @@ private:
                 descendStair(0.4);
                 break;
 
+            // ========== 武器头爪子指令 ==========
+            case '1':
+                publishHeadGripper(1);  // 准备抓取
+                break;
+            case '2':
+                publishHeadGripper(2);  // 抓取
+                break;
+            case '3':
+                publishHeadGripper(3);  // 抬起武器头
+                break;
+            case '4':
+                publishHeadGripper(4);  // 对接
+                break;
+
             // ========== 参数调节 ==========
             case '[':
                 linear_speed_ *= 0.9;
@@ -218,6 +243,18 @@ private:
         descend_stair_pub_->publish(msg);
     }
 
+    void publishHeadGripper(int32_t command)
+    {
+        const char* desc = command == 1 ? "准备抓取"
+                         : command == 2 ? "抓取"
+                         : command == 3 ? "抬起武器头"
+                         : command == 4 ? "对接" : "未知";
+        RCLCPP_INFO(this->get_logger(), "武器头爪子指令: %d (%s)", command, desc);
+        auto msg = std_msgs::msg::Int32();
+        msg.data = command;
+        head_gripper_pub_->publish(msg);
+    }
+
     void publishAll()
     {
         // 发布速度
@@ -239,6 +276,7 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr climb_stair_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr descend_stair_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr head_gripper_pub_;
 
     // 参数
     std::string robot_name_;

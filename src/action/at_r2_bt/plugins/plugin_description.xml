@@ -86,4 +86,14 @@
       navigation-to-prep-pose step when the robot is already there.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::PublishHeadCmdAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Publishes an integer command (std_msgs/Int32) on a topic
+      (default /AT_R2/head_gripper_cmd, latched) to drive the independent
+      weapon-head gripper: 1=prepare grasp, 2=grasp, 3=dock. When wait_done is
+      true it subscribes to done_topic (default /AT_R2/head_gripper_done) and
+      stays RUNNING until the feedback value equals the sent command, or fails
+      after timeout seconds (timeout<=0 = wait forever).
+    </description>
+  </class>
 </library>
