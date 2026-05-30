@@ -34,6 +34,7 @@ public:
         std::string climb_stair_topic = "/" + robot_name_ + "/climb_stair";
         std::string descend_stair_topic = "/" + robot_name_ + "/descend_stair";
         std::string head_gripper_topic = "/" + robot_name_ + "/head_gripper_cmd";
+        std::string zone_mode_topic = "/" + robot_name_ + "/zone_mode";
 
         // 创建发布者
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic, 10);
@@ -42,6 +43,9 @@ public:
         // 武器头爪子指令: latched(transient_local), 确保爪子节点稍晚连上也能收到最新指令
         head_gripper_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             head_gripper_topic, rclcpp::QoS(1).transient_local().reliable());
+        // 区模式: latched(transient_local), 后启动的节点也能立刻拿到当前模式
+        zone_mode_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            zone_mode_topic, rclcpp::QoS(1).transient_local().reliable());
 
         // 速度参数
         linear_speed_ = 0.1;   // m/s
@@ -74,6 +78,11 @@ public:
         RCLCPP_INFO(this->get_logger(), "   2 - 抓取");
         RCLCPP_INFO(this->get_logger(), "   3 - 抬起武器头");
         RCLCPP_INFO(this->get_logger(), "   4 - 对接");
+        RCLCPP_INFO(this->get_logger(), "");
+        RCLCPP_INFO(this->get_logger(), "【区模式 /zone_mode】");
+        RCLCPP_INFO(this->get_logger(), "   7 - 一区 (抓武器头/对接)");
+        RCLCPP_INFO(this->get_logger(), "   8 - 二区 (上下台阶/抓块)");
+        RCLCPP_INFO(this->get_logger(), "   9 - 三区 (预留)");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【参数调节】");
         RCLCPP_INFO(this->get_logger(), "   [/] - 移动速度 -/+10%%");
@@ -200,6 +209,17 @@ private:
                 publishHeadGripper(4);  // 对接
                 break;
 
+            // ========== 区模式切换 ==========
+            case '7':
+                publishZoneMode(1);  // 一区
+                break;
+            case '8':
+                publishZoneMode(2);  // 二区
+                break;
+            case '9':
+                publishZoneMode(3);  // 三区
+                break;
+
             // ========== 参数调节 ==========
             case '[':
                 linear_speed_ *= 0.9;
@@ -255,6 +275,17 @@ private:
         head_gripper_pub_->publish(msg);
     }
 
+    void publishZoneMode(int32_t mode)
+    {
+        const char* desc = mode == 1 ? "一区: 抓武器头/对接"
+                         : mode == 2 ? "二区: 上下台阶/抓块"
+                         : mode == 3 ? "三区: 预留" : "未知";
+        RCLCPP_INFO(this->get_logger(), "切换区模式: %d (%s)", mode, desc);
+        auto msg = std_msgs::msg::Int32();
+        msg.data = mode;
+        zone_mode_pub_->publish(msg);
+    }
+
     void publishAll()
     {
         // 发布速度
@@ -277,6 +308,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr climb_stair_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr descend_stair_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr head_gripper_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr zone_mode_pub_;
 
     // 参数
     std::string robot_name_;

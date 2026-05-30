@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_msgs REQUIRED)
@@ -33,7 +34,7 @@ add_executable(virtual_serial_port_node
   src/virtual_serial_port_node.cpp
 )
 target_link_libraries(virtual_serial_port_node cdc_trans)
-ament_target_dependencies(virtual_serial_port_node rclcpp geometry_msgs tf2_ros tf2 tf2_msgs)
+ament_target_dependencies(virtual_serial_port_node rclcpp geometry_msgs std_msgs tf2_ros tf2 tf2_msgs)
 
 # 安装
 install(TARGETS

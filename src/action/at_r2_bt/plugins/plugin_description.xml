@@ -96,4 +96,12 @@
       after timeout seconds (timeout<=0 = wait forever).
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::SetZoneModeAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Publishes an integer (std_msgs/Int32) on a topic (default /AT_R2/zone_mode,
+      latched) to switch the robot working-zone mode: 1=zone 1 (grasp weapon
+      head / dock), 2=zone 2 (climb stairs / grasp blocks), 3=zone 3 (reserved).
+      Synchronous: publishes and returns SUCCESS immediately.
+    </description>
+  </class>
 </library>

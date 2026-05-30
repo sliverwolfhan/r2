@@ -21,6 +21,8 @@ struct VelocityPacket {
     float vx;              // x方向线速度 m/s
     float vy;              // y方向线速度 m/s  
     float omega;           // 角速度 rad/s
+    uint8_t mode;          // 区模式 zone_mode (连续发送当前值)
+    uint8_t grasp_cmd;     // 武器头爪子命令 (仅收到话题时发一次, 其余发0)
     uint8_t climb_action;  // 爬楼梯动作类型 (0=无, 1=上, 2=下)
     uint8_t climb_height;  // 爬楼梯高度 (0=无, 1=200mm, 2=400mm)
     uint8_t tail;          // 包尾 0xBA
@@ -57,6 +59,9 @@ public:
         current_velocity_ = {0.0f, 0.0f, 0.0f};
         current_climb_action_ = ClimbAction::NONE;
         current_climb_height_ = 0;
+        current_mode_ = 0;
+        current_grasp_cmd_ = 0;
+        grasp_send_once_ = false;
         
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -87,6 +92,17 @@ public:
         descend_sub_ = this->create_subscription<std_msgs::msg::Float64>(
             "/AT_R2/descend_stair", 10,
             std::bind(&VirtualSerialPortNode::descend_callback, this, std::placeholders::_1));
+        
+        // 订阅区模式话题 (latched, mode 连续发送)
+        mode_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/zone_mode", rclcpp::QoS(1).transient_local().reliable(),
+            std::bind(&VirtualSerialPortNode::mode_callback, this, std::placeholders::_1));
+        
+        // 订阅武器头爪子命令话题 (grasp_cmd 收到时发一次)
+        // 用 volatile(默认) QoS: 避免本节点重启时收到 latched 历史指令而误触发一次抓取
+        grasp_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/head_gripper_cmd", 10,
+            std::bind(&VirtualSerialPortNode::grasp_callback, this, std::placeholders::_1));
         
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
@@ -126,6 +142,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "虚拟串口节点已启动，订阅话题: %s, 发送周期: %dms", 
             cmd_vel_topic.c_str(), send_interval_ms_);
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
+        RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status");
     }
     
@@ -171,6 +188,23 @@ private:
         RCLCPP_INFO(this->get_logger(), "收到下楼梯指令: 高度 %.2f m -> 编码 %d", msg->data, current_climb_height_);
     }
     
+    void mode_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        // mode 连续发送: 只更新当前值, 由发送线程每包带上
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_mode_ = static_cast<uint8_t>(msg->data);
+        RCLCPP_INFO(this->get_logger(), "收到区模式: %d", msg->data);
+    }
+    
+    void grasp_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        // grasp_cmd 单次发送: 记录值并置一次性标志
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_grasp_cmd_ = static_cast<uint8_t>(msg->data);
+        grasp_send_once_ = true;
+        RCLCPP_INFO(this->get_logger(), "收到抓取命令: %d (将发送一次)", msg->data);
+    }
+    
     void send_thread_func()
     {
         using namespace std::chrono_literals;
@@ -190,6 +224,16 @@ private:
                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                     "发送速度: vx %.2f vy %.2f omega %.2f", 
                     current_velocity_.vx, current_velocity_.vy, current_velocity_.omega);
+                // mode: 连续发送当前区模式值
+                packet.mode = current_mode_;
+                // grasp_cmd: 收到话题时发送一次实际值, 其余时间发送0
+                if (grasp_send_once_) {
+                    packet.grasp_cmd = current_grasp_cmd_;
+                    grasp_send_once_ = false;
+                    RCLCPP_INFO(this->get_logger(), "发送抓取命令: grasp_cmd=%d", packet.grasp_cmd);
+                } else {
+                    packet.grasp_cmd = 0;
+                }
                 // climb：触发时发送一次实际值，其余时间发送0
                 if (climb_send_once_) {
                     packet.climb_action = static_cast<uint8_t>(current_climb_action_);
@@ -291,6 +335,8 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr climb_sub_;
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr descend_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr mode_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
     
@@ -303,6 +349,9 @@ private:
     ClimbAction current_climb_action_;
     uint8_t current_climb_height_;
     bool climb_send_once_;
+    uint8_t current_mode_;        // 当前区模式 (连续发送)
+    uint8_t current_grasp_cmd_;   // 当前抓取命令值
+    bool grasp_send_once_;        // 抓取命令一次性发送标志
     
     std::mutex status_mutex_;
     bool climber_running_{false};       // 下位机正在执行

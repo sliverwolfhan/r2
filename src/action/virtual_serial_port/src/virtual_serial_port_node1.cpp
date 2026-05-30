@@ -1,60 +1,62 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include "virtual_serial_port/cdc_trans.hpp"
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/buffer.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2_msgs/msg/tf_message.hpp>
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include <cmath>
+
+// 爬楼梯动作类型
+enum class ClimbAction : uint8_t {
+    NONE = 0,      // 无动作
+    CLIMB = 1,     // 上楼梯
+    DESCEND = 2    // 下楼梯
+};
 
 // 发送给下位机的速度数据包结构
 #pragma pack(push, 1)
 struct VelocityPacket {
-    uint8_t header;    // 包头 0xAB
-    float vx;          // x方向线速度 m/s
-    float vy;          // y方向线速度 m/s  
-    float omega;       // 角速度 rad/s
-    uint8_t mode;      // 模式标志位 (0或1)
-    uint8_t tail;      // 包尾 0xBA
+    uint8_t header;        // 包头 0xAB
+    float vx;              // x方向线速度 m/s
+    float vy;              // y方向线速度 m/s  
+    float omega;           // 角速度 rad/s
+    uint8_t climb_action;  // 爬楼梯动作类型 (0=无, 1=上, 2=下)
+    uint8_t climb_height;  // 爬楼梯高度 (0=无, 1=200mm, 2=400mm)
+    uint8_t tail;          // 包尾 0xBA
+};
+#pragma pack(pop)
+
+// 从下位机接收的状态数据包结构
+#pragma pack(push, 1)
+struct StatusPacket {
+    uint8_t header;          // 包头 0xAB
+    uint8_t climber_status;  // 爬楼梯状态 (1=开始执行, 2=执行完成)
+    uint8_t tail;            // 包尾 0xBA
 };
 #pragma pack(pop)
 
 class VirtualSerialPortNode : public rclcpp::Node
 {
 public:
-    VirtualSerialPortNode() : Node("virtual_serial_port_node"), running_(true), current_mode_(0), mode_send_once_(false)
+    VirtualSerialPortNode() : Node("virtual_serial_port_node"), running_(true), climb_send_once_(false)
     {
         // 声明参数
         this->declare_parameter<int>("usb_vid", 0x0483);  // STM32 默认VID
         this->declare_parameter<int>("usb_pid", 0x5740);  // CDC默认PID
-        this->declare_parameter<std::string>("cmd_vel_topic", "cmd_vel");
-        this->declare_parameter<int>("send_interval_ms", 20);  // 发送周期，降低到20ms避免缓冲区溢出
-        this->declare_parameter<double>("rotation_threshold", 5.0);  // 旋转阈值，单位度
+        this->declare_parameter<std::string>("cmd_vel_topic", "/AT_R2/cmd_vel_nav2_result");
+        this->declare_parameter<int>("send_interval_ms", 8);  // 发送周期
         
         // 获取参数
         usb_vid_ = static_cast<uint16_t>(this->get_parameter("usb_vid").as_int());
         usb_pid_ = static_cast<uint16_t>(this->get_parameter("usb_pid").as_int());
         std::string cmd_vel_topic = this->get_parameter("cmd_vel_topic").as_string();
         send_interval_ms_ = this->get_parameter("send_interval_ms").as_int();
-        rotation_threshold_ = this->get_parameter("rotation_threshold").as_double();
         
-        // 初始化速度为0
+        // 初始化速度和爬楼梯状态
         current_velocity_ = {0.0f, 0.0f, 0.0f};
-        
-        // 初始化TF2
-        tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-        
-        // 订阅自定义TF话题
-        tf_sub_ = this->create_subscription<tf2_msgs::msg::TFMessage>(
-            "/AT_R2/tf", 10,
-            std::bind(&VirtualSerialPortNode::tf_callback, this, std::placeholders::_1));
-        
-        RCLCPP_INFO(this->get_logger(), "订阅TF话题: /AT_R2/tf");
+        current_climb_action_ = ClimbAction::NONE;
+        current_climb_height_ = 0;
         
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -73,8 +75,47 @@ public:
         
         // 订阅cmd_vel话题
         cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-            "/AT_R2/cmd_vel_nav2_result", 10,
+            cmd_vel_topic, 10,
             std::bind(&VirtualSerialPortNode::cmd_vel_callback, this, std::placeholders::_1));
+        
+        // 订阅爬楼梯话题
+        climb_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+            "/AT_R2/climb_stair", 10,
+            std::bind(&VirtualSerialPortNode::climb_callback, this, std::placeholders::_1));
+        
+        // 订阅下楼梯话题
+        descend_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+            "/AT_R2/descend_stair", 10,
+            std::bind(&VirtualSerialPortNode::descend_callback, this, std::placeholders::_1));
+        
+        // 创建爬楼梯状态发布器
+        climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/climber_status", 10);
+        
+        // 定时持续发布最新状态（10Hz）
+        // 平时发0；收到下位机1时持续发1；收到下位机2时发一次2，之后恢复发0
+        status_timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(100),
+            [this]() {
+                auto msg = std_msgs::msg::Int32();
+                int32_t publish_value = 0;
+                {
+                    std::lock_guard<std::mutex> lock(status_mutex_);
+                    if (climber_finish_once_) {
+                        // 收到完成信号，发一次2，然后恢复
+                        publish_value = 2;
+                        climber_finish_once_ = false;
+                        climber_running_ = false;
+                    } else if (climber_running_) {
+                        // 正在执行中，持续发1
+                        publish_value = 1;
+                    } else {
+                        publish_value = 0;
+                    }
+                }
+                msg.data = publish_value;
+                climber_status_pub_->publish(msg);
+            });
         
         // 启动发送线程（独立线程，8ms周期）
         send_thread_ = std::thread(&VirtualSerialPortNode::send_thread_func, this);
@@ -82,11 +123,10 @@ public:
         // 启动USB事件处理线程
         usb_thread_ = std::thread(&VirtualSerialPortNode::usb_thread_func, this);
         
-        // 启动TF监听线程
-        tf_thread_ = std::thread(&VirtualSerialPortNode::tf_thread_func, this);
-        
-        RCLCPP_INFO(this->get_logger(), "虚拟串口节点已启动，订阅话题: %s, 发送周期: %dms, 旋转阈值: %.1f度", 
-            cmd_vel_topic.c_str(), send_interval_ms_, rotation_threshold_);
+        RCLCPP_INFO(this->get_logger(), "虚拟串口节点已启动，订阅话题: %s, 发送周期: %dms", 
+            cmd_vel_topic.c_str(), send_interval_ms_);
+        RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
+        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status");
     }
     
     ~VirtualSerialPortNode()
@@ -98,24 +138,9 @@ public:
         if (usb_thread_.joinable()) {
             usb_thread_.join();
         }
-        if (tf_thread_.joinable()) {
-            tf_thread_.join();
-        }
     }
 
 private:
-    void tf_callback(const tf2_msgs::msg::TFMessage::SharedPtr msg)
-    {
-        // 将接收到的TF消息添加到buffer中
-        for (const auto& transform : msg->transforms) {
-            try {
-                tf_buffer_->setTransform(transform, "default_authority", false);
-            } catch (tf2::TransformException &ex) {
-                RCLCPP_DEBUG(this->get_logger(), "TF设置失败: %s", ex.what());
-            }
-        }
-    }
-    
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
     {
         // 只更新速度值，不在回调中发送
@@ -125,58 +150,66 @@ private:
         current_velocity_.omega = static_cast<float>(msg->angular.z);
     }
     
+    void climb_callback(const std_msgs::msg::Float64::SharedPtr msg)
+    {
+        RCLCPP_INFO(this->get_logger(), "收到爬楼梯指令: 高度 %.2f m ", msg->data);
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_climb_action_ = ClimbAction::CLIMB;
+        double h = msg->data;
+        current_climb_height_ = (h <= 0.3) ? 1 : 2;
+        climb_send_once_ = true;
+        RCLCPP_INFO(this->get_logger(), "收到爬楼梯指令: 高度 %.2f m -> 编码 %d", msg->data, current_climb_height_);
+    }
+    
+    void descend_callback(const std_msgs::msg::Float64::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_climb_action_ = ClimbAction::DESCEND;
+        double h = msg->data;
+        current_climb_height_ = (h <= 0.3) ? 1 : 2;
+        climb_send_once_ = true;
+        RCLCPP_INFO(this->get_logger(), "收到下楼梯指令: 高度 %.2f m -> 编码 %d", msg->data, current_climb_height_);
+    }
+    
     void send_thread_func()
     {
+        using namespace std::chrono_literals;
         RCLCPP_INFO(this->get_logger(), "发送线程已启动");
         
-        int consecutive_failures = 0;  // 连续失败计数
-        const int max_failures = 5;    // 最大连续失败次数
-        
         while (running_) {
-            auto now = std::chrono::system_clock::now();
+            auto now = std::chrono::steady_clock::now();
             
             // 构建数据包
             VelocityPacket packet;
-            packet.header = 0xAB;  // 包头
+            packet.header = 0xAB;
             {
                 std::lock_guard<std::mutex> lock(velocity_mutex_);
-                packet.vx = -(current_velocity_.vy);
-                packet.vy = current_velocity_.vx;
-                packet.omega = -(current_velocity_.omega);
-                
-                // 如果需要发送一次mode，则发送实际值，否则发送0
-                if (mode_send_once_) {
-                    packet.mode = current_mode_;
-                    mode_send_once_ = false;  // 发送后清除标志
-                    RCLCPP_INFO(this->get_logger(), "发送mode: %d", packet.mode);
+                packet.vx = -current_velocity_.vx;
+                packet.vy = -current_velocity_.vy;
+                packet.omega = -current_velocity_.omega;
+                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                    "发送速度: vx %.2f vy %.2f omega %.2f", 
+                    current_velocity_.vx, current_velocity_.vy, current_velocity_.omega);
+                // climb：触发时发送一次实际值，其余时间发送0
+                if (climb_send_once_) {
+                    packet.climb_action = static_cast<uint8_t>(current_climb_action_);
+                    packet.climb_height = current_climb_height_;
+                    climb_send_once_ = false;
+                    RCLCPP_INFO(this->get_logger(), "发送爬楼梯指令: action=%d, height=%d",
+                        packet.climb_action, packet.climb_height);
                 } else {
-                    packet.mode = 0;  // 其余时间发送0
+                    packet.climb_action = 0;
+                    packet.climb_height = 0;
                 }
             }
-            packet.tail = 0xBA;  // 包尾
-            // RCLCPP_INFO(this->get_logger(), "packet.vx:%.2f, packet.vx:%.2f, packet.vx:%.2f, packet.vx:%d, ", 
-            // packet.vx, packet.vy,packet.omega,packet.mode);
-            // 发送数据并检查结果
-            int result = cdc_trans_->send_struct(packet);
+            packet.tail = 0xBA;
             
-            if (result < 0) {
-                consecutive_failures++;
-                if (consecutive_failures >= max_failures) {
-                    RCLCPP_ERROR(this->get_logger(), 
-                        "连续发送失败%d次，USB设备可能断开，等待重连...", consecutive_failures);
-                    // 等待重连
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                    consecutive_failures = 0;
-                }
-            } else {
-                // 发送成功，重置失败计数
-                if (consecutive_failures > 0) {
-                    RCLCPP_INFO(this->get_logger(), "USB通信恢复正常");
-                    consecutive_failures = 0;
-                }
+            // 发送并检查结果
+            if (!cdc_trans_->send_struct(packet)) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                    "发送速度指令失败");
             }
             
-            // 使用参数配置的发送周期
             std::this_thread::sleep_until(now + std::chrono::milliseconds(send_interval_ms_));
         }
         
@@ -194,82 +227,57 @@ private:
         RCLCPP_INFO(this->get_logger(), "USB事件处理线程已退出");
     }
     
-    void tf_thread_func()
-    {
-        RCLCPP_INFO(this->get_logger(), "TF监听线程已启动");
-        
-        auto last_print_time = std::chrono::system_clock::now();
-        bool tf_available = false;
-        
-        while (running_) {
-            try {
-                // 查询从map到base_footprint的变换
-                RCLCPP_INFO(this->get_logger(), "TF监听线程已启动1");
-                geometry_msgs::msg::TransformStamped transform_stamped = 
-                    tf_buffer_->lookupTransform("map", "base_footprint", tf2::TimePointZero);
-                RCLCPP_INFO(this->get_logger(), "TF监听线程已启动2");
-                if (!tf_available) {
-                    RCLCPP_INFO(this->get_logger(), "TF变换可用: map -> base_footprint");
-                    tf_available = true;
-                }
-                
-                // 提取四元数
-                auto& q = transform_stamped.transform.rotation;
-                tf2::Quaternion quaternion(q.x, q.y, q.z, q.w);
-                // 转换为欧拉角
-                double roll, pitch, yaw;
-                tf2::Matrix3x3(quaternion).getRPY(roll, pitch, yaw);
-                
-                // 将弧度转换为度数
-                double pitch_degrees = pitch * 180.0 / M_PI;
-                
-                // 每隔一秒打印一次
-                auto now = std::chrono::system_clock::now();
-                if (std::chrono::duration_cast<std::chrono::seconds>(now - last_print_time).count() >= 1) {
-                    RCLCPP_INFO(this->get_logger(), "Pitch角度: %.2f度", pitch_degrees);
-                    last_print_time = now;
-                }
-                
-                // 检查绕Y轴旋转是否大于阈值
-                uint8_t new_mode = (std::abs(pitch_degrees) > rotation_threshold_) ? 2 : 1;
-                
-                // 更新模式（线程安全）
-                {
-                    std::lock_guard<std::mutex> lock(velocity_mutex_);
-                    if (current_mode_ != new_mode) {
-                        current_mode_ = new_mode;
-                        mode_send_once_ = true;  // 标记需要发送一次
-                        uint8_t mode_value = current_mode_.load();  // 读取atomic值
-                        RCLCPP_INFO(this->get_logger(), "模式切换: %d (pitch: %.2f度)", 
-                                   mode_value, pitch_degrees);
-                    }
-                }
-                
-            } catch (tf2::TransformException &ex) {
-                if (tf_available) {
-                    RCLCPP_WARN(this->get_logger(), "TF查询失败: %s", ex.what());
-                    tf_available = false;
-                } else {
-                    // 首次启动时每5秒打印一次等待信息
-                    auto now = std::chrono::system_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::seconds>(now - last_print_time).count() >= 5) {
-                        RCLCPP_WARN(this->get_logger(), "等待TF变换: map -> base_footprint (%s)", ex.what());
-                        last_print_time = now;
-                    }
-                }
-            }
-            
-            // 10Hz频率检查TF
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        
-        RCLCPP_INFO(this->get_logger(), "TF监听线程已退出");
-    }
     
     void on_data_received(const uint8_t* data, int size)
     {
         RCLCPP_DEBUG(this->get_logger(), "收到下位机数据，长度: %d", size);
-        (void)data;
+        
+        // 检查数据包大小是否匹配
+        if (size == sizeof(StatusPacket)) {
+            StatusPacket status;
+            std::memcpy(&status, data, sizeof(StatusPacket));
+            
+            // 校验包头包尾
+            if (status.header != 0xAB || status.tail != 0xBA) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                    "收到的数据包头尾校验失败: header=0x%02X tail=0x%02X",
+                    status.header, status.tail);
+                return;
+            }
+            
+            uint8_t new_status = status.climber_status;
+            
+            // 只在状态变化时处理，避免重复打印和重复操作
+            if (new_status == last_climber_raw_ ) {
+                return;
+            }
+            last_climber_raw_ = new_status;
+            
+            if (new_status == 1) {
+                // 开始执行
+                std::lock_guard<std::mutex> lock(status_mutex_);
+                climber_running_ = true;
+                climber_finish_once_ = false;
+                RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 开始执行 (1)");
+            } else if (new_status == 2) {
+                // 执行完成
+                {
+                    std::lock_guard<std::mutex> lock(status_mutex_);
+                    climber_finish_once_ = true;
+                }
+                // 清除爬楼梯指令
+                {
+                    std::lock_guard<std::mutex> lock(velocity_mutex_);
+                    current_climb_action_ = ClimbAction::NONE;
+                    current_climb_height_ = 0;
+                }
+                RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 执行完成 (2)");
+            }
+        } else {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                "收到的数据包大小不匹配: 期望 %zu 字节，实际 %d 字节", 
+                sizeof(StatusPacket), size);
+        }
     }
     
     // 当前速度结构
@@ -281,26 +289,29 @@ private:
     
     std::unique_ptr<CDCTrans> cdc_trans_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
-    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tf_sub_;
-    
-    // TF2相关
-    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr climb_sub_;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr descend_sub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
+    rclcpp::TimerBase::SharedPtr status_timer_;
     
     std::thread send_thread_;
     std::thread usb_thread_;
-    std::thread tf_thread_;
     std::atomic<bool> running_;
     
     std::mutex velocity_mutex_;
     Velocity current_velocity_;
-    std::atomic<uint8_t> current_mode_;
-    bool mode_send_once_;  // 标志位：是否需要发送一次mode
+    ClimbAction current_climb_action_;
+    uint8_t current_climb_height_;
+    bool climb_send_once_;
+    
+    std::mutex status_mutex_;
+    bool climber_running_{false};       // 下位机正在执行
+    bool climber_finish_once_{false};   // 下位机执行完成，待发一次2
+    uint8_t last_climber_raw_{0xFF};    // 上次收到的原始状态，用于去重
     
     uint16_t usb_vid_;
     uint16_t usb_pid_;
     int send_interval_ms_;
-    double rotation_threshold_;
 };
 
 int main(int argc, char* argv[])
