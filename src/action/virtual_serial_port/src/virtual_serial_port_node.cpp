@@ -22,9 +22,8 @@ struct VelocityPacket {
     float vy;              // y方向线速度 m/s  
     float omega;           // 角速度 rad/s
     uint8_t mode;          // 区模式 zone_mode (连续发送当前值)
-    uint8_t grasp_cmd;     // 武器头爪子命令 (仅收到话题时发一次, 其余发0)
-    uint8_t climb_action;  // 爬楼梯动作类型 (0=无, 1=上, 2=下)
-    uint8_t climb_height;  // 爬楼梯高度 (0=无, 1=200mm, 2=400mm)
+    uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下)
+    uint8_t climb_height;  // 爬楼梯高度 (mode=2时配合action, 0=无 1=200mm 2=400mm)
     uint8_t tail;          // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -169,8 +168,13 @@ private:
     
     void climb_callback(const std_msgs::msg::Float64::SharedPtr msg)
     {
-        RCLCPP_INFO(this->get_logger(), "收到爬楼梯指令: 高度 %.2f m ", msg->data);
         std::lock_guard<std::mutex> lock(velocity_mutex_);
+        // 仅二区(mode=2)接受爬楼梯命令, 避免在一区把爬楼梯值塞进 action 被下位机误当抓取命令
+        if (current_mode_ != 2) {
+            RCLCPP_WARN(this->get_logger(),
+                "当前 mode=%d (非二区), 忽略爬楼梯指令 (高度 %.2f m)", current_mode_, msg->data);
+            return;
+        }
         current_climb_action_ = ClimbAction::CLIMB;
         double h = msg->data;
         current_climb_height_ = (h <= 0.3) ? 1 : 2;
@@ -181,6 +185,12 @@ private:
     void descend_callback(const std_msgs::msg::Float64::SharedPtr msg)
     {
         std::lock_guard<std::mutex> lock(velocity_mutex_);
+        // 仅二区(mode=2)接受下楼梯命令
+        if (current_mode_ != 2) {
+            RCLCPP_WARN(this->get_logger(),
+                "当前 mode=%d (非二区), 忽略下楼梯指令 (高度 %.2f m)", current_mode_, msg->data);
+            return;
+        }
         current_climb_action_ = ClimbAction::DESCEND;
         double h = msg->data;
         current_climb_height_ = (h <= 0.3) ? 1 : 2;
@@ -200,6 +210,12 @@ private:
     {
         // grasp_cmd 单次发送: 记录值并置一次性标志
         std::lock_guard<std::mutex> lock(velocity_mutex_);
+        // 仅一区(mode=1)接受抓取命令, 避免在其他区把抓取值塞进 action 被下位机误解释
+        if (current_mode_ != 1) {
+            RCLCPP_WARN(this->get_logger(),
+                "当前 mode=%d (非一区), 忽略抓取命令 %d", current_mode_, msg->data);
+            return;
+        }
         current_grasp_cmd_ = static_cast<uint8_t>(msg->data);
         grasp_send_once_ = true;
         RCLCPP_INFO(this->get_logger(), "收到抓取命令: %d (将发送一次)", msg->data);
@@ -222,27 +238,28 @@ private:
                 packet.vy = -current_velocity_.vy;
                 packet.omega = -current_velocity_.omega;
                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                    "发送速度: vx %.2f vy %.2f omega %.2f", 
-                    current_velocity_.vx, current_velocity_.vy, current_velocity_.omega);
+                    "发送速度: vx %.2f vy %.2f omega %.2f mode %d", 
+                    current_velocity_.vx, current_velocity_.vy, current_velocity_.omega,
+                    current_mode_);
                 // mode: 连续发送当前区模式值
                 packet.mode = current_mode_;
-                // grasp_cmd: 收到话题时发送一次实际值, 其余时间发送0
+                // action: 抓取命令与爬楼梯动作复用同一字段, 均为单次发送, 其余时间发0
+                //   - 收到抓取命令(head_gripper_cmd)时: action=抓取命令值, climb_height=0
+                //   - 收到爬楼梯/下楼梯命令时:          action=爬楼梯动作(1上/2下), climb_height=高度
+                //   下位机根据 mode 解释 action (mode=1抓取, mode=2爬楼梯)
                 if (grasp_send_once_) {
-                    packet.grasp_cmd = current_grasp_cmd_;
+                    packet.action = current_grasp_cmd_;
+                    packet.climb_height = 0;
                     grasp_send_once_ = false;
-                    RCLCPP_INFO(this->get_logger(), "发送抓取命令: grasp_cmd=%d", packet.grasp_cmd);
-                } else {
-                    packet.grasp_cmd = 0;
-                }
-                // climb：触发时发送一次实际值，其余时间发送0
-                if (climb_send_once_) {
-                    packet.climb_action = static_cast<uint8_t>(current_climb_action_);
+                    RCLCPP_INFO(this->get_logger(), "发送抓取命令: action=%d", packet.action);
+                } else if (climb_send_once_) {
+                    packet.action = static_cast<uint8_t>(current_climb_action_);
                     packet.climb_height = current_climb_height_;
                     climb_send_once_ = false;
                     RCLCPP_INFO(this->get_logger(), "发送爬楼梯指令: action=%d, height=%d",
-                        packet.climb_action, packet.climb_height);
+                        packet.action, packet.climb_height);
                 } else {
-                    packet.climb_action = 0;
+                    packet.action = 0;
                     packet.climb_height = 0;
                 }
             }
