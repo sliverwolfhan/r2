@@ -5,6 +5,7 @@
        这套独立的"武器头爪子"通过话题 /AT_R2/head_gripper_cmd (Int32) 驱动:
          1 = 准备抓取   2 = 抓取   3 = 抬起武器头   4 = 对接
        流程:
+         0. 切换到一区模式 (SetZoneMode mode=1) —— 否则串口节点门控会忽略抓取命令
          1. 通知爪子"准备抓取" (head cmd=1)
          2. 调参 + 导航到柜台前预备点 (PublishGoal)
          3. 侧向 + 前向贴靠柜台 (DockToWall)
@@ -15,6 +16,8 @@
          8. 通知爪子"对接" (head cmd=4)
 
        说明:
+       - SetZoneMode 发布到 /AT_R2/zone_mode (Int32, latched), 1=一区/2=二区/3=三区。
+         虚拟串口节点据此判断: mode=1 才接受抓取命令, mode=2 才接受爬楼梯命令。
        - PublishHeadCmd 默认 wait_done=false, 发完指令立即返回, 用其后的
          导航/贴靠/DelayMs 留出执行时间。
        - 若爪子节点会在 /AT_R2/head_gripper_done 上回发完成编号, 可将对应
@@ -22,6 +25,12 @@
   -->
   <BehaviorTree ID="GraspHead">
     <Sequence>
+
+      <!-- Step 0: 切换到一区模式 (mode=1)
+           必须最先执行: 虚拟串口节点有 mode 门控, 只有 mode=1 时
+           /AT_R2/head_gripper_cmd 的抓取命令才会被采纳并下发给下位机。
+           SetZoneMode 是同步节点, 发布即返回成功; 话题 latched, 持续生效。 -->
+      <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
 
       <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
       <PublishHeadCmd node="{node}" command="1"
