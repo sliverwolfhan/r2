@@ -78,6 +78,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "   2 - 抓取");
         RCLCPP_INFO(this->get_logger(), "   3 - 抬起武器头");
         RCLCPP_INFO(this->get_logger(), "   4 - 对接");
+        RCLCPP_INFO(this->get_logger(), "   5 - 松开");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【区模式 /zone_mode】");
         RCLCPP_INFO(this->get_logger(), "   7 - 一区 (抓武器头/对接)");
@@ -208,6 +209,9 @@ private:
             case '4':
                 publishHeadGripper(4);  // 对接
                 break;
+            case '5':
+                publishHeadGripper(5);  // 松开
+                break;
 
             // ========== 区模式切换 ==========
             case '7':
@@ -268,7 +272,8 @@ private:
         const char* desc = command == 1 ? "准备抓取"
                          : command == 2 ? "抓取"
                          : command == 3 ? "抬起武器头"
-                         : command == 4 ? "对接" : "未知";
+                         : command == 4 ? "对接"
+                         : command == 5 ? "松开" : "未知";
         RCLCPP_INFO(this->get_logger(), "武器头爪子指令: %d (%s)", command, desc);
         auto msg = std_msgs::msg::Int32();
         msg.data = command;

@@ -51,7 +51,7 @@
                wz_std="0.4"
                wait_after_set="0.3"/>
       <PublishGoal node="{node}"
-                x="0.89" y="5.50" yaw="-3.12"
+                x="0.87" y="5.50" yaw="-3.12"
                 frame_id="map"
                 goal="{nav_goal}"/>
       <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
@@ -97,7 +97,7 @@
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="2000">
+      <DelayMs delay_msec="5000">
         <AlwaysSuccess/>
       </DelayMs>
 
@@ -142,23 +142,20 @@
                 x="0.5" y="5.3" yaw="0.0"
                 frame_id="map"
                 goal="{nav_goal}"/>
-      <PublishGoal node="{node}"
-                x="0.4" y="5.5" yaw="0.0"
-                frame_id="map"
-                goal="{nav_goal}"/>
+
       <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.0"
                     vx="-0.2"
                     wz="0.0"
-                    stall_threshold="0.05"
-                    stall_duration="0.5"
-                    timeout="4"
+                    stall_threshold="0.03"
+                    stall_duration="1.0"
+                    timeout="6"
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
-      <ForceSuccess>      
+      <!-- <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.1"
                     vx="-0.0"
@@ -169,7 +166,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess> -->
       <!-- Step 8: 通知爪子执行对接
            对接通常需要等做完, 这里默认仍用 wait_done=false + DelayMs;
            若有完成反馈建议改 wait_done="true" timeout="15.0" -->
