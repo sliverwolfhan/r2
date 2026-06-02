@@ -18,6 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(small_gicp REQUIRED)
 ament_auto_find_build_dependencies()
 
 ###########
@@ -28,7 +29,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   DIRECTORY src
 )
 
-target_link_libraries(${PROJECT_NAME} OpenMP::OpenMP_CXX)
+target_link_libraries(${PROJECT_NAME} OpenMP::OpenMP_CXX small_gicp::small_gicp)
 
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN small_gicp_relocalization::SmallGicpRelocalizationNode
