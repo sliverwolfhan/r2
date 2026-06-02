@@ -60,7 +60,7 @@ point_lio:
       satu_acc: 30.0                                     # the saturation value of IMU's acceleration. not related to the units
       satu_gyro: 100.0                                   # the saturation value of IMU's angular velocity. not related to the units
       acc_norm: 1.0                                     # 1.0 for g as unit, 9.81 for m/s^2 as unit of the IMU's acceleration
-      lidar_meas_cov: 0.001                              # 0.001激光点测量噪声协方差
+      lidar_meas_cov: 0.0001                              # 0.001激光点测量噪声协方差
       acc_cov_output: 500.0                              #输出模型下的加速度过程噪声
       gyr_cov_output: 1000.0                             #输出模型下的角速度过程噪声
       b_acc_cov: 0.0001                                  #加速度零偏随机游走噪声
@@ -182,7 +182,7 @@ small_gicp_relocalization:
     base_frame: "base_footprint"
     robot_base_frame: "chassis"
     lidar_frame: "mid360"
-    init_pose: [0.4, -4.6, 0.0, 0.0, 0.0, 0.0]   # [x, y, z, roll, pitch, yaw]
+    init_pose: [0.4, 4.6, 0.0, 0.0, 0.0, 3.14]   # [x, y, z, roll, pitch, yaw]
     # The prior_pcd_file does not need to be specified since it going to be set by defaults in launch.
     # prior_pcd_file: ""
 

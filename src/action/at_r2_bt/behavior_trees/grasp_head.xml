@@ -32,12 +32,6 @@
            SetZoneMode 是同步节点, 发布即返回成功; 话题 latched, 持续生效。 -->
       <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
 
-      <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
-      <PublishHeadCmd node="{node}" command="1"
-                      topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/>
-
-      <!-- Step 2: 调参 + 导航到柜台前预备点 -->
       <SetCostmapInflation node="{node}"
                     local_radius="0.05"
                     global_radius="0.15"
@@ -57,26 +51,37 @@
                wz_std="0.4"
                wait_after_set="0.3"/>
       <PublishGoal node="{node}"
-                x="1.3" y="-5.25" yaw="3.12"
+                x="0.89" y="5.50" yaw="-3.12"
                 frame_id="map"
                 goal="{nav_goal}"/>
+      <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
+      <PublishHeadCmd node="{node}" command="1"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <!-- <DelayMs delay_msec="3000">
+        <AlwaysSuccess/>
+      </DelayMs> -->
+      <!-- Step 2: 调参 + 导航到柜台前预备点 -->
+
 
       <!-- Step 3: 侧向贴靠柜台
            vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
            stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
-      <DockToWall node="{node}"
-                  vy="0.1"
-                  vx="0.0"
-                  wz="0.0"
-                  stall_threshold="0.008"
-                  stall_duration="0.5"
-                  timeout="5.0"
-                  publish_rate_hz="50.0"
-                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                  odom_topic="/AT_R2/odometry"/>
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="-0.1"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.01"
+                    stall_duration="0.5"
+                    timeout="3.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
 
       <!-- 前向贴靠柜台 -->
-      <DockToWall node="{node}"
+      <!-- <DockToWall node="{node}"
                   vy="0.0"
                   vx="0.1"
                   wz="0.0"
@@ -85,14 +90,14 @@
                   timeout="2.0"
                   publish_rate_hz="50.0"
                   cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                  odom_topic="/AT_R2/odometry"/>
+                  odom_topic="/AT_R2/odometry"/> -->
 
       <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间
            若爪子有完成反馈, 改成: wait_done="true" timeout="10.0" 并删掉下面的 DelayMs -->
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="3000">
+      <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
 
@@ -101,44 +106,74 @@
       <PublishHeadCmd node="{node}" command="3"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="3000">
+      <!-- <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
-      </DelayMs>
+      </DelayMs> -->
 
       <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
            timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
-      <DockToWall node="{node}"
-                  vy="0.0"
-                  vx="-0.15"
-                  wz="0.0"
-                  stall_threshold="0.30"
-                  stall_duration="10.0"
-                  timeout="1.5"
-                  publish_rate_hz="50.0"
-                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                  odom_topic="/AT_R2/odometry"/>
-
-      <!-- Step 7: 导航到与持杆机器人对接的位置
-           TODO: 把对接点坐标 (x, y, yaw) 改成实际值 -->
-      <SetCostmapInflation node="{node}"
-                    local_radius="0.30"
-                    global_radius="0.30"
-                    local_cost_scaling_factor="1.0"
-                    global_cost_scaling_factor="4.0"/>
-      <PublishGoal node="{node}"
-                x="0.0" y="0.0" yaw="0.0"
-                frame_id="map"
-                goal="{nav_goal}"/>
-
-      <!-- Step 8: 通知爪子执行对接
-           对接通常需要等做完, 这里默认仍用 wait_done=false + DelayMs;
-           若有完成反馈建议改 wait_done="true" timeout="15.0" -->
+      <ForceSuccess>      
+        <DockToWall node="{node}"
+                    vy="0.2"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.30"
+                    stall_duration="10.0"
+                    timeout="2"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      
       <PublishHeadCmd node="{node}" command="4"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="3000">
+      <!-- <DelayMs delay_msec="3000">
         <AlwaysSuccess/>
-      </DelayMs>
+      </DelayMs> -->
+      <!-- Step 7: 导航到与持杆机器人对接的位置
+           TODO: 把对接点坐标 (x, y, yaw) 改成实际值 -->
+      <!-- <SetCostmapInflation node="{node}"
+                    local_radius="0.30"
+                    global_radius="0.30"
+                    local_cost_scaling_factor="1.0"
+                    global_cost_scaling_factor="4.0"/> -->
+      <PublishGoal node="{node}"
+                x="0.5" y="5.3" yaw="0.0"
+                frame_id="map"
+                goal="{nav_goal}"/>
+      <PublishGoal node="{node}"
+                x="0.4" y="5.5" yaw="0.0"
+                frame_id="map"
+                goal="{nav_goal}"/>
+      <ForceSuccess>      
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="-0.2"
+                    wz="0.0"
+                    stall_threshold="0.05"
+                    stall_duration="0.5"
+                    timeout="4"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      <ForceSuccess>      
+        <DockToWall node="{node}"
+                    vy="0.1"
+                    vx="-0.0"
+                    wz="0.0"
+                    stall_threshold="0.01"
+                    stall_duration="0.5"
+                    timeout="4"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      <!-- Step 8: 通知爪子执行对接
+           对接通常需要等做完, 这里默认仍用 wait_done=false + DelayMs;
+           若有完成反馈建议改 wait_done="true" timeout="15.0" -->
+
 
     </Sequence>
   </BehaviorTree>

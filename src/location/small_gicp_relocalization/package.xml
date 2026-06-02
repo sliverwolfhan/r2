@@ -18,6 +18,7 @@
   <depend>tf2_eigen</depend>
   <depend>tf2_ros</depend>
   <depend>pcl_conversions</depend>
+  <depend>small_gicp</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
