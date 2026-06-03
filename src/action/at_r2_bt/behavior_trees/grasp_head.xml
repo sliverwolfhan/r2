@@ -51,7 +51,7 @@
                wz_std="0.4"
                wait_after_set="0.3"/>
       <PublishGoal node="{node}"
-                x="0.87" y="5.50" yaw="-3.12"
+                x="0.89" y="5.50" yaw="-3.12"
                 frame_id="map"
                 goal="{nav_goal}"/>
       <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
@@ -74,7 +74,7 @@
                     wz="0.0"
                     stall_threshold="0.01"
                     stall_duration="0.5"
-                    timeout="3.0"
+                    timeout="4.0"
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
@@ -97,7 +97,7 @@
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="5000">
+      <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
 
