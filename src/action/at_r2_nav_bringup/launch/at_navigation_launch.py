@@ -212,6 +212,6 @@ def generate_launch_description():
     ld.add_action(start_robot_state_publisher_cmd)
     ld.add_action(start_livox_ros_driver2_node)
     ld.add_action(bringup_cmd)
-    ld.add_action(rviz_cmd)
+    # ld.add_action(rviz_cmd)
 
     return ld
