@@ -14,6 +14,8 @@
 
 #include "small_gicp_relocalization/small_gicp_relocalization.hpp"
 
+#include <cmath>
+
 #include "pcl/common/transforms.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "small_gicp/pcl/pcl_registration.hpp"
@@ -25,6 +27,7 @@ namespace small_gicp_relocalization
 
 SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptions & options)
 : Node("small_gicp_relocalization", options),
+  stable_count_(0),
   result_t_(Eigen::Isometry3d::Identity()),
   previous_result_t_(Eigen::Isometry3d::Identity())
 {
@@ -33,6 +36,11 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("global_leaf_size", 0.25);
   this->declare_parameter("registered_leaf_size", 0.25);
   this->declare_parameter("max_dist_sq", 1.0);
+  this->declare_parameter("relocalization_enabled", true);
+  this->declare_parameter("auto_disable_relocalization", true);
+  this->declare_parameter("stable_required_count", 5);
+  this->declare_parameter("stable_translation_threshold", 0.02);
+  this->declare_parameter("stable_rotation_threshold", 0.02);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
@@ -46,6 +54,11 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("global_leaf_size", global_leaf_size_);
   this->get_parameter("registered_leaf_size", registered_leaf_size_);
   this->get_parameter("max_dist_sq", max_dist_sq_);
+  this->get_parameter("relocalization_enabled", relocalization_enabled_);
+  this->get_parameter("auto_disable_relocalization", auto_disable_relocalization_);
+  this->get_parameter("stable_required_count", stable_required_count_);
+  this->get_parameter("stable_translation_threshold", stable_translation_threshold_);
+  this->get_parameter("stable_rotation_threshold", stable_rotation_threshold_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
@@ -72,6 +85,9 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+
+  parameter_callback_handle_ = this->add_on_set_parameters_callback(
+    std::bind(&SmallGicpRelocalizationNode::parametersCallback, this, std::placeholders::_1));
 
   loadGlobalMap(prior_pcd_file_);
 
@@ -102,6 +118,53 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   transform_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(50),  // 20 Hz
     std::bind(&SmallGicpRelocalizationNode::publishTransform, this));
+}
+
+rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parametersCallback(
+  const std::vector<rclcpp::Parameter> & parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  for (const auto & parameter : parameters) {
+    if (parameter.get_name() == "relocalization_enabled") {
+      relocalization_enabled_ = parameter.as_bool();
+      stable_count_ = 0;
+      if (!relocalization_enabled_) {
+        accumulated_cloud_->clear();
+      }
+      RCLCPP_INFO(
+        this->get_logger(), "Relocalization %s.", relocalization_enabled_ ? "enabled" : "disabled");
+    } else if (parameter.get_name() == "auto_disable_relocalization") {
+      auto_disable_relocalization_ = parameter.as_bool();
+    } else if (parameter.get_name() == "stable_required_count") {
+      const auto stable_required_count = parameter.as_int();
+      if (stable_required_count < 1) {
+        result.successful = false;
+        result.reason = "stable_required_count must be greater than 0";
+        return result;
+      }
+      stable_required_count_ = stable_required_count;
+    } else if (parameter.get_name() == "stable_translation_threshold") {
+      const auto stable_translation_threshold = parameter.as_double();
+      if (stable_translation_threshold < 0.0) {
+        result.successful = false;
+        result.reason = "stable_translation_threshold must not be negative";
+        return result;
+      }
+      stable_translation_threshold_ = stable_translation_threshold;
+    } else if (parameter.get_name() == "stable_rotation_threshold") {
+      const auto stable_rotation_threshold = parameter.as_double();
+      if (stable_rotation_threshold < 0.0) {
+        result.successful = false;
+        result.reason = "stable_rotation_threshold must not be negative";
+        return result;
+      }
+      stable_rotation_threshold_ = stable_rotation_threshold;
+    }
+  }
+
+  return result;
 }
 
 void SmallGicpRelocalizationNode::loadGlobalMap(const std::string & file_name)
@@ -138,6 +201,10 @@ void SmallGicpRelocalizationNode::registeredPcdCallback(
   last_scan_time_ = msg->header.stamp;
   current_scan_frame_id_ = msg->header.frame_id;
 
+  if (!relocalization_enabled_) {
+    return;
+  }
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr scan(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*msg, *scan);
   *accumulated_cloud_ += *scan;
@@ -145,6 +212,11 @@ void SmallGicpRelocalizationNode::registeredPcdCallback(
 
 void SmallGicpRelocalizationNode::performRegistration()
 {
+  if (!relocalization_enabled_) {
+    accumulated_cloud_->clear();
+    return;
+  }
+
   if (accumulated_cloud_->empty()) {
     RCLCPP_WARN(this->get_logger(), "No accumulated points to process.");
     return;
@@ -170,7 +242,32 @@ void SmallGicpRelocalizationNode::performRegistration()
   auto result = register_->align(*target_, *source_, *target_tree_, previous_result_t_);
 
   if (result.converged) {
-    result_t_ = previous_result_t_ = result.T_target_source;
+    const auto last_result = previous_result_t_;
+    const auto new_result = result.T_target_source;
+    const auto translation_delta = (new_result.translation() - last_result.translation()).norm();
+    const auto rotation_delta = std::abs(
+      Eigen::AngleAxisd(last_result.rotation().transpose() * new_result.rotation()).angle());
+
+    if (translation_delta < stable_translation_threshold_ &&
+      rotation_delta < stable_rotation_threshold_)
+    {
+      ++stable_count_;
+    } else {
+      stable_count_ = 0;
+    }
+
+    result_t_ = previous_result_t_ = new_result;
+
+    if (auto_disable_relocalization_ && stable_count_ >= stable_required_count_) {
+      const auto stable_count = stable_count_;
+      RCLCPP_INFO(
+        this->get_logger(),
+        "Relocalization is stable for %d iterations, disabling registration and keeping TF output.",
+        stable_count);
+      relocalization_enabled_ = false;
+      accumulated_cloud_->clear();
+      this->set_parameter(rclcpp::Parameter("relocalization_enabled", false));
+    }
   } else {
     RCLCPP_WARN(this->get_logger(), "GICP did not converge.");
   }
@@ -226,6 +323,12 @@ void SmallGicpRelocalizationNode::initialPoseCallback(
     Eigen::Isometry3d map_to_odom = map_to_robot_base * robot_base_to_odom;
 
     previous_result_t_ = result_t_ = map_to_odom;
+    stable_count_ = 0;
+    if (!relocalization_enabled_) {
+      relocalization_enabled_ = true;
+      this->set_parameter(rclcpp::Parameter("relocalization_enabled", true));
+      RCLCPP_INFO(this->get_logger(), "Relocalization enabled by initial pose reset.");
+    }
   } catch (tf2::TransformException & ex) {
     RCLCPP_WARN(
       this->get_logger(), "Could not transform initial pose from %s to %s: %s",

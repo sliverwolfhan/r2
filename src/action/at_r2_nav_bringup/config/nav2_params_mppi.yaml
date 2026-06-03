@@ -177,6 +177,11 @@ small_gicp_relocalization:
     global_leaf_size: 0.2
     registered_leaf_size: 0.2
     max_dist_sq: 1.0
+    relocalization_enabled: true
+    auto_disable_relocalization: true
+    stable_required_count: 5
+    stable_translation_threshold: 0.02
+    stable_rotation_threshold: 0.02
     map_frame: "map"
     odom_frame: "odom"
     base_frame: "base_footprint"
