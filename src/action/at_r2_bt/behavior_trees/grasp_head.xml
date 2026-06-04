@@ -167,10 +167,24 @@
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess> -->
-      <!-- Step 8: 通知爪子执行对接
-           对接通常需要等做完, 这里默认仍用 wait_done=false + DelayMs;
-           若有完成反馈建议改 wait_done="true" timeout="15.0" -->
+      <!-- Step 8: 等待持杆机器人确认对接完成后, 自动发布松开爪子指令
+           WaitDockingRelease 会订阅 status_topic(Int32), 当收到 target_status(默认 1) 时,
+           向 gripper_topic 发布 release_cmd(默认 5), 然后返回 SUCCESS;
+           timeout 秒内没有收到目标状态则返回 FAILURE。
 
+           对应 C++ 节点: wait_docking_release_action.cpp
+           默认等价于:
+             status_topic="/AT_R2/docking_status"
+             gripper_topic="/AT_R2/head_gripper_cmd"
+             target_status="1"
+             release_cmd="5"
+             timeout="30.0" -->
+      <!-- <WaitDockingRelease node="{node}"
+                          status_topic="/AT_R2/docking_status"
+                          gripper_topic="/AT_R2/head_gripper_cmd"
+                          target_status="1"
+                          release_cmd="5"
+                          timeout="30.0"/> -->
 
     </Sequence>
   </BehaviorTree>

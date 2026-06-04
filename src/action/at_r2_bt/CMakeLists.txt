@@ -50,6 +50,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dock_to_wall_action.cpp
   src/publish_head_cmd_action.cpp
   src/set_zone_mode_action.cpp
+  src/wait_docking_release_action.cpp
 )
 
 # Set dependencies
@@ -95,6 +96,7 @@ add_executable(simple_bt_runner
   src/dock_to_wall_action.cpp
   src/publish_head_cmd_action.cpp
   src/set_zone_mode_action.cpp
+  src/wait_docking_release_action.cpp
   src/delay_decorator.cpp
 )
 ament_target_dependencies(simple_bt_runner
