@@ -61,7 +61,7 @@ def generate_launch_description():
 
     declare_world_cmd = DeclareLaunchArgument(
         "world",
-        default_value="rc_2026_red",
+        default_value="rc_2026_red3",
         description="Select world: 'rmul_2024' or 'rmuc_2024' (map file share the same name as the this parameter)",
     )
 

@@ -42,16 +42,16 @@
                plugin_prefix="FollowPath"
                goal_angle_weight="10.0"
                goal_angle_threshold="2.0"
-               vx_max="0.7"
-               vx_min="-0.7"
-               vy_max="0.7"
+               vx_max="1.0"
+               vx_min="-0.9"
+               vy_max="0.9"
                wz_max="4.0"
-               vx_std="0.3"
-               vy_std="0.3"
+               vx_std="0.4"
+               vy_std="0.4"
                wz_std="0.4"
                wait_after_set="0.3"/>
       <PublishGoal node="{node}"
-                x="0.89" y="5.50" yaw="-3.12"
+                x="0.98" y="5.50" yaw="-3.14"
                 frame_id="map"
                 goal="{nav_goal}"/>
       <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
@@ -69,12 +69,12 @@
            stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
       <ForceSuccess>
         <DockToWall node="{node}"
-                    vy="-0.1"
+                    vy="-0.2"
                     vx="0.0"
                     wz="0.0"
                     stall_threshold="0.01"
                     stall_duration="0.5"
-                    timeout="4.0"
+                    timeout="1.7"
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
@@ -97,7 +97,7 @@
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="2000">
+      <DelayMs delay_msec="3000">
         <AlwaysSuccess/>
       </DelayMs>
 
@@ -138,7 +138,7 @@
                     global_radius="0.30"
                     local_cost_scaling_factor="1.0"
                     global_cost_scaling_factor="4.0"/> -->
-      <PublishGoal node="{node}"
+      <!-- <PublishGoal node="{node}"
                 x="0.5" y="5.3" yaw="0.0"
                 frame_id="map"
                 goal="{nav_goal}"/>
@@ -154,7 +154,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess> -->
       <!-- <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.1"
