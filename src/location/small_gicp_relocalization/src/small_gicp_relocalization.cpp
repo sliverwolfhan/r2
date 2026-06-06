@@ -14,7 +14,9 @@
 
 #include "small_gicp_relocalization/small_gicp_relocalization.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "pcl/common/transforms.h"
 #include "pcl_conversions/pcl_conversions.h"
@@ -27,7 +29,10 @@ namespace small_gicp_relocalization
 
 SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptions & options)
 : Node("small_gicp_relocalization", options),
+  map_bounds_valid_(false),
   stable_count_(0),
+  map_bounds_min_(Eigen::Vector3d::Zero()),
+  map_bounds_max_(Eigen::Vector3d::Zero()),
   result_t_(Eigen::Isometry3d::Identity()),
   previous_result_t_(Eigen::Isometry3d::Identity())
 {
@@ -38,9 +43,12 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("max_dist_sq", 1.0);
   this->declare_parameter("relocalization_enabled", true);
   this->declare_parameter("auto_disable_relocalization", true);
+  this->declare_parameter("map_bounds_filter_enabled", true);
   this->declare_parameter("stable_required_count", 5);
+  this->declare_parameter("map_bounds_filter_min_points", 1);
   this->declare_parameter("stable_translation_threshold", 0.02);
   this->declare_parameter("stable_rotation_threshold", 0.02);
+  this->declare_parameter("map_bounds_filter_margin", 1.0);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
@@ -56,9 +64,12 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("max_dist_sq", max_dist_sq_);
   this->get_parameter("relocalization_enabled", relocalization_enabled_);
   this->get_parameter("auto_disable_relocalization", auto_disable_relocalization_);
+  this->get_parameter("map_bounds_filter_enabled", map_bounds_filter_enabled_);
   this->get_parameter("stable_required_count", stable_required_count_);
+  this->get_parameter("map_bounds_filter_min_points", map_bounds_filter_min_points_);
   this->get_parameter("stable_translation_threshold", stable_translation_threshold_);
   this->get_parameter("stable_rotation_threshold", stable_rotation_threshold_);
+  this->get_parameter("map_bounds_filter_margin", map_bounds_filter_margin_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
@@ -137,6 +148,8 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         this->get_logger(), "Relocalization %s.", relocalization_enabled_ ? "enabled" : "disabled");
     } else if (parameter.get_name() == "auto_disable_relocalization") {
       auto_disable_relocalization_ = parameter.as_bool();
+    } else if (parameter.get_name() == "map_bounds_filter_enabled") {
+      map_bounds_filter_enabled_ = parameter.as_bool();
     } else if (parameter.get_name() == "stable_required_count") {
       const auto stable_required_count = parameter.as_int();
       if (stable_required_count < 1) {
@@ -145,6 +158,14 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         return result;
       }
       stable_required_count_ = stable_required_count;
+    } else if (parameter.get_name() == "map_bounds_filter_min_points") {
+      const auto map_bounds_filter_min_points = parameter.as_int();
+      if (map_bounds_filter_min_points < 0) {
+        result.successful = false;
+        result.reason = "map_bounds_filter_min_points must not be negative";
+        return result;
+      }
+      map_bounds_filter_min_points_ = map_bounds_filter_min_points;
     } else if (parameter.get_name() == "stable_translation_threshold") {
       const auto stable_translation_threshold = parameter.as_double();
       if (stable_translation_threshold < 0.0) {
@@ -161,6 +182,14 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         return result;
       }
       stable_rotation_threshold_ = stable_rotation_threshold;
+    } else if (parameter.get_name() == "map_bounds_filter_margin") {
+      const auto map_bounds_filter_margin = parameter.as_double();
+      if (map_bounds_filter_margin < 0.0) {
+        result.successful = false;
+        result.reason = "map_bounds_filter_margin must not be negative";
+        return result;
+      }
+      map_bounds_filter_margin_ = map_bounds_filter_margin;
     }
   }
 
@@ -193,6 +222,77 @@ void SmallGicpRelocalizationNode::loadGlobalMap(const std::string & file_name)
     }
   }
   pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
+
+  if (global_map_->empty()) {
+    map_bounds_valid_ = false;
+    RCLCPP_WARN(this->get_logger(), "Global map is empty, map bounds filter is disabled.");
+    return;
+  }
+
+  map_bounds_min_ = Eigen::Vector3d(
+    std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+    std::numeric_limits<double>::max());
+  map_bounds_max_ = Eigen::Vector3d(
+    std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(),
+    std::numeric_limits<double>::lowest());
+
+  for (const auto & point : global_map_->points) {
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
+      continue;
+    }
+
+    map_bounds_min_.x() = std::min(map_bounds_min_.x(), static_cast<double>(point.x));
+    map_bounds_min_.y() = std::min(map_bounds_min_.y(), static_cast<double>(point.y));
+    map_bounds_min_.z() = std::min(map_bounds_min_.z(), static_cast<double>(point.z));
+    map_bounds_max_.x() = std::max(map_bounds_max_.x(), static_cast<double>(point.x));
+    map_bounds_max_.y() = std::max(map_bounds_max_.y(), static_cast<double>(point.y));
+    map_bounds_max_.z() = std::max(map_bounds_max_.z(), static_cast<double>(point.z));
+  }
+
+  map_bounds_valid_ =
+    map_bounds_min_.x() <= map_bounds_max_.x() && map_bounds_min_.y() <= map_bounds_max_.y() &&
+    map_bounds_min_.z() <= map_bounds_max_.z();
+
+  if (!map_bounds_valid_) {
+    RCLCPP_WARN(this->get_logger(), "Global map has no finite points, map bounds filter is disabled.");
+    return;
+  }
+
+  RCLCPP_INFO_STREAM(
+    this->get_logger(), "Global map bounds: min = " << map_bounds_min_.transpose()
+                                                     << ", max = " << map_bounds_max_.transpose());
+}
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr SmallGicpRelocalizationNode::filterScanByMapBounds(
+  const pcl::PointCloud<pcl::PointXYZ> & scan, const Eigen::Isometry3d & map_to_odom) const
+{
+  pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>());
+  filtered->points.reserve(scan.points.size());
+  filtered->header = scan.header;
+
+  const Eigen::Vector3d min_bound =
+    map_bounds_min_ - Eigen::Vector3d::Constant(map_bounds_filter_margin_);
+  const Eigen::Vector3d max_bound =
+    map_bounds_max_ + Eigen::Vector3d::Constant(map_bounds_filter_margin_);
+
+  for (const auto & point : scan.points) {
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
+      continue;
+    }
+
+    const Eigen::Vector3d point_map =
+      map_to_odom * Eigen::Vector3d(point.x, point.y, point.z);
+    if ((point_map.array() >= min_bound.array()).all() &&
+      (point_map.array() <= max_bound.array()).all())
+    {
+      filtered->points.push_back(point);
+    }
+  }
+
+  filtered->width = filtered->points.size();
+  filtered->height = 1;
+  filtered->is_dense = false;
+  return filtered;
 }
 
 void SmallGicpRelocalizationNode::registeredPcdCallback(
@@ -207,7 +307,26 @@ void SmallGicpRelocalizationNode::registeredPcdCallback(
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr scan(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*msg, *scan);
-  *accumulated_cloud_ += *scan;
+
+  if (!map_bounds_filter_enabled_ || !map_bounds_valid_) {
+    *accumulated_cloud_ += *scan;
+    return;
+  }
+
+  const auto filtered = filterScanByMapBounds(*scan, previous_result_t_);
+  if (static_cast<int>(filtered->points.size()) < map_bounds_filter_min_points_) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000,
+      "Map bounds filter kept %zu / %zu points, using unfiltered scan instead.",
+      filtered->points.size(), scan->points.size());
+    *accumulated_cloud_ += *scan;
+    return;
+  }
+
+  RCLCPP_INFO_THROTTLE(
+    this->get_logger(), *this->get_clock(), 2000, "Map bounds filter kept %zu / %zu points.",
+    filtered->points.size(), scan->points.size());
+  *accumulated_cloud_ += *filtered;
 }
 
 void SmallGicpRelocalizationNode::performRegistration()

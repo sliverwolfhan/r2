@@ -44,6 +44,8 @@ public:
 private:
   void registeredPcdCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
   void loadGlobalMap(const std::string & file_name);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr filterScanByMapBounds(
+    const pcl::PointCloud<pcl::PointXYZ> & scan, const Eigen::Isometry3d & map_to_odom) const;
   void performRegistration();
   void publishTransform();
   void initialPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
@@ -60,11 +62,17 @@ private:
   float max_dist_sq_;
   bool relocalization_enabled_;
   bool auto_disable_relocalization_;
+  bool map_bounds_filter_enabled_;
   int stable_required_count_;
+  int map_bounds_filter_min_points_;
   double stable_translation_threshold_;
   double stable_rotation_threshold_;
+  double map_bounds_filter_margin_;
+  bool map_bounds_valid_;
   int stable_count_;
   std::vector<double> init_pose_;
+  Eigen::Vector3d map_bounds_min_;
+  Eigen::Vector3d map_bounds_max_;
 
   std::string map_frame_;
   std::string odom_frame_;

@@ -177,6 +177,9 @@ small_gicp_relocalization:
     global_leaf_size: 0.2
     registered_leaf_size: 0.2
     max_dist_sq: 1.0
+    map_bounds_filter_enabled: true
+    map_bounds_filter_margin: 1.0
+    map_bounds_filter_min_points: 1
     map_frame: "map"
     odom_frame: "odom"
     base_frame: "base_footprint"
