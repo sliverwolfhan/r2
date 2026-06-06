@@ -186,6 +186,22 @@ small_gicp_relocalization:
     # The prior_pcd_file does not need to be specified since it going to be set by defaults in launch.
     # prior_pcd_file: ""
 
+transformed_pcd_publisher:
+  ros__parameters:
+    use_sim_time: False
+    pcd_file: ""
+    frame_id: "map"
+    topic_name: "prior_pcd_transformed"
+    offset_x: 0.0
+    offset_y: 0.0
+    offset_z: 0.0
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+    angles_in_degrees: false
+    publish_period_sec: 0.0
+    output_pcd_file: ""
+
 pointcloud_to_laserscan:
   ros__parameters:
     use_sim_time: False

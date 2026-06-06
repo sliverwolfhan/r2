@@ -180,6 +180,16 @@ def generate_launch_description():
                 arguments=["--ros-args", "--log-level", log_level],
             ),
             Node(
+                package="small_gicp_relocalization",
+                executable="transformed_pcd_publisher_node",
+                name="transformed_pcd_publisher",
+                output="screen",
+                respawn=use_respawn,
+                respawn_delay=2.0,
+                parameters=[configured_params, {"pcd_file": prior_pcd_file}],
+                arguments=["--ros-args", "--log-level", log_level],
+            ),
+            Node(
                 package="nav2_lifecycle_manager",
                 executable="lifecycle_manager",
                 name="lifecycle_manager_localization",
@@ -209,6 +219,12 @@ def generate_launch_description():
                 plugin="small_gicp_relocalization::SmallGicpRelocalizationNode",
                 name="small_gicp_relocalization",
                 parameters=[configured_params, {"prior_pcd_file": prior_pcd_file}],
+            ),
+            ComposableNode(
+                package="small_gicp_relocalization",
+                plugin="small_gicp_relocalization::TransformedPcdPublisherNode",
+                name="transformed_pcd_publisher",
+                parameters=[configured_params, {"pcd_file": prior_pcd_file}],
             ),
             ComposableNode(
                 package="nav2_lifecycle_manager",

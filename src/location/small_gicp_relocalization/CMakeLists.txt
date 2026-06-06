@@ -36,6 +36,11 @@ rclcpp_components_register_node(${PROJECT_NAME}
   EXECUTABLE ${PROJECT_NAME}_node
 )
 
+rclcpp_components_register_node(${PROJECT_NAME}
+  PLUGIN small_gicp_relocalization::TransformedPcdPublisherNode
+  EXECUTABLE transformed_pcd_publisher_node
+)
+
 #############
 ## Testing ##
 #############
