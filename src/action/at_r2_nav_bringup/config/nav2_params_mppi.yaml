@@ -57,23 +57,23 @@ point_lio:
       extrinsic_est_en: False                           # for aggressive motion, set this variable False
       imu_time_inte: 0.005                              # = 1 / frequency of IMU
       lidar_time_inte: 0.1
-      satu_acc: 30.0                                     # the saturation value of IMU's acceleration. not related to the units
-      satu_gyro: 100.0                                   # the saturation value of IMU's angular velocity. not related to the units
+      satu_acc: 100.0                                     # the saturation value of IMU's acceleration. not related to the units
+      satu_gyro: 300.0                                   # the saturation value of IMU's angular velocity. not related to the units
       acc_norm: 1.0                                     # 1.0 for g as unit, 9.81 for m/s^2 as unit of the IMU's acceleration
-      lidar_meas_cov: 0.0001                              # 0.001激光点测量噪声协方差
+      lidar_meas_cov: 0.001                              # 0.001激光点测量噪声协方差
       acc_cov_output: 500.0                              #输出模型下的加速度过程噪声
       gyr_cov_output: 1000.0                             #输出模型下的角速度过程噪声
       b_acc_cov: 0.0001                                  #加速度零偏随机游走噪声
       b_gyr_cov: 0.0001                                  #陀螺仪零偏随机游走噪声
-      imu_meas_acc_cov: 0.3                              #IMU 加速度测量噪声协方差
-      imu_meas_omg_cov: 0.3                              #IMU 角速度测量噪声协方差
+      imu_meas_acc_cov: 0.1                              #IMU 加速度测量噪声协方差
+      imu_meas_omg_cov: 0.1                              #IMU 角速度测量噪声协方差
       gyr_cov_input: 0.01                                # for IMU as input model  输入模型下的加速度过程噪声
       acc_cov_input: 0.1                                # for IMU as input model 输入模型下的角速度过程噪声
       plane_thr: 0.05                                    # 0.05, the threshold for plane criteria, the smaller, the flatter a plane
       match_s: 81.0
       ivox_grid_resolution: 0.3
-      gravity: [0.0, 0.0, 9.81]            # gravity to be aligned
-      gravity_init: [0.0, 0.0, 9.81]       # preknown gravity in the first IMU body frame, use when imu_en is False or start from a non-stationary state
+      gravity: [0.0, 0.0, 1.0]            # gravity to be aligned
+      gravity_init: [0.0, 0.0, 1.0]       # preknown gravity in the first IMU body frame, use when imu_en is False or start from a non-stationary state
       extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
       extrinsic_R: [ 1.0, 0.0, 0.0,
                      0.0, 1.0, 0.0,
@@ -177,12 +177,9 @@ small_gicp_relocalization:
     global_leaf_size: 0.2
     registered_leaf_size: 0.2
     max_dist_sq: 1.0
-    map_bounds_filter_enabled: true
-    map_bounds_filter_margin: 1.0
-    map_bounds_filter_min_points: 1
     relocalization_enabled: true
     auto_disable_relocalization: true
-    stable_required_count: 5
+    stable_required_count: 10
     stable_translation_threshold: 0.02
     stable_rotation_threshold: 0.02
     map_frame: "map"
@@ -190,24 +187,24 @@ small_gicp_relocalization:
     base_frame: "base_footprint"
     robot_base_frame: "chassis"
     lidar_frame: "mid360"
-    init_pose: [0.4, 4.6, 0.0, 0.0, 0.0, 3.14]   # [x, y, z, roll, pitch, yaw]
+    init_pose: [0.35, 4.6, 0.0, 0.0, 0.0, 3.14]   # [x, y, z, roll, pitch, yaw]
     # The prior_pcd_file does not need to be specified since it going to be set by defaults in launch.
     # prior_pcd_file: ""
 
 transformed_pcd_publisher:
   ros__parameters:
     use_sim_time: False
-    pcd_file: ""
+    pcd_file: "/home/pc1/AT_RC/src/action/at_r2_nav_bringup/pcd/rc_2026_red4.pcd"
     frame_id: "map"
     topic_name: "prior_pcd_transformed"
-    offset_x: 0.0
-    offset_y: 0.0
-    offset_z: 0.0
-    roll: 0.0
+    offset_x: -0.3975
+    offset_y: -0.355
+    offset_z: 0.75
+    roll: 3.14
     pitch: 0.0
     yaw: 0.0
     angles_in_degrees: false
-    publish_period_sec: 0.0
+    publish_period_sec: 3.0
     output_pcd_file: ""
 
 pointcloud_to_laserscan:
@@ -380,9 +377,9 @@ controller_server:
       movement_time_allowance: 15.0
     general_goal_checker:
       plugin: "pb_nav2_plugins/PreciseGoalChecker"
-      x_goal_tolerance: 0.05
+      x_goal_tolerance: 0.03
       y_goal_tolerance: 0.05
-      yaw_goal_tolerance: 0.05
+      yaw_goal_tolerance: 0.03
       stable_duration: 0.3
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
@@ -391,19 +388,19 @@ controller_server:
       batch_size: 5000
       vx_std: 0.45        # 增大速度采样标准差以匹配更高速度
       vy_std: 0.45
-      wz_std: 0.45
+      wz_std: 0.35
       vx_max: 2.0        # 提高速度
-      vx_min: -2.0
+      vx_min: -6.0
       vy_max: 2.0
       wz_max: 3.5
       ax_max: 4.0        # 提高加速度
-      ax_min: -4.0
-      ay_min: -4.0
-      ay_max: 4.0
+      ax_min: -6.0
+      ay_min: -6.0
+      ay_max: 5.0
       az_max: 5.5
       iteration_count: 2
       temperature: 0.3
-      gamma: 0.04
+      gamma: 0.03
       motion_model: "Omni"          # 改为全向运动模型 DiffDrive Omni
       visualize: false
       critic_index_to_visualize: 0

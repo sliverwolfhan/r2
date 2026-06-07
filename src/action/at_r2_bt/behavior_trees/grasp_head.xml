@@ -46,18 +46,34 @@
                vx_min="-0.9"
                vy_max="0.9"
                wz_max="4.0"
-               vx_std="0.4"
-               vy_std="0.4"
-               wz_std="0.4"
+               vx_std="0.3"
+               vy_std="0.3"
+               wz_std="0.3"
                wait_after_set="0.3"/>
+      
+      <!-- <ParallelAll max_failures="1"> -->
+        <!-- 1腿 -->
       <PublishGoal node="{node}"
-                x="0.98" y="5.50" yaw="-3.14"
+                x="0.96" y="5.6" yaw="-3.14"
                 frame_id="map"
                 goal="{nav_goal}"/>
+
+        <!-- 2 -->
+        <!-- <Sequence>
+          <DelayMs delay_msec="900">
+            <AlwaysSuccess/>
+          </DelayMs>  
+          <PublishHeadCmd node="{node}" command="1"
+                          topic="/AT_R2/head_gripper_cmd"
+                          wait_done="false"/>
+        </Sequence> -->
+      <!-- </ParallelAll>          -->
+      <!-- <PublishGoal node="{node}"
+                x="1.0" y="5.50" yaw="-3.14"
+                frame_id="map"
+                goal="{nav_goal}"/> -->
       <!-- Step 1: 通知爪子准备抓取(可与导航并行执行, 这里先发指令再走) -->
-      <PublishHeadCmd node="{node}" command="1"
-                      topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/>
+
       <!-- <DelayMs delay_msec="3000">
         <AlwaysSuccess/>
       </DelayMs> -->
@@ -67,7 +83,7 @@
       <!-- Step 3: 侧向贴靠柜台
            vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
            stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
-      <ForceSuccess>
+      <!-- <ForceSuccess>
         <DockToWall node="{node}"
                     vy="-0.2"
                     vx="0.0"
@@ -78,7 +94,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess> -->
 
       <!-- 前向贴靠柜台 -->
       <!-- <DockToWall node="{node}"
@@ -94,25 +110,25 @@
 
       <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间
            若爪子有完成反馈, 改成: wait_done="true" timeout="10.0" 并删掉下面的 DelayMs -->
-      <PublishHeadCmd node="{node}" command="2"
+      <!-- <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
       <DelayMs delay_msec="3000">
         <AlwaysSuccess/>
-      </DelayMs>
+      </DelayMs> -->
 
       <!-- Step 5: 通知爪子抬起武器头, 留出抬起执行时间
            抬起后再后退, 避免武器头还在柜台上就拖动 -->
-      <PublishHeadCmd node="{node}" command="3"
+      <!-- <PublishHeadCmd node="{node}" command="3"
                       topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/>
+                      wait_done="false"/> -->
       <!-- <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs> -->
 
       <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
            timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
-      <ForceSuccess>      
+      <!-- <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.2"
                     vx="0.0"
@@ -123,11 +139,11 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess> -->
       
-      <PublishHeadCmd node="{node}" command="4"
+      <!-- <PublishHeadCmd node="{node}" command="4"
                       topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/>
+                      wait_done="false"/> -->
       <!-- <DelayMs delay_msec="3000">
         <AlwaysSuccess/>
       </DelayMs> -->
@@ -138,12 +154,29 @@
                     global_radius="0.30"
                     local_cost_scaling_factor="1.0"
                     global_cost_scaling_factor="4.0"/> -->
-      <!-- <PublishGoal node="{node}"
-                x="0.5" y="5.3" yaw="0.0"
-                frame_id="map"
-                goal="{nav_goal}"/>
+      <!-- <ParallelAll max_failures="1"> -->
+        <!-- 1腿 -->
+        <!-- <PublishGoal node="{node}"
+                  x="0.6" y="5.1" yaw="0.0"
+                  frame_id="map"
+                  goal="{nav_goal}"/> -->
 
-      <ForceSuccess>      
+        <!-- 2 -->
+        <!-- <Sequence>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>  
+          <PublishHeadCmd node="{node}" command="4"
+                          topic="/AT_R2/head_gripper_cmd"
+                          wait_done="false"/>
+        </Sequence> -->
+      <!-- </ParallelAll>          -->
+      <!-- <PublishGoal node="{node}"
+                x="0.5" y="5.1" yaw="0.0"
+                frame_id="map"
+                goal="{nav_goal}"/> -->
+
+      <!-- <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.0"
                     vx="-0.2"

@@ -61,7 +61,7 @@ def generate_launch_description():
 
     declare_world_cmd = DeclareLaunchArgument(
         "world",
-        default_value="rc_2026_red3",
+        default_value="rc_2026_red4",
         description="Select world: 'rmul_2024' or 'rmuc_2024' (map file share the same name as the this parameter)",
     )
 
@@ -212,6 +212,6 @@ def generate_launch_description():
     ld.add_action(start_robot_state_publisher_cmd)
     ld.add_action(start_livox_ros_driver2_node)
     ld.add_action(bringup_cmd)
-    # ld.add_action(rviz_cmd)
+    ld.add_action(rviz_cmd)
 
     return ld

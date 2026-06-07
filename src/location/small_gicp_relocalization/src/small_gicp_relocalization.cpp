@@ -356,7 +356,7 @@ void SmallGicpRelocalizationNode::performRegistration()
 
   register_->reduction.num_threads = num_threads_;
   register_->rejector.max_dist_sq = max_dist_sq_;
-  register_->optimizer.max_iterations = 10;
+  register_->optimizer.max_iterations = 20;
 
   auto result = register_->align(*target_, *source_, *target_tree_, previous_result_t_);
 
