@@ -44,11 +44,15 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("relocalization_enabled", true);
   this->declare_parameter("auto_disable_relocalization", true);
   this->declare_parameter("map_bounds_filter_enabled", true);
+  this->declare_parameter("sliding_window_filter_enabled", true);
   this->declare_parameter("stable_required_count", 5);
   this->declare_parameter("map_bounds_filter_min_points", 1);
+  this->declare_parameter("sliding_window_filter_size", 3);
   this->declare_parameter("stable_translation_threshold", 0.02);
   this->declare_parameter("stable_rotation_threshold", 0.02);
   this->declare_parameter("map_bounds_filter_margin", 1.0);
+  this->declare_parameter("sliding_window_filter_reset_translation_threshold", 0.3);
+  this->declare_parameter("sliding_window_filter_reset_rotation_threshold", 0.3);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
@@ -65,11 +69,18 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("relocalization_enabled", relocalization_enabled_);
   this->get_parameter("auto_disable_relocalization", auto_disable_relocalization_);
   this->get_parameter("map_bounds_filter_enabled", map_bounds_filter_enabled_);
+  this->get_parameter("sliding_window_filter_enabled", sliding_window_filter_enabled_);
   this->get_parameter("stable_required_count", stable_required_count_);
   this->get_parameter("map_bounds_filter_min_points", map_bounds_filter_min_points_);
+  this->get_parameter("sliding_window_filter_size", sliding_window_filter_size_);
   this->get_parameter("stable_translation_threshold", stable_translation_threshold_);
   this->get_parameter("stable_rotation_threshold", stable_rotation_threshold_);
   this->get_parameter("map_bounds_filter_margin", map_bounds_filter_margin_);
+  this->get_parameter(
+    "sliding_window_filter_reset_translation_threshold",
+    sliding_window_filter_reset_translation_threshold_);
+  this->get_parameter(
+    "sliding_window_filter_reset_rotation_threshold", sliding_window_filter_reset_rotation_threshold_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
@@ -77,6 +88,24 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("lidar_frame", lidar_frame_);
   this->get_parameter("prior_pcd_file", prior_pcd_file_);
   this->get_parameter("init_pose", init_pose_);
+
+  if (sliding_window_filter_size_ < 1) {
+    RCLCPP_WARN(
+      this->get_logger(), "sliding_window_filter_size must be greater than 0, using 1.");
+    sliding_window_filter_size_ = 1;
+  }
+  if (sliding_window_filter_reset_translation_threshold_ < 0.0) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "sliding_window_filter_reset_translation_threshold must not be negative, using 0.0.");
+    sliding_window_filter_reset_translation_threshold_ = 0.0;
+  }
+  if (sliding_window_filter_reset_rotation_threshold_ < 0.0) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "sliding_window_filter_reset_rotation_threshold must not be negative, using 0.0.");
+    sliding_window_filter_reset_rotation_threshold_ = 0.0;
+  }
 
   // [x, y, z, roll, pitch, yaw] - init_pose parameters
   if (!init_pose_.empty() && init_pose_.size() >= 6) {
@@ -141,6 +170,7 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
     if (parameter.get_name() == "relocalization_enabled") {
       relocalization_enabled_ = parameter.as_bool();
       stable_count_ = 0;
+      resetResultFilter();
       if (!relocalization_enabled_) {
         accumulated_cloud_->clear();
       }
@@ -150,6 +180,12 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
       auto_disable_relocalization_ = parameter.as_bool();
     } else if (parameter.get_name() == "map_bounds_filter_enabled") {
       map_bounds_filter_enabled_ = parameter.as_bool();
+    } else if (parameter.get_name() == "sliding_window_filter_enabled") {
+      sliding_window_filter_enabled_ = parameter.as_bool();
+      resetResultFilter();
+      RCLCPP_INFO(
+        this->get_logger(), "Sliding window filter %s.",
+        sliding_window_filter_enabled_ ? "enabled" : "disabled");
     } else if (parameter.get_name() == "stable_required_count") {
       const auto stable_required_count = parameter.as_int();
       if (stable_required_count < 1) {
@@ -166,6 +202,17 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         return result;
       }
       map_bounds_filter_min_points_ = map_bounds_filter_min_points;
+    } else if (parameter.get_name() == "sliding_window_filter_size") {
+      const auto sliding_window_filter_size = parameter.as_int();
+      if (sliding_window_filter_size < 1) {
+        result.successful = false;
+        result.reason = "sliding_window_filter_size must be greater than 0";
+        return result;
+      }
+      sliding_window_filter_size_ = sliding_window_filter_size;
+      while (result_window_.size() > static_cast<std::size_t>(sliding_window_filter_size_)) {
+        result_window_.erase(result_window_.begin());
+      }
     } else if (parameter.get_name() == "stable_translation_threshold") {
       const auto stable_translation_threshold = parameter.as_double();
       if (stable_translation_threshold < 0.0) {
@@ -190,6 +237,22 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         return result;
       }
       map_bounds_filter_margin_ = map_bounds_filter_margin;
+    } else if (parameter.get_name() == "sliding_window_filter_reset_translation_threshold") {
+      const auto reset_translation_threshold = parameter.as_double();
+      if (reset_translation_threshold < 0.0) {
+        result.successful = false;
+        result.reason = "sliding_window_filter_reset_translation_threshold must not be negative";
+        return result;
+      }
+      sliding_window_filter_reset_translation_threshold_ = reset_translation_threshold;
+    } else if (parameter.get_name() == "sliding_window_filter_reset_rotation_threshold") {
+      const auto reset_rotation_threshold = parameter.as_double();
+      if (reset_rotation_threshold < 0.0) {
+        result.successful = false;
+        result.reason = "sliding_window_filter_reset_rotation_threshold must not be negative";
+        return result;
+      }
+      sliding_window_filter_reset_rotation_threshold_ = reset_rotation_threshold;
     }
   }
 
@@ -295,6 +358,78 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr SmallGicpRelocalizationNode::filterScanByMap
   return filtered;
 }
 
+Eigen::Isometry3d SmallGicpRelocalizationNode::filterRegistrationResult(
+  const Eigen::Isometry3d & raw_result)
+{
+  if (shouldResetResultFilter(raw_result)) {
+    resetResultFilter();
+  }
+
+  result_window_.push_back(raw_result);
+  while (result_window_.size() > static_cast<std::size_t>(sliding_window_filter_size_)) {
+    result_window_.erase(result_window_.begin());
+  }
+
+  return averageTransformWindow();
+}
+
+Eigen::Isometry3d SmallGicpRelocalizationNode::averageTransformWindow() const
+{
+  if (result_window_.empty()) {
+    return result_t_;
+  }
+
+  Eigen::Vector3d translation = Eigen::Vector3d::Zero();
+  Eigen::Vector4d rotation_coefficients = Eigen::Vector4d::Zero();
+  const Eigen::Quaterniond reference(result_window_.front().rotation());
+
+  for (const auto & transform : result_window_) {
+    translation += transform.translation();
+
+    Eigen::Quaterniond rotation(transform.rotation());
+    if (rotation.dot(reference) < 0.0) {
+      rotation.coeffs() *= -1.0;
+    }
+    rotation_coefficients += rotation.coeffs();
+  }
+
+  translation /= static_cast<double>(result_window_.size());
+
+  Eigen::Quaterniond rotation;
+  if (rotation_coefficients.norm() > std::numeric_limits<double>::epsilon()) {
+    rotation.coeffs() = rotation_coefficients;
+    rotation.normalize();
+  } else {
+    rotation = reference.normalized();
+  }
+
+  Eigen::Isometry3d average = Eigen::Isometry3d::Identity();
+  average.translation() = translation;
+  average.linear() = rotation.toRotationMatrix();
+  return average;
+}
+
+void SmallGicpRelocalizationNode::resetResultFilter()
+{
+  result_window_.clear();
+}
+
+bool SmallGicpRelocalizationNode::shouldResetResultFilter(
+  const Eigen::Isometry3d & raw_result) const
+{
+  if (result_window_.empty()) {
+    return false;
+  }
+
+  const auto & last_result = result_window_.back();
+  const auto translation_delta = (raw_result.translation() - last_result.translation()).norm();
+  const auto rotation_delta = std::abs(
+    Eigen::AngleAxisd(last_result.rotation().transpose() * raw_result.rotation()).angle());
+
+  return translation_delta > sliding_window_filter_reset_translation_threshold_ ||
+         rotation_delta > sliding_window_filter_reset_rotation_threshold_;
+}
+
 void SmallGicpRelocalizationNode::registeredPcdCallback(
   const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
@@ -375,7 +510,13 @@ void SmallGicpRelocalizationNode::performRegistration()
       stable_count_ = 0;
     }
 
-    result_t_ = previous_result_t_ = new_result;
+    previous_result_t_ = new_result;
+    if (sliding_window_filter_enabled_) {
+      result_t_ = filterRegistrationResult(new_result);
+    } else {
+      result_t_ = new_result;
+      resetResultFilter();
+    }
 
     if (auto_disable_relocalization_ && stable_count_ >= stable_required_count_) {
       const auto stable_count = stable_count_;
@@ -443,6 +584,7 @@ void SmallGicpRelocalizationNode::initialPoseCallback(
 
     previous_result_t_ = result_t_ = map_to_odom;
     stable_count_ = 0;
+    resetResultFilter();
     if (!relocalization_enabled_) {
       relocalization_enabled_ = true;
       this->set_parameter(rclcpp::Parameter("relocalization_enabled", true));

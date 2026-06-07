@@ -48,6 +48,10 @@ private:
     const pcl::PointCloud<pcl::PointXYZ> & scan, const Eigen::Isometry3d & map_to_odom) const;
   void performRegistration();
   void publishTransform();
+  Eigen::Isometry3d filterRegistrationResult(const Eigen::Isometry3d & raw_result);
+  Eigen::Isometry3d averageTransformWindow() const;
+  void resetResultFilter();
+  bool shouldResetResultFilter(const Eigen::Isometry3d & raw_result) const;
   void initialPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
   rcl_interfaces::msg::SetParametersResult parametersCallback(
     const std::vector<rclcpp::Parameter> & parameters);
@@ -63,11 +67,15 @@ private:
   bool relocalization_enabled_;
   bool auto_disable_relocalization_;
   bool map_bounds_filter_enabled_;
+  bool sliding_window_filter_enabled_;
   int stable_required_count_;
   int map_bounds_filter_min_points_;
+  int sliding_window_filter_size_;
   double stable_translation_threshold_;
   double stable_rotation_threshold_;
   double map_bounds_filter_margin_;
+  double sliding_window_filter_reset_translation_threshold_;
+  double sliding_window_filter_reset_rotation_threshold_;
   bool map_bounds_valid_;
   int stable_count_;
   std::vector<double> init_pose_;
@@ -84,6 +92,7 @@ private:
   rclcpp::Time last_scan_time_;
   Eigen::Isometry3d result_t_;
   Eigen::Isometry3d previous_result_t_;
+  std::vector<Eigen::Isometry3d> result_window_;
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr global_map_;
   pcl::PointCloud<pcl::PointXYZ>::Ptr registered_scan_;
