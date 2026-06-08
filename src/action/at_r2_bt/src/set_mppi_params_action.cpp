@@ -89,6 +89,11 @@ BT::PortsList SetMppiParamsAction::providedPorts()
     BT::InputPort<bool>("twirling_enabled", "TwirlingCritic.enabled"),
     BT::InputPort<int>("twirling_cost_power", "TwirlingCritic.twirling_cost_power"),
     BT::InputPort<double>("twirling_weight", "TwirlingCritic.twirling_cost_weight"),
+    // Goal checker ports (mapped directly to general_goal_checker.<key>, no plugin prefix)
+    BT::InputPort<double>("goal_x_tolerance", "PreciseGoalChecker.x_goal_tolerance"),
+    BT::InputPort<double>("goal_y_tolerance", "PreciseGoalChecker.y_goal_tolerance"),
+    BT::InputPort<double>("goal_yaw_tolerance", "PreciseGoalChecker.yaw_goal_tolerance"),
+    BT::InputPort<double>("goal_stable_duration", "PreciseGoalChecker.stable_duration"),
     BT::InputPort<double>(
       "wait_after_set", 0.3, "Seconds to wait after set_parameters before SUCCESS"),
     BT::InputPort<double>("service_timeout", 2.0, "Seconds to wait for set_parameters service")
@@ -128,6 +133,13 @@ void SetMppiParamsAction::buildParams(Target & target, const std::string & prefi
       bool v = false;
       if (getInput(port, v)) {
         target.params.emplace_back(pname(key), v);
+      }
+    };
+
+  auto add_raw_d = [this, &target](const char * port, const char * key) {
+      double v = 0.0;
+      if (getInput(port, v)) {
+        target.params.emplace_back(key, v);
       }
     };
 
@@ -192,6 +204,11 @@ void SetMppiParamsAction::buildParams(Target & target, const std::string & prefi
   add_b("twirling_enabled", "TwirlingCritic.enabled");
   add_i("twirling_cost_power", "TwirlingCritic.twirling_cost_power");
   add_d("twirling_weight", "TwirlingCritic.twirling_cost_weight");
+
+  add_raw_d("goal_x_tolerance", "general_goal_checker.x_goal_tolerance");
+  add_raw_d("goal_y_tolerance", "general_goal_checker.y_goal_tolerance");
+  add_raw_d("goal_yaw_tolerance", "general_goal_checker.yaw_goal_tolerance");
+  add_raw_d("goal_stable_duration", "general_goal_checker.stable_duration");
 
   target.valid = !target.params.empty();
 }

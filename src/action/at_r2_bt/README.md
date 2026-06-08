@@ -2,10 +2,11 @@
 
 ## 功能概述
 
-这个包提供了两个自定义的Nav2行为树节点：
+这个包提供了多个自定义的 Nav2 行为树节点，包括：
 
-1. **PublishGoal**: 用于在行为树执行过程中将目标位置同时发布到ROS话题和黑板
+1. **PublishGoal**: 用于在行为树执行过程中将目标位置同时发布到 ROS 话题和黑板
 2. **ClimbStair**: 用于控制机器人爬楼梯功能
+3. **SetMppiParams**: 用于在行为树运行过程中动态修改 controller_server 上的 MPPI 参数。详细用法见 [SET_MPPI_PARAMS_GUIDE.md](SET_MPPI_PARAMS_GUIDE.md)
 
 ### 主要特性
 
