@@ -40,7 +40,7 @@
       <SetMppiParams node="{node}"
                controller_node="/AT_R2/controller_server"
                plugin_prefix="FollowPath"
-               goal_angle_weight="10.0"
+               goal_angle_weight="6.0"
                goal_angle_threshold="2.0"
                vx_max="1.0"
                vx_min="-0.9"
@@ -60,7 +60,7 @@
 
         <!-- 2 -->
         <Sequence>
-          <DelayMs delay_msec="700">
+          <DelayMs delay_msec="600">
             <AlwaysSuccess/>
           </DelayMs>  
           <PublishHeadCmd node="{node}" command="1"
@@ -128,7 +128,7 @@
 
       <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
            timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
-      <!-- <ForceSuccess>      
+      <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.2"
                     vx="0.0"
@@ -139,7 +139,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess> -->
+      </ForceSuccess>
       
       <!-- <PublishHeadCmd node="{node}" command="4"
                       topic="/AT_R2/head_gripper_cmd"

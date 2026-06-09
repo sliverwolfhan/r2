@@ -30,11 +30,11 @@ target_link_libraries(cdc_trans ${LIBUSB_LIBRARIES})
 ament_target_dependencies(cdc_trans rclcpp)
 
 # 虚拟串口节点
-add_executable(virtual_serial_port_node
-  src/virtual_serial_port_node.cpp
+add_executable(virtual_serial_port_node_test
+  src/virtual_serial_port_node_test.cpp
 )
-target_link_libraries(virtual_serial_port_node cdc_trans)
-ament_target_dependencies(virtual_serial_port_node rclcpp geometry_msgs std_msgs tf2_ros tf2 tf2_msgs)
+target_link_libraries(virtual_serial_port_node_test cdc_trans)
+ament_target_dependencies(virtual_serial_port_node_test rclcpp geometry_msgs std_msgs tf2_ros tf2 tf2_msgs)
 
 # 安装
 install(TARGETS
@@ -45,7 +45,7 @@ install(TARGETS
 )
 
 install(TARGETS
-  virtual_serial_port_node
+  virtual_serial_port_node_test
   DESTINATION lib/${PROJECT_NAME}
 )
 
