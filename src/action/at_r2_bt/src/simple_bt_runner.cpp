@@ -25,6 +25,7 @@
 #include "nav2_bt_publish_goal/select_arm_prep_name_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_action.hpp"
 #include "nav2_bt_publish_goal/is_prep_skippable_condition.hpp"
+#include "nav2_bt_publish_goal/grasp_ready_by_pose_distance_condition.hpp"
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
 #include "nav2_bt_publish_goal/delay_decorator.hpp"
 #include "nav2_bt_publish_goal/publish_head_cmd_action.hpp"
@@ -90,6 +91,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PeekNextStepAction>("PeekNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::SelectArmPrepNameAction>("SelectArmPrepName");
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
+  factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DockToWallAction>("DockToWall");
   factory.registerNodeType<nav2_bt_publish_goal::DelayDecorator>("DelayMs");
   factory.registerNodeType<nav2_bt_publish_goal::PublishHeadCmdAction>("PublishHeadCmd");
@@ -109,6 +111,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ PeekNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectArmPrepName 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ IsPrepSkippable 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ GraspReadyByPoseDistance 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PublishHeadCmd 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SetZoneMode 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitDockingRelease 节点已注册");

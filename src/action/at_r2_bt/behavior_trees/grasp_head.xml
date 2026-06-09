@@ -53,10 +53,31 @@
       
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
-        <PublishGoal node="{node}"
-                x="1.0" y="5.60" yaw="-3.14"
-                frame_id="map"
-                goal="{nav_goal}"/>
+        <ReactiveFallback>
+          <!-- 导航过程中持续检查抓取就绪条件：
+               1) 当前 map->base_link 的 y 在范围内
+               2) 当前 yaw 接近目标角度
+               3) /AT_R2/distance 测距满足范围
+               三项连续 stable_count 次满足后返回 SUCCESS，并 halt PublishGoal 取消导航。 -->
+          <GraspReadyByPoseDistance node="{node}"
+                                    map_frame="map"
+                                    base_frame="base_link"
+                                    y_min="5.45"
+                                    y_max="5.65"
+                                    target_yaw="-3.14"
+                                    yaw_tolerance="0.20"
+                                    distance_topic="/AT_R2/distance"
+                                    distance_scale="0.001"
+                                    distance_min="0.05"
+                                    distance_max="0.30"
+                                    stable_count="3"
+                                    max_data_age="0.5"/>
+
+          <PublishGoal node="{node}"
+                  x="1.0" y="5.60" yaw="-3.14"
+                  frame_id="map"
+                  goal="{nav_goal}"/>
+        </ReactiveFallback>
 
         <!-- 2 -->
         <Sequence>

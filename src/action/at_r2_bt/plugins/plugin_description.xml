@@ -86,6 +86,14 @@
       navigation-to-prep-pose step when the robot is already there.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition" base_class_type="BT::ConditionNode">
+    <description>
+      Condition node. During navigation, reads current map->base TF and
+      /AT_R2/distance (std_msgs/Float64). Returns SUCCESS only when the current
+      y range, yaw tolerance, and scaled distance range from XML ports are all
+      satisfied for stable_count consecutive ticks.
+    </description>
+  </class>
   <class type="nav2_bt_publish_goal::PublishHeadCmdAction" base_class_type="BT::ActionNodeBase">
     <description>
       Publishes an integer command (std_msgs/Int32) on a topic
