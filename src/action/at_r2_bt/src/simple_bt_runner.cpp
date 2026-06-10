@@ -31,6 +31,7 @@
 #include "nav2_bt_publish_goal/publish_head_cmd_action.hpp"
 #include "nav2_bt_publish_goal/set_zone_mode_action.hpp"
 #include "nav2_bt_publish_goal/wait_docking_release_action.hpp"
+#include "nav2_bt_publish_goal/wait_for_enter_action.hpp"
 
 int main(int argc, char** argv)
 {
@@ -97,6 +98,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PublishHeadCmdAction>("PublishHeadCmd");
   factory.registerNodeType<nav2_bt_publish_goal::SetZoneModeAction>("SetZoneMode");
   factory.registerNodeType<nav2_bt_publish_goal::WaitDockingReleaseAction>("WaitDockingRelease");
+  factory.registerNodeType<nav2_bt_publish_goal::WaitForEnterAction>("WaitForEnter");
   RCLCPP_INFO(node->get_logger(), "✓ PublishGoal 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ClimbStair 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DescendStair 节点已注册");
@@ -115,6 +117,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ PublishHeadCmd 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SetZoneMode 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitDockingRelease 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
   std::string bt_file = "grasp_head.xml";

@@ -50,7 +50,14 @@
                vy_std="0.3"
                wz_std="0.3"
                wait_after_set="0.3"/>
-      
+
+      <!-- 一键启动门控: 参数已提前设置完成后停在这里，比赛开始时按 Enter 立即开始导航。 -->
+      <WaitForEnter node="{node}"
+                    prompt="参数已设置完成，按 Enter 开始导航"
+                    require_tty="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
         <ReactiveFallback>

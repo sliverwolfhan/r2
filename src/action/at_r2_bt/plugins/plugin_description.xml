@@ -112,4 +112,11 @@
       Synchronous: publishes and returns SUCCESS immediately.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::WaitForEnterAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Waits for the operator to press Enter before continuing the behavior tree.
+      Useful to pre-run setup nodes before a competition start signal, then
+      release navigation immediately from the terminal.
+    </description>
+  </class>
 </library>
