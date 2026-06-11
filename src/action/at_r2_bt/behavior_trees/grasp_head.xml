@@ -8,7 +8,7 @@
          0. 切换到一区模式 (SetZoneMode mode=1) —— 否则串口节点门控会忽略抓取命令
          1. 通知爪子"准备抓取" (head cmd=1)
          2. 调参 + 导航到柜台前预备点 (PublishGoal)
-         3. 侧向 + 前向贴靠柜台 (DockToWall)
+         3. 侧向 + 贴靠柜台 (DockToWall)
          4. 通知爪子"抓取" (head cmd=2)
          5. 通知爪子"抬起武器头" (head cmd=3)
          6. 后退离开柜台 (DockToWall vx 负向)
@@ -109,20 +109,53 @@
 
 
       <!-- Step 3: 侧向贴靠柜台
-           vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
-           stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
-      <!-- <ForceSuccess>
-        <DockToWall node="{node}"
-                    vy="-0.2"
-                    vx="0.0"
-                    wz="0.0"
-                    stall_threshold="0.01"
-                    stall_duration="0.5"
-                    timeout="1.7"
-                    publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                    odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess> -->
+           vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整。
+           贴墙后 Y/Yaw 基本固定，再用测距闭环修正抓取距离。 -->
+      <DockToWall node="{node}"
+                  vy="-0.2"
+                  vx="0.0"
+                  wz="0.0"
+                  stall_threshold="0.01"
+                  stall_duration="0.5"
+                  timeout="2.0"
+                  publish_rate_hz="50.0"
+                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                  odom_topic="/AT_R2/odometry"/>
+
+      <!-- Step 3.5: 已满足 180mm±5mm 则跳过移动，否则按误差比例发布速度对准。
+           cmd_axis 可选 x/y，用于现场选择发布 linear.x 还是 linear.y；
+           positive_error_direction 可选 1/-1，用于方向反了时快速翻转。 -->
+      <Fallback>
+        <GraspReadyByPoseDistance node="{node}"
+                                  map_frame="map"
+                                  base_frame="base_link"
+                                  y_min="5.45"
+                                  y_max="5.65"
+                                  target_yaw="-3.14"
+                                  yaw_tolerance="0.20"
+                                  distance_topic="/AT_R2/distance"
+                                  distance_scale="0.001"
+                                  distance_min="0.175"
+                                  distance_max="0.185"
+                                  stable_count="3"
+                                  max_data_age="0.5"/>
+
+        <DistanceServoAlign node="{node}"
+                            distance_topic="/AT_R2/distance"
+                            distance_scale="0.001"
+                            target_distance="0.180"
+                            tolerance="0.005"
+                            kp="0.8"
+                            max_speed="0.06"
+                            min_speed="0.015"
+                            stable_count="3"
+                            max_data_age="0.5"
+                            timeout="8.0"
+                            publish_rate_hz="50.0"
+                            cmd_axis="x"
+                            positive_error_direction="1.0"
+                            cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+      </Fallback>
 
       <!-- 前向贴靠柜台 -->
       <!-- <DockToWall node="{node}"
