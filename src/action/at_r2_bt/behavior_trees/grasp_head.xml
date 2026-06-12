@@ -153,7 +153,9 @@
                             timeout="8.0"
                             publish_rate_hz="50.0"
                             cmd_axis="x"
-                            positive_error_direction="1.0"
+                            positive_error_direction="-1.0"
+                            side_speed_scale="0.5"
+                            side_speed_direction="-1.0"
                             cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
       </Fallback>
 

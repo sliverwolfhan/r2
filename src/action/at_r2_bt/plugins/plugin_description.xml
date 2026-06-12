@@ -97,7 +97,8 @@
   <class type="nav2_bt_publish_goal::DistanceServoAlignAction" base_class_type="BT::ActionNodeBase">
     <description>
       Servo-aligns the robot to a target /AT_R2/distance value using proportional
-      cmd_vel control. The published linear velocity axis is selectable from XML.
+      cmd_vel control. The published linear velocity axis is selectable from XML,
+      with an optional y-axis side press velocity scaled from the main speed.
     </description>
   </class>
   <class type="nav2_bt_publish_goal::PublishHeadCmdAction" base_class_type="BT::ActionNodeBase">

@@ -47,6 +47,10 @@ BT::PortsList DistanceServoAlignAction::providedPorts()
       "Which linear velocity axis to publish: x or y"),
     BT::InputPort<double>("positive_error_direction", 1.0,
       "Velocity sign for positive error; use -1 to invert"),
+    BT::InputPort<double>("side_speed_scale", 0.0,
+      "Extra y-axis press speed scale relative to absolute main closed-loop speed; 0 disables"),
+    BT::InputPort<double>("side_speed_direction", 1.0,
+      "Extra y-axis press direction; use -1 to invert"),
   };
 }
 
@@ -73,6 +77,8 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
   double publish_rate_hz = 50.0;
   cmd_axis_ = "x";
   positive_error_direction_ = 1.0;
+  side_speed_scale_ = 0.0;
+  side_speed_direction_ = 1.0;
 
   (void)getInput("distance_topic", distance_topic_);
   (void)getInput("cmd_vel_topic", cmd_vel_topic_);
@@ -92,6 +98,8 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
   (void)getInput("publish_rate_hz", publish_rate_hz);
   (void)getInput("cmd_axis", cmd_axis_);
   (void)getInput("positive_error_direction", positive_error_direction_);
+  (void)getInput("side_speed_scale", side_speed_scale_);
+  (void)getInput("side_speed_direction", side_speed_direction_);
 
   if (!std::isfinite(distance_scale_) || distance_scale_ == 0.0) {
     RCLCPP_ERROR(node_->get_logger(),
@@ -147,6 +155,17 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
     return BT::NodeStatus::FAILURE;
   }
   positive_error_direction_ = (positive_error_direction_ >= 0.0) ? 1.0 : -1.0;
+  if (!std::isfinite(side_speed_scale_) || side_speed_scale_ < 0.0) {
+    RCLCPP_ERROR(node_->get_logger(),
+      "DistanceServoAlign invalid side_speed_scale: %.6f", side_speed_scale_);
+    return BT::NodeStatus::FAILURE;
+  }
+  side_speed_direction_ = (side_speed_direction_ >= 0.0) ? 1.0 : -1.0;
+  if (cmd_axis_ == "y" && side_speed_scale_ > 0.0) {
+    RCLCPP_ERROR(node_->get_logger(),
+      "DistanceServoAlign side_speed_scale requires cmd_axis=x because side press uses linear.y");
+    return BT::NodeStatus::FAILURE;
+  }
 
   stopAll();
 
@@ -179,9 +198,11 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
 
   RCLCPP_INFO(node_->get_logger(),
     "DistanceServoAlign started: target=%.3fm tol=%.3fm kp=%.3f speed=[%.3f, %.3f] "
-    "axis=%s direction=%.0f distance_topic=%s cmd_vel_topic=%s timeout=%.1fs",
+    "axis=%s direction=%.0f side_y_scale=%.3f side_y_direction=%.0f "
+    "distance_topic=%s cmd_vel_topic=%s timeout=%.1fs",
     target_distance_, tolerance_, kp_, min_speed_, max_speed_, cmd_axis_.c_str(),
-    positive_error_direction_, distance_topic_.c_str(), cmd_vel_topic_.c_str(), timeout_);
+    positive_error_direction_, side_speed_scale_, side_speed_direction_,
+    distance_topic_.c_str(), cmd_vel_topic_.c_str(), timeout_);
 
   return BT::NodeStatus::RUNNING;
 }
@@ -237,7 +258,12 @@ BT::NodeStatus DistanceServoAlignAction::onRunning()
   const double abs_error = std::fabs(error);
 
   if (abs_error <= tolerance_) {
-    setZeroCommand();
+    geometry_msgs::msg::Twist cmd;
+    applySidePressCommand(cmd, computeSpeed(error));
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      cmd_ = cmd;
+    }
     ++stable_count_current_;
     RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
       "DistanceServoAlign: distance=%.3f target=%.3f error=%.3f stable=%d/%d",
@@ -262,6 +288,7 @@ BT::NodeStatus DistanceServoAlignAction::onRunning()
   } else {
     cmd.linear.y = speed;
   }
+  applySidePressCommand(cmd, speed);
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -270,9 +297,9 @@ BT::NodeStatus DistanceServoAlignAction::onRunning()
 
   RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
     "DistanceServoAlign: distance raw=%.3f scaled=%.3f target=%.3f error=%.3f "
-    "cmd.%s=%.3f age=%.3fs",
+    "cmd.%s=%.3f cmd.y=%.3f age=%.3fs",
     raw_distance, current_distance, target_distance_, error,
-    cmd_axis_.c_str(), speed, data_age);
+    cmd_axis_.c_str(), speed, cmd.linear.y, data_age);
 
   return BT::NodeStatus::RUNNING;
 }
@@ -349,6 +376,16 @@ double DistanceServoAlignAction::computeSpeed(double error) const
     speed = std::copysign(min_speed_, speed);
   }
   return speed;
+}
+
+void DistanceServoAlignAction::applySidePressCommand(
+  geometry_msgs::msg::Twist & cmd,
+  double main_speed) const
+{
+  if (side_speed_scale_ <= 0.0) {
+    return;
+  }
+  cmd.linear.y = std::fabs(main_speed) * side_speed_scale_ * side_speed_direction_;
 }
 
 }  // namespace nav2_bt_publish_goal
