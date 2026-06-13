@@ -37,7 +37,7 @@ BT::PortsList DockToWallAction::providedPorts()
       "Time (s) position must remain unchanged to confirm docked"),
     BT::InputPort<double>("timeout", 10.0, "Max time (s) before giving up"),
     BT::InputPort<double>("publish_rate_hz", 50.0, "cmd_vel publish rate (Hz)"),
-    BT::InputPort<std::string>("cmd_vel_topic", "/AT_R2/cmd_vel_nav2_result",
+    BT::InputPort<std::string>("cmd_vel_topic", "/AT_R2/cmd_vel_bt",
       "Velocity command topic"),
     BT::InputPort<std::string>("odom_topic", "/AT_R2/odometry",
       "Odometry topic for position feedback"),
@@ -62,7 +62,7 @@ BT::NodeStatus DockToWallAction::onStart()
   stall_duration_ = 0.5;
   timeout_ = 10.0;
   double publish_rate_hz = 50.0;
-  cmd_vel_topic_ = "/AT_R2/cmd_vel_nav2_result";
+  cmd_vel_topic_ = "/AT_R2/cmd_vel_bt";
   odom_topic_ = "/AT_R2/odometry";
 
   getInput("vy", vy_);
@@ -84,8 +84,9 @@ BT::NodeStatus DockToWallAction::onStart()
   odom_received_ = false;
 
   // 创建 publisher
-  if (!cmd_vel_pub_) {
+  if (!cmd_vel_pub_ || active_cmd_vel_topic_ != cmd_vel_topic_) {
     cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic_, 10);
+    active_cmd_vel_topic_ = cmd_vel_topic_;
   }
 
   // 创建 odom 订阅
@@ -104,8 +105,8 @@ BT::NodeStatus DockToWallAction::onStart()
 
   RCLCPP_INFO(node_->get_logger(),
     "DockToWall started: vy=%.3f vx=%.3f wz=%.3f "
-    "stall_thresh=%.4fm stall_dur=%.2fs timeout=%.1fs",
-    vy_, vx_, wz_, stall_threshold_, stall_duration_, timeout_);
+    "stall_thresh=%.4fm stall_dur=%.2fs timeout=%.1fs topic=%s",
+    vy_, vx_, wz_, stall_threshold_, stall_duration_, timeout_, cmd_vel_topic_.c_str());
 
   return BT::NodeStatus::RUNNING;
 }

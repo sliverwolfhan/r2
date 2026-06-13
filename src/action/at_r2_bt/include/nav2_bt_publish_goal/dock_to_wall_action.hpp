@@ -48,6 +48,7 @@ private:
   double stall_duration_;     // 需要持续多长时间位置不变才判定贴住(s)
   double timeout_;            // 最大超时时间(s)
   std::string cmd_vel_topic_;
+  std::string active_cmd_vel_topic_;
   std::string odom_topic_;
 
   // 状态

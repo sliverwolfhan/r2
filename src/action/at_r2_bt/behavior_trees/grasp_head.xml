@@ -90,7 +90,7 @@
                     stall_duration="0.4"
                     timeout="1.0"
                     publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
 
@@ -103,7 +103,7 @@
                   stall_duration="0.5"
                   timeout="2.0"
                   publish_rate_hz="50.0"
-                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                  cmd_vel_topic="/AT_R2/cmd_vel_bt"
                   odom_topic="/AT_R2/odometry"/> -->
       <Fallback>
         <GraspReadyByPoseDistance node="{node}"
@@ -168,7 +168,7 @@
                       stall_duration="10.0"
                       timeout="2"
                       publish_rate_hz="50.0"
-                      cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                      cmd_vel_topic="/AT_R2/cmd_vel_bt"
                       odom_topic="/AT_R2/odometry"/>
         </ForceSuccess>
         <PublishHeadCmd node="{node}" command="4"
@@ -235,7 +235,7 @@
                     stall_duration="1.0"
                     timeout="6"
                     publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess> -->
       <ForceSuccess>      
@@ -247,7 +247,7 @@
                     stall_duration="0.6"
                     timeout="4"
                     publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
       <!-- <WaitDockingRelease node="{node}"
