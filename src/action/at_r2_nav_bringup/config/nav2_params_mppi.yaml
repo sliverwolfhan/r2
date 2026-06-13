@@ -45,8 +45,8 @@ point_lio:
       blind: 0.5
       # Body filter parameters - 车体点云滤波参数
       body_filter_en: true                              # 启用车体滤波
-      body_min_x: -0.4                                  # 车体包围盒 X 最小值 (米)
-      body_max_x: 0.8                                   # 车体包围盒 X 最大值 (米)
+      body_min_x: -0.9                                  # 车体包围盒 X 最小值 (米)
+      body_max_x: 0.4                                   # 车体包围盒 X 最大值 (米)
       body_min_y: -0.6                                  # 车体包围盒 Y 最小值 (米)
       body_max_y: 1.0                                   # 车体包围盒 Y 最大值 (米)
       body_min_z: -0.5                                  # 车体包围盒 Z 最小值 (米)
@@ -73,7 +73,7 @@ point_lio:
       match_s: 81.0
       ivox_grid_resolution: 0.3
       gravity: [0.0, 0.0, 1.0]            # gravity to be aligned
-      gravity_init: [0.0, 0.0, 1.0]       # preknown gravity in the first IMU body frame, use when imu_en is False or start from a non-stationary state
+      gravity_init: [0.0, 0.00, 1.0]       # preknown gravity in the first IMU body frame, use when imu_en is False or start from a non-stationary state
       extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
       extrinsic_R: [ 1.0, 0.0, 0.0,
                      0.0, 1.0, 0.0,
@@ -178,7 +178,7 @@ small_gicp_relocalization:
     registered_leaf_size: 0.12
     max_dist_sq: 0.01
     map_bounds_filter_enabled: true
-    map_bounds_filter_margin: 0.05
+    map_bounds_filter_margin: 0.1
     map_bounds_filter_min_points: 1
     sliding_window_filter_enabled: true
     sliding_window_filter_size: 3
@@ -384,10 +384,10 @@ controller_server:
       movement_time_allowance: 15.0
     general_goal_checker:
       plugin: "pb_nav2_plugins/PreciseGoalChecker"
-      x_goal_tolerance: 0.015
-      y_goal_tolerance: 0.03
+      x_goal_tolerance: 0.03
+      y_goal_tolerance: 0.05
       yaw_goal_tolerance: 0.05
-      stable_duration: 0.3
+      stable_duration: 0.2
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
       time_steps: 30
@@ -407,7 +407,7 @@ controller_server:
       az_max: 5.5
       iteration_count: 2
       temperature: 0.3
-      gamma: 0.04
+      gamma: 0.03
       motion_model: "Omni"          # 改为全向运动模型 DiffDrive Omni
       visualize: false
       critic_index_to_visualize: 0
@@ -585,7 +585,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 1.0
-        inflation_radius: 0.35  # 局部代价地图：减小膨胀半径到0.3米
+        inflation_radius: 0.1  # 局部代价地图：减小膨胀半径到0.3米
       always_send_full_costmap: False
 
 global_costmap:
@@ -633,7 +633,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.35  # 全局代价地图：减小膨胀半径到0.5米
+        inflation_radius: 0.15  # 全局代价地图：减小膨胀半径到0.5米
       always_send_full_costmap: False
 
 # The yaml_filename does not need to be specified since it going to be set by defaults in launch.

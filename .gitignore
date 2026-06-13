@@ -40,3 +40,5 @@ Thumbs.db
 # 这两个 > 100MB 一定超 GitHub 限制，保持忽略
 # src/action/at_r2_nav_bringup/pcd/ATRC_2026.pcd  (129 MB)
 # src/location/point_lio/PCD/dixiashi.pcd        (219 MB)
+*.pt
+src/location/point_lio/PCD/scans.pcd

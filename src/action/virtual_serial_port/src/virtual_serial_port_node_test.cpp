@@ -287,8 +287,8 @@ private:
             hex_ss << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
                    << static_cast<int>(data[i]) << " ";
         }
-        RCLCPP_INFO(this->get_logger(), "收到下位机数据，长度: %d, 前64字节hex: [%s]",
-            size, hex_ss.str().c_str());
+        // RCLCPP_INFO(this->get_logger(), "收到下位机数据，长度: %d, 前64字节hex: [%s]",
+        //     size, hex_ss.str().c_str());
 
         if (size == sizeof(StatusPacket)) {
             StatusPacket status;
