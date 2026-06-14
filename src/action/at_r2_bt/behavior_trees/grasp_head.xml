@@ -54,7 +54,7 @@
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
           <PublishGoal node="{node}"
-                  x="0.90" y="5.49" yaw="-3.14"
+                  x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
                   frame_id="map"
                   goal="{nav_goal}"/>
         <!-- 2 -->
@@ -109,22 +109,22 @@
         <GraspReadyByPoseDistance node="{node}"
                                   map_frame="map"
                                   base_frame="base_link"
-                                  y_min="5.53"
-                                  y_max="5.57"
-                                  target_yaw="-3.14"
-                                  yaw_tolerance="0.20"
+                                  target_y="{grasp_prep_y}"
+                                  y_tolerance="{grasp_prep_y_tolerance}"
+                                  target_yaw="{grasp_prep_yaw}"
+                                  yaw_tolerance="{grasp_prep_yaw_tolerance}"
                                   distance_topic="/AT_R2/distance"
                                   distance_scale="0.001"
-                                  distance_min="0.600"
-                                  distance_max="0.610"
+                                  target_distance="{grasp_laser_target_distance}"
+                                  distance_tolerance="{grasp_laser_distance_tolerance}"
                                   stable_count="3"
                                   max_data_age="0.5"/>
 
         <DistanceServoAlign node="{node}"
                             distance_topic="/AT_R2/distance"
                             distance_scale="0.001"
-                            target_distance="0.605"
-                            tolerance="0.005"
+                            target_distance="{grasp_laser_target_distance}"
+                            tolerance="{grasp_laser_distance_tolerance}"
                             kp="0.8"
                             max_speed="0.1"
                             min_speed="0.015"

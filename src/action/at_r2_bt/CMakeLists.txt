@@ -144,6 +144,11 @@ install(DIRECTORY yaml/
   DESTINATION share/${PROJECT_NAME}/yaml
 )
 
+# Install parameter configs
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
 # Install launch files
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch

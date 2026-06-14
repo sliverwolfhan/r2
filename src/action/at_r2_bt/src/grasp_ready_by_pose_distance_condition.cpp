@@ -27,13 +27,13 @@ BT::PortsList GraspReadyByPoseDistanceCondition::providedPorts()
 {
   return {
     BT::InputPort<rclcpp::Node::SharedPtr>("node", "ROS node"),
-    BT::InputPort<double>("y_min", "Minimum robot y in map frame (m)"),
-    BT::InputPort<double>("y_max", "Maximum robot y in map frame (m)"),
+    BT::InputPort<double>("target_y", "Target robot y in map frame (m)"),
+    BT::InputPort<double>("y_tolerance", "Tolerance for robot y (m)"),
     BT::InputPort<double>("target_yaw", "Target robot yaw in map frame (rad)"),
     BT::InputPort<double>("yaw_tolerance", 0.15, "Tolerance for yaw (rad)"),
     BT::InputPort<std::string>("distance_topic", "/AT_R2/distance", "Distance topic (std_msgs/Float64)"),
-    BT::InputPort<double>("distance_min", "Minimum scaled distance"),
-    BT::InputPort<double>("distance_max", "Maximum scaled distance"),
+    BT::InputPort<double>("target_distance", "Target scaled distance"),
+    BT::InputPort<double>("distance_tolerance", "Tolerance for scaled distance"),
     BT::InputPort<double>("distance_scale", 1.0, "Scale applied to raw distance before comparing"),
     BT::InputPort<int>("stable_count", 3, "Required consecutive successful ticks"),
     BT::InputPort<double>("max_data_age", 0.5, "Maximum age of distance data (s), <=0 disables age check"),
@@ -137,29 +137,29 @@ BT::NodeStatus GraspReadyByPoseDistanceCondition::tick()
     return BT::NodeStatus::FAILURE;
   }
 
-  double y_min = 0.0;
-  double y_max = 0.0;
+  double target_y = 0.0;
+  double y_tolerance = 0.0;
   double target_yaw = 0.0;
-  double distance_min = 0.0;
-  double distance_max = 0.0;
-  if (!getInput("y_min", y_min) ||
-      !getInput("y_max", y_max) ||
+  double target_distance = 0.0;
+  double distance_tolerance = 0.0;
+  if (!getInput("target_y", target_y) ||
+      !getInput("y_tolerance", y_tolerance) ||
       !getInput("target_yaw", target_yaw) ||
-      !getInput("distance_min", distance_min) ||
-      !getInput("distance_max", distance_max))
+      !getInput("target_distance", target_distance) ||
+      !getInput("distance_tolerance", distance_tolerance))
   {
     RCLCPP_ERROR(node_->get_logger(),
-      "Missing required inputs [y_min / y_max / target_yaw / distance_min / distance_max]");
+      "Missing required inputs [target_y / y_tolerance / target_yaw / target_distance / distance_tolerance]");
     stable_count_ = 0;
     return BT::NodeStatus::FAILURE;
   }
 
-  if (y_min > y_max) {
-    std::swap(y_min, y_max);
-  }
-  if (distance_min > distance_max) {
-    std::swap(distance_min, distance_max);
-  }
+  y_tolerance = std::max(0.0, y_tolerance);
+  distance_tolerance = std::max(0.0, distance_tolerance);
+  const double y_min = target_y - y_tolerance;
+  const double y_max = target_y + y_tolerance;
+  const double distance_min = target_distance - distance_tolerance;
+  const double distance_max = target_distance + distance_tolerance;
 
   double yaw_tol = 0.15;
   double distance_scale = 1.0;

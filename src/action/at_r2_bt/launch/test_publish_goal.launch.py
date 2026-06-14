@@ -7,35 +7,27 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
+
 def generate_launch_description():
     """
-    Launch file for testing the PublishGoal BT node
-    
-    This launch file starts a simple BT navigator node that can be used
-    to test the PublishGoal behavior tree node.
+    Launch file for running the simple BT runner with weapon grasp parameters.
     """
-    
-    # Get package directories
-    pkg_dir = get_package_share_directory('nav2_bt_publish_goal')
-    
-    # Path to example behavior tree
-    bt_xml_file = os.path.join(pkg_dir, 'behavior_trees', 'example_single_goal.xml')
-    
+
+    pkg_dir = get_package_share_directory('at_r2_bt')
+    weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params.yaml')
+
     return LaunchDescription([
-        # Simple test node that loads and runs the behavior tree
         Node(
-            package='nav2_bt_navigator',
-            executable='bt_navigator',
-            name='bt_navigator_test',
+            package='at_r2_bt',
+            executable='simple_bt_runner',
+            name='simple_bt_runner',
             output='screen',
-            parameters=[{
-                'use_sim_time': False,
-                'default_nav_to_pose_bt_xml': bt_xml_file,
-                'plugin_lib_names': [
-                    'nav2_bt_publish_goal',  # Our custom plugin
-                ],
-                'bt_loop_duration': 10,
-                'default_server_timeout': 20,
-            }]
+            arguments=['grasp_head.xml'],
+            parameters=[
+                weapon_params_file,
+                {
+                    'use_sim_time': False,
+                },
+            ],
         ),
     ])
