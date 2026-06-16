@@ -254,30 +254,9 @@ std::string CatchKFS::process(const std::string last_task_name) {
     object_pose.pose.orientation.z = quat.getZ();
     object_pose.pose.position.x -= grasp_right_run_;
 
-    if (!robot->set_air_pump(true)) {
-        return fail_task("气泵开启失败");
-    }
-    // std::this_thread::sleep_for(100ms);
-
     RCLCPP_INFO(robot->node_->get_logger(), "执行抓取动作");
     if (!robot->execute_cartesian_space_trajectory(object_pose, 3.0)) { // 0.8
         return fail_task("执行抓取轨迹失败");
-    }
-
-    // std::this_thread::sleep_for(3s);
-
-    // quat.setRPY(-M_PI/2.2, 0, 0);
-    // object_pose.pose.orientation.w = quat.getW();
-    // object_pose.pose.orientation.x = quat.getX();
-    // object_pose.pose.orientation.y = quat.getY();
-    // object_pose.pose.orientation.z = quat.getZ();
-    object_pose.pose.position.x+=0.12+grasp_right_run_qian_;
-    object_pose.pose.position.z -= 0.18;
-
-    // object_pose.pose.position.x -= 0.1;
-    RCLCPP_INFO(robot->node_->get_logger(), "向前推进");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 2.1)) { // 2.1
-        return fail_task("向前推进失败");
     }
 
 
@@ -287,54 +266,6 @@ std::string CatchKFS::process(const std::string last_task_name) {
         robot->finish_current_task(goal_handle, true, "抓取流程执行完成");
     }
 
-
-    // // 直线后退0.3m
-    // if (grasp_height_ == 0.0 ||
-    //     grasp_height_ == 1.0){
-
-    //     quat.setRPY(0, (M_PI / 1.8), 0); 
-    //     object_pose.pose.orientation.w = quat.getW();
-    //     object_pose.pose.orientation.x = quat.getX();
-    //     object_pose.pose.orientation.y = quat.getY();
-    //     object_pose.pose.orientation.z = quat.getZ();
-    //     object_pose.pose.position.z+=0.07;
-    //     if (!robot->execute_cartesian_space_trajectory(object_pose, 2.0)) { // 0.8
-    //         return fail_task("后退失败");
-    //     }
-
-
-    //     object_pose.pose.position.x-=0.3;
-
-    //     if (!robot->execute_cartesian_space_trajectory(object_pose, 2.0)) { // 0.6
-    //         return fail_task("后退失败");
-    //     }
-    // }
-    
-    std::string detach_pos_name;
-    std::vector<double> detach_pos;
-    // 3. 移动到 kfs_detach
-    detach_pos_name = "kfs_detach";
-
-
-    if (!robot->get_named_joint_position(detach_pos_name, detach_pos)) {
-        RCLCPP_ERROR(robot->node_->get_logger(), "未找到命名位姿 [%s]", detach_pos_name.c_str());
-        return fail_task("未找到命名位姿 " + detach_pos_name);
-    }
-
-    RCLCPP_INFO(robot->node_->get_logger(), "移动到释放位置 [%s]", detach_pos_name.c_str());
-    if (!robot->execute_joint_space_trajectory(detach_pos, 3.0)) {
-        return fail_task("移动到释放位置失败");
-    }
-
-    // 4. 等待 1s
-    std::this_thread::sleep_for(1s);
-
-    // // 5. 关闭气泵
-    // RCLCPP_INFO(robot->node_->get_logger(), "关闭气泵");
-    // if (!robot->set_air_pump(false)) {
-    //     robot->finish_current_task(goal_handle, false, "气泵关闭失败");
-    //     return "idel";
-    // }
 
 
     RCLCPP_INFO(robot->node_->get_logger(), "抓取流程完成");
