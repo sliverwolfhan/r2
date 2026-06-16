@@ -106,6 +106,7 @@
                    x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
                    frame_id="map"
                    goal="{nav_goal}"/> -->
+      <PublishPumpCmd node="{node}" command="1"/> 
       <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
       <ArmTask node="{node}"
                task_id="2"

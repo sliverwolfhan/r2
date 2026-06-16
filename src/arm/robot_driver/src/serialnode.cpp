@@ -148,7 +148,15 @@ void SerialNode::legsSubscribCb(const robot_interfaces::msg::Arm& msg) {
     grasp_state_send_once_pending = false;
 
     // 通过 USB CDC 发送目标数据包到下位机
-    cdc_trans->send_struct(arm_target);
+    bool ok = cdc_trans->send_struct(arm_target);
+
+    // 调试：打印发往下位机的目标，限频 1 秒一次，避免刷屏
+    RCLCPP_INFO_THROTTLE(
+        this->get_logger(), *this->get_clock(), 1000,
+        "发送目标到下位机[ok=%d type=%d pump=%d grasp=%d] rad=[%.3f %.3f %.3f %.3f %.3f %.3f]",
+        ok, arm_target.pack_type, arm_target.air_pump, arm_target.grasp_state,
+        arm_target.joints[0].rad, arm_target.joints[1].rad, arm_target.joints[2].rad,
+        arm_target.joints[3].rad, arm_target.joints[4].rad, arm_target.joints[5].rad);
 }
 
 void SerialNode::handleGraspIt(const ArmState_t* arm_state) {
