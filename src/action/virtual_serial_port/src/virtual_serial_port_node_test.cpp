@@ -28,6 +28,7 @@ struct VelocityPacket {
     uint8_t mode;          // 区模式 zone_mode (连续发送当前值)
     uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下)
     uint8_t climb_height;  // 爬楼梯高度 (mode=2时配合action, 0=无 1=200mm 2=400mm)
+    uint8_t pump;          // 气泵使能 (连续发送当前值): 1=吸气, 0=放气
     uint8_t tail;          // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -77,6 +78,7 @@ public:
         current_mode_ = 0;
         current_grasp_cmd_ = 0;
         grasp_send_once_ = false;
+        current_pump_ = 0;
 
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -121,6 +123,11 @@ public:
             "/AT_R2/head_gripper_cmd", 10,
             std::bind(&VirtualSerialPortNode::grasp_callback, this, std::placeholders::_1));
 
+        // 订阅气泵使能话题 (latched, pump 连续发送当前值: 1=吸气, 0=放气)
+        pump_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
+            std::bind(&VirtualSerialPortNode::pump_callback, this, std::placeholders::_1));
+
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/climber_status", 10);
@@ -162,6 +169,7 @@ public:
             cmd_vel_topic.c_str(), bt_cmd_vel_topic.c_str(), send_interval_ms_);
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
+        RCLCPP_INFO(this->get_logger(), "已订阅气泵使能话题: /AT_R2/pump_cmd (连续发送, 1=吸气 0=放气)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, 距离发布器: /AT_R2/distance");
     }
 
@@ -247,6 +255,14 @@ private:
         RCLCPP_INFO(this->get_logger(), "收到抓取命令: %d (将发送一次)", msg->data);
     }
 
+    void pump_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_pump_ = (msg->data != 0) ? 1 : 0;
+        RCLCPP_INFO(this->get_logger(), "收到气泵指令: %d (%s)",
+            msg->data, current_pump_ ? "吸气" : "放气");
+    }
+
     void send_thread_func()
     {
         using namespace std::chrono_literals;
@@ -283,6 +299,7 @@ private:
                     selected_source, selected_velocity.vx, selected_velocity.vy, selected_velocity.omega,
                     current_mode_);
                 packet.mode = current_mode_;
+                packet.pump = current_pump_;
                 if (grasp_send_once_) {
                     packet.action = current_grasp_cmd_;
                     packet.climb_height = 0;
@@ -397,6 +414,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr descend_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr mode_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
@@ -420,6 +438,7 @@ private:
     uint8_t current_mode_;
     uint8_t current_grasp_cmd_;
     bool grasp_send_once_;
+    uint8_t current_pump_;
 
     std::mutex status_mutex_;
     bool climber_running_{false};

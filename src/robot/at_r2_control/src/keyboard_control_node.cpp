@@ -35,6 +35,7 @@ public:
         std::string descend_stair_topic = "/" + robot_name_ + "/descend_stair";
         std::string head_gripper_topic = "/" + robot_name_ + "/head_gripper_cmd";
         std::string zone_mode_topic = "/" + robot_name_ + "/zone_mode";
+        std::string pump_topic = "/" + robot_name_ + "/pump_cmd";
 
         // 创建发布者
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic, 10);
@@ -46,6 +47,9 @@ public:
         // 区模式: latched(transient_local), 后启动的节点也能立刻拿到当前模式
         zone_mode_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             zone_mode_topic, rclcpp::QoS(1).transient_local().reliable());
+        // 气泵使能: latched(transient_local), 1=吸气 0=放气, 连续保持当前值
+        pump_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            pump_topic, rclcpp::QoS(1).transient_local().reliable());
 
         // 速度参数
         linear_speed_ = 0.1;   // m/s
@@ -85,6 +89,10 @@ public:
         RCLCPP_INFO(this->get_logger(), "   7 - 一区 (抓武器头/对接)");
         RCLCPP_INFO(this->get_logger(), "   8 - 二区 (上下台阶/抓块)");
         RCLCPP_INFO(this->get_logger(), "   9 - 三区 (预留)");
+        RCLCPP_INFO(this->get_logger(), "");
+        RCLCPP_INFO(this->get_logger(), "【气泵 /pump_cmd】");
+        RCLCPP_INFO(this->get_logger(), "   G - 吸气");
+        RCLCPP_INFO(this->get_logger(), "   H - 放气");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【参数调节】");
         RCLCPP_INFO(this->get_logger(), "   [/] - 移动速度 -/+10%%");
@@ -227,6 +235,14 @@ private:
                 publishZoneMode(3);  // 三区
                 break;
 
+            // ========== 气泵 ==========
+            case 'g': case 'G':
+                publishPump(1);  // 吸气
+                break;
+            case 'h': case 'H':
+                publishPump(0);  // 放气
+                break;
+
             // ========== 参数调节 ==========
             case '[':
                 linear_speed_ *= 0.9;
@@ -295,6 +311,14 @@ private:
         zone_mode_pub_->publish(msg);
     }
 
+    void publishPump(int32_t enable)
+    {
+        RCLCPP_INFO(this->get_logger(), "气泵: %d (%s)", enable, enable ? "吸气" : "放气");
+        auto msg = std_msgs::msg::Int32();
+        msg.data = enable;
+        pump_pub_->publish(msg);
+    }
+
     void publishAll()
     {
         // 发布速度
@@ -318,6 +342,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr descend_stair_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr head_gripper_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr zone_mode_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr pump_pub_;
 
     // 参数
     std::string robot_name_;
