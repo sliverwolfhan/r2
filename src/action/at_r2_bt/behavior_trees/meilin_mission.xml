@@ -57,10 +57,10 @@
        机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
   <BehaviorTree ID="MoveBetweenBlocks">
     <Sequence>
-      <PublishGoal node="{node}"
+      <!-- <PublishGoal node="{node}"
                    x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                    frame_id="map"
-                   goal="{nav_goal}"/>
+                   goal="{nav_goal}"/> -->
       <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
                         
       <!-- <DelayMs delay_msec="4000">
@@ -108,6 +108,7 @@
                    goal="{nav_goal}"/> -->
       <PublishPumpCmd node="{node}" command="1"/> 
       <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
+      <PublishPumpCmd node="{node}" command="1"/> 
       <ArmTask node="{node}"
                task_id="2"
                server_name="robotic_task"
@@ -122,6 +123,10 @@
                goal_data="{arm_goal_data}"
                err_code="{arm_err_code}"
                reason="{arm_reason}"/>
+      <ArmMoveNamed node="{node}"
+                pose_name="hold_block"
+                server_name="robotic_task"
+                task_id="1"/>
     </Sequence>
   </BehaviorTree>
 

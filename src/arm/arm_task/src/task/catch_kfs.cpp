@@ -260,7 +260,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     object_pose.pose.position.x -= grasp_right_run_;
 
     RCLCPP_INFO(robot->node_->get_logger(), "执行抓取动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 3.0)) { // 0.8
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 1.0)) { // 0.8
         return fail_task("执行抓取轨迹失败");
     }
 

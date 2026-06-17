@@ -126,7 +126,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
-  std::string bt_file = "grasp_head.xml";
+  std::string bt_file = "meilin_mission.xml";
   if (argc > 1) {
     bt_file = argv[1];
   }
