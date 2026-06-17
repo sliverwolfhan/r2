@@ -19,6 +19,7 @@ namespace nav2_bt_publish_goal
 // 根据测距误差做比例速度闭环，对准到目标距离。
 // error = target_distance - current_distance，速度方向可通过 cmd_axis 和
 // positive_error_direction 在 XML 中调整，便于现场调参。
+// 可选附加 y 方向贴靠速度：|主闭环速度| * side_speed_scale。
 class DistanceServoAlignAction : public BT::StatefulActionNode
 {
 public:
@@ -39,6 +40,7 @@ private:
   void stopAll();
   void setZeroCommand();
   double computeSpeed(double error) const;
+  void applySidePressCommand(geometry_msgs::msg::Twist & cmd, double main_speed) const;
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
@@ -71,6 +73,8 @@ private:
   double max_data_age_{0.5};
   double timeout_{8.0};
   double positive_error_direction_{1.0};
+  double side_speed_scale_{0.0};
+  double side_speed_direction_{1.0};
   int stable_count_required_{3};
 };
 

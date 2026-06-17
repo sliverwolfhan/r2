@@ -1,4 +1,4 @@
-<mujoco model="robotic_arm_scene">
+<mujoco model="robotic_arm_urdf_scene">
   <option gravity="0 0 -9.81"/>
   <include file="robotic_arm.xml"/>
 

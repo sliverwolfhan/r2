@@ -51,6 +51,7 @@ add_library(${PROJECT_NAME} SHARED
   src/distance_servo_align_action.cpp
   src/dock_to_wall_action.cpp
   src/publish_head_cmd_action.cpp
+  src/publish_pump_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
@@ -100,6 +101,7 @@ add_executable(simple_bt_runner
   src/distance_servo_align_action.cpp
   src/dock_to_wall_action.cpp
   src/publish_head_cmd_action.cpp
+  src/publish_pump_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
@@ -142,6 +144,11 @@ install(DIRECTORY behavior_trees/
 # Install yaml configs (block_*.yaml, arm_ready_position.yaml, ...)
 install(DIRECTORY yaml/
   DESTINATION share/${PROJECT_NAME}/yaml
+)
+
+# Install parameter configs
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
 )
 
 # Install launch files

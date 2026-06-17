@@ -8,6 +8,8 @@
 #include <atomic>
 #include <sstream>
 #include <iomanip>
+#include <cstring>
+#include <memory>
 
 // 爬楼梯动作类型
 enum class ClimbAction : uint8_t {
@@ -26,6 +28,7 @@ struct VelocityPacket {
     uint8_t mode;          // 区模式 zone_mode (连续发送当前值)
     uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下)
     uint8_t climb_height;  // 爬楼梯高度 (mode=2时配合action, 0=无 1=200mm 2=400mm)
+    uint8_t pump;          // 气泵使能 (连续发送当前值): 1=吸气, 0=放气
     uint8_t tail;          // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -49,21 +52,33 @@ public:
         this->declare_parameter<int>("usb_vid", 0x0483);
         this->declare_parameter<int>("usb_pid", 0x5740);
         this->declare_parameter<std::string>("cmd_vel_topic", "/AT_R2/cmd_vel_nav2_result");
+        this->declare_parameter<std::string>("bt_cmd_vel_topic", "/AT_R2/cmd_vel_bt");
+        this->declare_parameter<double>("nav_cmd_vel_timeout_sec", 0.5);
+        this->declare_parameter<double>("bt_cmd_vel_timeout_sec", 0.2);
         this->declare_parameter<int>("send_interval_ms", 8);
 
         // 获取参数
         usb_vid_ = static_cast<uint16_t>(this->get_parameter("usb_vid").as_int());
         usb_pid_ = static_cast<uint16_t>(this->get_parameter("usb_pid").as_int());
         std::string cmd_vel_topic = this->get_parameter("cmd_vel_topic").as_string();
+        std::string bt_cmd_vel_topic = this->get_parameter("bt_cmd_vel_topic").as_string();
+        nav_cmd_vel_timeout_sec_ = this->get_parameter("nav_cmd_vel_timeout_sec").as_double();
+        bt_cmd_vel_timeout_sec_ = this->get_parameter("bt_cmd_vel_timeout_sec").as_double();
         send_interval_ms_ = this->get_parameter("send_interval_ms").as_int();
 
         // 初始化速度和爬楼梯状态
-        current_velocity_ = {0.0f, 0.0f, 0.0f};
+        nav_velocity_ = {0.0f, 0.0f, 0.0f};
+        bt_velocity_ = {0.0f, 0.0f, 0.0f};
+        last_nav_cmd_time_ = this->now();
+        last_bt_cmd_time_ = this->now();
+        nav_cmd_received_ = false;
+        bt_cmd_received_ = false;
         current_climb_action_ = ClimbAction::NONE;
         current_climb_height_ = 0;
         current_mode_ = 0;
         current_grasp_cmd_ = 0;
         grasp_send_once_ = false;
+        current_pump_ = 0;
 
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -80,10 +95,13 @@ public:
             RCLCPP_WARN(this->get_logger(), "USB-CDC设备打开失败，将持续尝试重连");
         }
 
-        // 订阅cmd_vel话题
+        // 订阅速度话题: Nav2 为默认源, BT override 优先级更高
         cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
             cmd_vel_topic, 10,
-            std::bind(&VirtualSerialPortNode::cmd_vel_callback, this, std::placeholders::_1));
+            std::bind(&VirtualSerialPortNode::nav_cmd_vel_callback, this, std::placeholders::_1));
+        bt_cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+            bt_cmd_vel_topic, 10,
+            std::bind(&VirtualSerialPortNode::bt_cmd_vel_callback, this, std::placeholders::_1));
 
         // 订阅爬楼梯话题
         climb_sub_ = this->create_subscription<std_msgs::msg::Float64>(
@@ -104,6 +122,11 @@ public:
         grasp_sub_ = this->create_subscription<std_msgs::msg::Int32>(
             "/AT_R2/head_gripper_cmd", 10,
             std::bind(&VirtualSerialPortNode::grasp_callback, this, std::placeholders::_1));
+
+        // 订阅气泵使能话题 (latched, pump 连续发送当前值: 1=吸气, 0=放气)
+        pump_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
+            std::bind(&VirtualSerialPortNode::pump_callback, this, std::placeholders::_1));
 
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
@@ -141,10 +164,12 @@ public:
         // 启动USB事件处理线程
         usb_thread_ = std::thread(&VirtualSerialPortNode::usb_thread_func, this);
 
-        RCLCPP_INFO(this->get_logger(), "虚拟串口节点已启动，订阅话题: %s, 发送周期: %dms",
-            cmd_vel_topic.c_str(), send_interval_ms_);
+        RCLCPP_INFO(this->get_logger(),
+            "虚拟串口节点已启动，Nav2速度话题: %s, BT速度话题: %s, 发送周期: %dms",
+            cmd_vel_topic.c_str(), bt_cmd_vel_topic.c_str(), send_interval_ms_);
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
+        RCLCPP_INFO(this->get_logger(), "已订阅气泵使能话题: /AT_R2/pump_cmd (连续发送, 1=吸气 0=放气)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, 距离发布器: /AT_R2/distance");
     }
 
@@ -160,12 +185,24 @@ public:
     }
 
 private:
-    void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
+    void nav_cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
     {
         std::lock_guard<std::mutex> lock(velocity_mutex_);
-        current_velocity_.vx = static_cast<float>(msg->linear.x);
-        current_velocity_.vy = static_cast<float>(msg->linear.y);
-        current_velocity_.omega = static_cast<float>(msg->angular.z);
+        nav_velocity_.vx = static_cast<float>(msg->linear.x);
+        nav_velocity_.vy = static_cast<float>(msg->linear.y);
+        nav_velocity_.omega = static_cast<float>(msg->angular.z);
+        last_nav_cmd_time_ = this->now();
+        nav_cmd_received_ = true;
+    }
+
+    void bt_cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        bt_velocity_.vx = static_cast<float>(msg->linear.x);
+        bt_velocity_.vy = static_cast<float>(msg->linear.y);
+        bt_velocity_.omega = static_cast<float>(msg->angular.z);
+        last_bt_cmd_time_ = this->now();
+        bt_cmd_received_ = true;
     }
 
     void climb_callback(const std_msgs::msg::Float64::SharedPtr msg)
@@ -218,6 +255,14 @@ private:
         RCLCPP_INFO(this->get_logger(), "收到抓取命令: %d (将发送一次)", msg->data);
     }
 
+    void pump_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        current_pump_ = (msg->data != 0) ? 1 : 0;
+        RCLCPP_INFO(this->get_logger(), "收到气泵指令: %d (%s)",
+            msg->data, current_pump_ ? "吸气" : "放气");
+    }
+
     void send_thread_func()
     {
         using namespace std::chrono_literals;
@@ -230,14 +275,31 @@ private:
             packet.header = 0xAB;
             {
                 std::lock_guard<std::mutex> lock(velocity_mutex_);
-                packet.vx = -current_velocity_.vx;
-                packet.vy = -current_velocity_.vy;
-                packet.omega = -current_velocity_.omega;
+                const rclcpp::Time ros_now = this->now();
+                const bool bt_fresh = bt_cmd_received_ &&
+                    (ros_now - last_bt_cmd_time_).seconds() <= bt_cmd_vel_timeout_sec_;
+                const bool nav_fresh = nav_cmd_received_ &&
+                    (ros_now - last_nav_cmd_time_).seconds() <= nav_cmd_vel_timeout_sec_;
+
+                Velocity selected_velocity{0.0f, 0.0f, 0.0f};
+                const char* selected_source = "zero";
+                if (bt_fresh) {
+                    selected_velocity = bt_velocity_;
+                    selected_source = "bt";
+                } else if (nav_fresh) {
+                    selected_velocity = nav_velocity_;
+                    selected_source = "nav";
+                }
+
+                packet.vx = -selected_velocity.vx;
+                packet.vy = -selected_velocity.vy;
+                packet.omega = -selected_velocity.omega;
                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                    "发送速度: vx %.2f vy %.2f omega %.2f mode %d",
-                    current_velocity_.vx, current_velocity_.vy, current_velocity_.omega,
+                    "发送速度[%s]: vx %.2f vy %.2f omega %.2f mode %d",
+                    selected_source, selected_velocity.vx, selected_velocity.vy, selected_velocity.omega,
                     current_mode_);
                 packet.mode = current_mode_;
+                packet.pump = current_pump_;
                 if (grasp_send_once_) {
                     packet.action = current_grasp_cmd_;
                     packet.climb_height = 0;
@@ -287,8 +349,8 @@ private:
             hex_ss << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
                    << static_cast<int>(data[i]) << " ";
         }
-        RCLCPP_INFO(this->get_logger(), "收到下位机数据，长度: %d, 前64字节hex: [%s]",
-            size, hex_ss.str().c_str());
+        // RCLCPP_INFO(this->get_logger(), "收到下位机数据，长度: %d, 前64字节hex: [%s]",
+        //     size, hex_ss.str().c_str());
 
         if (size == sizeof(StatusPacket)) {
             StatusPacket status;
@@ -347,10 +409,12 @@ private:
 
     std::unique_ptr<CDCTrans> cdc_trans_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr bt_cmd_vel_sub_;
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr climb_sub_;
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr descend_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr mode_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
@@ -360,13 +424,21 @@ private:
     std::atomic<bool> running_;
 
     std::mutex velocity_mutex_;
-    Velocity current_velocity_;
+    Velocity nav_velocity_;
+    Velocity bt_velocity_;
+    rclcpp::Time last_nav_cmd_time_;
+    rclcpp::Time last_bt_cmd_time_;
+    bool nav_cmd_received_;
+    bool bt_cmd_received_;
+    double nav_cmd_vel_timeout_sec_;
+    double bt_cmd_vel_timeout_sec_;
     ClimbAction current_climb_action_;
     uint8_t current_climb_height_;
     bool climb_send_once_;
     uint8_t current_mode_;
     uint8_t current_grasp_cmd_;
     bool grasp_send_once_;
+    uint8_t current_pump_;
 
     std::mutex status_mutex_;
     bool climber_running_{false};

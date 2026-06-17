@@ -17,8 +17,15 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    LogInfo,
+    RegisterEventHandler,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch_ros.actions import Node
@@ -45,6 +52,8 @@ def generate_launch_description():
     rviz_config_file = LaunchConfiguration("rviz_config_file")
     use_robot_state_pub = LaunchConfiguration("use_robot_state_pub")
     use_rviz = LaunchConfiguration("use_rviz")
+    lidar_topic = LaunchConfiguration("lidar_topic")
+    lidar_ip = LaunchConfiguration("lidar_ip")
 
     # Declare the launch arguments
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -133,6 +142,22 @@ def generate_launch_description():
         "use_rviz", default_value="True", description="Whether to start RVIZ"
     )
 
+    declare_lidar_topic_cmd = DeclareLaunchArgument(
+        "lidar_topic",
+        default_value=[
+            TextSubstitution(text="/"),
+            namespace,
+            TextSubstitution(text="/livox/lidar"),
+        ],
+        description="LiDAR topic to wait for before starting navigation",
+    )
+
+    declare_lidar_ip_cmd = DeclareLaunchArgument(
+        "lidar_ip",
+        default_value="192.168.1.154",
+        description="LiDAR IP address to wait for before starting the Livox driver",
+    )
+
     # Create our own temporary YAML files that include substitutions
 
     configured_params = ParameterFile(
@@ -191,6 +216,57 @@ def generate_launch_description():
         }.items(),
     )
 
+    wait_for_lidar_ip_cmd = ExecuteProcess(
+        cmd=[
+            "bash",
+            "-c",
+            [
+                "until ping -c 1 -W 1 ",
+                lidar_ip,
+                " >/dev/null 2>&1; do "
+                "echo Waiting for LiDAR IP: ",
+                lidar_ip,
+                "; sleep 1; done",
+            ],
+        ],
+        output="screen",
+    )
+
+    wait_for_lidar_cmd = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "topic",
+            "echo",
+            "--once",
+            "--field",
+            "header.stamp",
+            lidar_topic,
+        ],
+        output="screen",
+    )
+
+    start_livox_after_lidar_ip_cmd = RegisterEventHandler(
+        OnProcessExit(
+            target_action=wait_for_lidar_ip_cmd,
+            on_exit=[
+                LogInfo(msg=["LiDAR IP ready: ", lidar_ip, ", starting Livox driver"]),
+                start_livox_ros_driver2_node,
+                LogInfo(msg=["Waiting for LiDAR topic: ", lidar_topic]),
+                wait_for_lidar_cmd,
+            ],
+        )
+    )
+
+    start_bringup_after_lidar_cmd = RegisterEventHandler(
+        OnProcessExit(
+            target_action=wait_for_lidar_cmd,
+            on_exit=[
+                LogInfo(msg=["LiDAR topic ready: ", lidar_topic, ", starting navigation"]),
+                bringup_cmd,
+            ],
+        )
+    )
+
     ld = LaunchDescription()
 
     # Declare the launch options
@@ -207,11 +283,15 @@ def generate_launch_description():
     ld.add_action(declare_use_robot_state_pub_cmd)
     ld.add_action(declare_use_rviz_cmd)
     ld.add_action(declare_use_respawn_cmd)
+    ld.add_action(declare_lidar_topic_cmd)
+    ld.add_action(declare_lidar_ip_cmd)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(start_robot_state_publisher_cmd)
-    ld.add_action(start_livox_ros_driver2_node)
-    ld.add_action(bringup_cmd)
+    ld.add_action(LogInfo(msg=["Waiting for LiDAR IP: ", lidar_ip]))
+    ld.add_action(start_livox_after_lidar_ip_cmd)
+    ld.add_action(start_bringup_after_lidar_cmd)
+    ld.add_action(wait_for_lidar_ip_cmd)
     ld.add_action(rviz_cmd)
 
     return ld

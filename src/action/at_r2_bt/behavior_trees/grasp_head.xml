@@ -15,21 +15,10 @@
          7. 导航到与持杆机器人对接的位置 (PublishGoal)
          8. 通知爪子"对接" (head cmd=4)
 
-       说明:
-       - SetZoneMode 发布到 /AT_R2/zone_mode (Int32, latched), 1=一区/2=二区/3=三区。
-         虚拟串口节点据此判断: mode=1 才接受抓取命令, mode=2 才接受爬楼梯命令。
-       - PublishHeadCmd 默认 wait_done=false, 发完指令立即返回, 用其后的
-         导航/贴靠/DelayMs 留出执行时间。
-       - 若爪子节点会在 /AT_R2/head_gripper_done 上回发完成编号, 可将对应
-         步骤改为 wait_done="true" timeout="N" 实现真正的同步等待。
   -->
   <BehaviorTree ID="GraspHead">
     <Sequence>
 
-      <!-- Step 0: 切换到一区模式 (mode=1)
-           必须最先执行: 虚拟串口节点有 mode 门控, 只有 mode=1 时
-           /AT_R2/head_gripper_cmd 的抓取命令才会被采纳并下发给下位机。
-           SetZoneMode 是同步节点, 发布即返回成功; 话题 latched, 持续生效。 -->
       <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
 
       <SetCostmapInflation node="{node}"
@@ -43,13 +32,17 @@
                goal_angle_weight="6.0"
                goal_angle_threshold="2.0"
                vx_max="1.0"
-               vx_min="-0.9"
+               vx_min="-1.0"
                vy_max="1.0"
                wz_max="4.0"
-               vx_std="0.3"
-               vy_std="0.3"
-               wz_std="0.3"
-               wait_after_set="0.3"/>
+               vx_std="0.4"
+               vy_std="0.4"
+               wz_std="0.4"
+               goal_x_tolerance="0.03"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.05"
+               goal_stable_duration="0.3"
+               wait_after_set="0.2"/>
 
       <!-- 一键启动门控: 参数已提前设置完成后停在这里，比赛开始时按 Enter 立即开始导航。 -->
       <WaitForEnter node="{node}"
@@ -60,35 +53,13 @@
 
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
-        <ReactiveFallback>
-          <!-- 导航过程中持续检查抓取就绪条件：
-               1) 当前 map->base_link 的 y 在范围内
-               2) 当前 yaw 接近目标角度
-               3) /AT_R2/distance 测距满足范围
-               三项连续 stable_count 次满足后返回 SUCCESS，并 halt PublishGoal 取消导航。 -->
-          <GraspReadyByPoseDistance node="{node}"
-                                    map_frame="map"
-                                    base_frame="base_link"
-                                    y_min="5.45"
-                                    y_max="5.65"
-                                    target_yaw="-3.14"
-                                    yaw_tolerance="0.20"
-                                    distance_topic="/AT_R2/distance"
-                                    distance_scale="0.001"
-                                    distance_min="0.05"
-                                    distance_max="0.30"
-                                    stable_count="3"
-                                    max_data_age="0.5"/>
-
           <PublishGoal node="{node}"
-                  x="1.0" y="5.60" yaw="-3.14"
+                  x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
                   frame_id="map"
                   goal="{nav_goal}"/>
-        </ReactiveFallback>
-
         <!-- 2 -->
         <Sequence>
-          <DelayMs delay_msec="600">
+          <DelayMs delay_msec="400">
             <AlwaysSuccess/>
           </DelayMs>  
           <PublishHeadCmd node="{node}" command="1"
@@ -107,55 +78,21 @@
       </DelayMs> -->
       <!-- Step 2: 调参 + 导航到柜台前预备点 -->
 
-
       <!-- Step 3: 侧向贴靠柜台
-           vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整。
-           贴墙后 Y/Yaw 基本固定，再用测距闭环修正抓取距离。 -->
-      <DockToWall node="{node}"
-                  vy="-0.2"
-                  vx="0.0"
-                  wz="0.0"
-                  stall_threshold="0.01"
-                  stall_duration="0.5"
-                  timeout="2.0"
-                  publish_rate_hz="50.0"
-                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                  odom_topic="/AT_R2/odometry"/>
-
-      <!-- Step 3.5: 已满足 180mm±5mm 则跳过移动，否则按误差比例发布速度对准。
-           cmd_axis 可选 x/y，用于现场选择发布 linear.x 还是 linear.y；
-           positive_error_direction 可选 1/-1，用于方向反了时快速翻转。 -->
-      <Fallback>
-        <GraspReadyByPoseDistance node="{node}"
-                                  map_frame="map"
-                                  base_frame="base_link"
-                                  y_min="5.45"
-                                  y_max="5.65"
-                                  target_yaw="-3.14"
-                                  yaw_tolerance="0.20"
-                                  distance_topic="/AT_R2/distance"
-                                  distance_scale="0.001"
-                                  distance_min="0.175"
-                                  distance_max="0.185"
-                                  stable_count="3"
-                                  max_data_age="0.5"/>
-
-        <DistanceServoAlign node="{node}"
-                            distance_topic="/AT_R2/distance"
-                            distance_scale="0.001"
-                            target_distance="0.180"
-                            tolerance="0.005"
-                            kp="0.8"
-                            max_speed="0.06"
-                            min_speed="0.015"
-                            stable_count="3"
-                            max_data_age="0.5"
-                            timeout="8.0"
-                            publish_rate_hz="50.0"
-                            cmd_axis="x"
-                            positive_error_direction="1.0"
-                            cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
-      </Fallback>
+           vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
+           stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="-0.2"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="0.4"
+                    timeout="1.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
 
       <!-- 前向贴靠柜台 -->
       <!-- <DockToWall node="{node}"
@@ -166,15 +103,47 @@
                   stall_duration="0.5"
                   timeout="2.0"
                   publish_rate_hz="50.0"
-                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                  cmd_vel_topic="/AT_R2/cmd_vel_bt"
                   odom_topic="/AT_R2/odometry"/> -->
+      <Fallback>
+        <GraspReadyByPoseDistance node="{node}"
+                                  map_frame="map"
+                                  base_frame="base_link"
+                                  target_y="{grasp_prep_y}"
+                                  y_tolerance="{grasp_prep_y_tolerance}"
+                                  target_yaw="{grasp_prep_yaw}"
+                                  yaw_tolerance="{grasp_prep_yaw_tolerance}"
+                                  distance_topic="/AT_R2/distance"
+                                  distance_scale="0.001"
+                                  target_distance="{grasp_laser_target_distance}"
+                                  distance_tolerance="{grasp_laser_distance_tolerance}"
+                                  stable_count="3"
+                                  max_data_age="0.5"/>
 
+        <DistanceServoAlign node="{node}"
+                            distance_topic="/AT_R2/distance"
+                            distance_scale="0.001"
+                            target_distance="{grasp_laser_target_distance}"
+                            tolerance="{grasp_laser_distance_tolerance}"
+                            kp="0.7"
+                            max_speed="0.1"
+                            min_speed="0.015"
+                            stable_count="2"
+                            max_data_age="0.5"
+                            timeout="8.0"
+                            publish_rate_hz="50.0"
+                            cmd_axis="x"
+                            positive_error_direction="-1.0"
+                            side_speed_scale="0.5"
+                            side_speed_direction="-1.0"
+                            cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+      </Fallback>
       <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间
            若爪子有完成反馈, 改成: wait_done="true" timeout="10.0" 并删掉下面的 DelayMs -->
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="3000">
+      <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
 
@@ -183,61 +152,81 @@
       <PublishHeadCmd node="{node}" command="3"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <!-- <DelayMs delay_msec="2000">
+      <DelayMs delay_msec="1000">
         <AlwaysSuccess/>
-      </DelayMs> -->
+      </DelayMs>
 
       <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
            timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
-      <ForceSuccess>      
-        <DockToWall node="{node}"
-                    vy="0.2"
-                    vx="0.0"
-                    wz="0.0"
-                    stall_threshold="0.30"
-                    stall_duration="10.0"
-                    timeout="2"
-                    publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                    odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
-      
-      <!-- <PublishHeadCmd node="{node}" command="4"
-                      topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/> -->
-      <!-- <DelayMs delay_msec="3000">
-        <AlwaysSuccess/>
-      </DelayMs> -->
+      <ParallelAll max_failures="1">
+        <ForceSuccess>      
+          <DockToWall node="{node}"
+                      vy="0.2"
+                      vx="0.0"
+                      wz="0.0"
+                      stall_threshold="0.30"
+                      stall_duration="10.0"
+                      timeout="2"
+                      publish_rate_hz="50.0"
+                      cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                      odom_topic="/AT_R2/odometry"/>
+        </ForceSuccess>
+        <PublishHeadCmd node="{node}" command="4"
+                topic="/AT_R2/head_gripper_cmd"
+                wait_done="false"/>
+      </ParallelAll>       
+
       <!-- Step 7: 导航到与持杆机器人对接的位置
            TODO: 把对接点坐标 (x, y, yaw) 改成实际值 -->
-      <!-- <SetCostmapInflation node="{node}"
-                    local_radius="0.30"
-                    global_radius="0.30"
-                    local_cost_scaling_factor="1.0"
-                    global_cost_scaling_factor="4.0"/> -->
+      <!-- <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="6.0"
+               goal_angle_threshold="2.0"
+               vx_max="1.2"
+               vx_min="-1.2"
+               vy_max="1.2"
+               wz_max="4.0"
+               vx_std="0.35"
+               vy_std="0.35"
+               wz_std="0.35"
+               goal_x_tolerance="0.05"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.10"
+               wait_after_set="0.3"/> -->
+
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
         <PublishGoal node="{node}"
-                  x="0.6" y="5.1" yaw="0.0"
+                  x="0.47" y="5.1" yaw="0.0"
                   frame_id="map"
                   goal="{nav_goal}"/>
 
         <!-- 2 -->
         <Sequence>
-          <DelayMs delay_msec="1000">
+          <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>  
-          <PublishHeadCmd node="{node}" command="4"
+          <PublishHeadCmd node="{node}" command="5"
                           topic="/AT_R2/head_gripper_cmd"
                           wait_done="false"/>
         </Sequence>
-      </ParallelAll>         
-      <!-- <PublishGoal node="{node}"
-                x="0.5" y="5.1" yaw="0.0"
-                frame_id="map"
-                goal="{nav_goal}"/> -->
+      </ParallelAll>       
 
-      <ForceSuccess>      
+      <!-- <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               goal_x_tolerance="0.05"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.10"
+               wait_after_set="0.3"
+               goal_stable_duration="0.1"/>   -->
+
+      <!-- <PublishGoal node="{node}"
+                  x="0.40" y="5.1" yaw="0.0"
+                  frame_id="map"
+                  goal="{nav_goal}"/> -->
+
+      <!-- <ForceSuccess>      
         <DockToWall node="{node}"
                     vy="0.0"
                     vx="-0.2"
@@ -246,39 +235,27 @@
                     stall_duration="1.0"
                     timeout="6"
                     publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
-                    odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
-      <!-- <ForceSuccess>      
-        <DockToWall node="{node}"
-                    vy="0.1"
-                    vx="-0.0"
-                    wz="0.0"
-                    stall_threshold="0.01"
-                    stall_duration="0.5"
-                    timeout="4"
-                    publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess> -->
-      <!-- Step 8: 等待持杆机器人确认对接完成后, 自动发布松开爪子指令
-           WaitDockingRelease 会订阅 status_topic(Int32), 当收到 target_status(默认 1) 时,
-           向 gripper_topic 发布 release_cmd(默认 5), 然后返回 SUCCESS;
-           timeout 秒内没有收到目标状态则返回 FAILURE。
-
-           对应 C++ 节点: wait_docking_release_action.cpp
-           默认等价于:
-             status_topic="/AT_R2/docking_status"
-             gripper_topic="/AT_R2/head_gripper_cmd"
-             target_status="1"
-             release_cmd="5"
-             timeout="30.0" -->
+      <ForceSuccess>      
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="-0.2"
+                    wz="0.0"
+                    stall_threshold="0.03"
+                    stall_duration="0.6"
+                    timeout="4"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
       <!-- <WaitDockingRelease node="{node}"
                           status_topic="/AT_R2/docking_status"
                           gripper_topic="/AT_R2/head_gripper_cmd"
                           target_status="1"
-                          release_cmd="5"
-                          timeout="30.0"/> -->
+                          release_cmd="6"
+                          timeout="1000.0"/> -->
 
     </Sequence>
   </BehaviorTree>

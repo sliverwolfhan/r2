@@ -30,6 +30,7 @@
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
 #include "nav2_bt_publish_goal/delay_decorator.hpp"
 #include "nav2_bt_publish_goal/publish_head_cmd_action.hpp"
+#include "nav2_bt_publish_goal/publish_pump_cmd_action.hpp"
 #include "nav2_bt_publish_goal/set_zone_mode_action.hpp"
 #include "nav2_bt_publish_goal/wait_docking_release_action.hpp"
 #include "nav2_bt_publish_goal/wait_for_enter_action.hpp"
@@ -98,6 +99,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::DockToWallAction>("DockToWall");
   factory.registerNodeType<nav2_bt_publish_goal::DelayDecorator>("DelayMs");
   factory.registerNodeType<nav2_bt_publish_goal::PublishHeadCmdAction>("PublishHeadCmd");
+  factory.registerNodeType<nav2_bt_publish_goal::PublishPumpCmdAction>("PublishPumpCmd");
   factory.registerNodeType<nav2_bt_publish_goal::SetZoneModeAction>("SetZoneMode");
   factory.registerNodeType<nav2_bt_publish_goal::WaitDockingReleaseAction>("WaitDockingRelease");
   factory.registerNodeType<nav2_bt_publish_goal::WaitForEnterAction>("WaitForEnter");
@@ -118,12 +120,13 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ GraspReadyByPoseDistance 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DistanceServoAlign 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PublishHeadCmd 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ PublishPumpCmd 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SetZoneMode 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitDockingRelease 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
-  std::string bt_file = "grasp_head.xml";
+  std::string bt_file = "meilin_mission.xml";
   if (argc > 1) {
     bt_file = argv[1];
   }
@@ -133,12 +136,50 @@ int main(int argc, char** argv)
 
   RCLCPP_INFO(node->get_logger(), "加载行为树: %s", bt_xml.c_str());
 
-  // 将 ROS 节点和共享 TF buffer 放入黑板（全局）
+  // 将 ROS 节点、共享 TF buffer、抓取参数放入黑板（全局）
   BT::Blackboard::Ptr blackboard = BT::Blackboard::create();
   blackboard->set("node", node);
   blackboard->set("tf_buffer", tf_buffer);
 
-  RCLCPP_INFO(node->get_logger(), "✓ ROS 节点 / TF buffer 已添加到黑板");
+  std::vector<std::string> weapon_priority = {
+    "weapon_1", "weapon_2", "weapon_3", "weapon_4", "weapon_5", "weapon_6"};
+  node->declare_parameter<std::vector<std::string>>("weapon_priority", weapon_priority);
+  node->get_parameter("weapon_priority", weapon_priority);
+  if (weapon_priority.empty()) {
+    RCLCPP_WARN(node->get_logger(), "weapon_priority 为空，默认使用 weapon_1");
+    weapon_priority.push_back("weapon_1");
+  }
+
+  const std::string selected_weapon = weapon_priority.front();
+  const auto declare_and_get_double = [&](const std::string & suffix, double default_value) {
+    const std::string param_name = selected_weapon + "." + suffix;
+    node->declare_parameter<double>(param_name, default_value);
+    return node->get_parameter(param_name).as_double();
+  };
+
+  const double grasp_prep_x = declare_and_get_double("grasp_prep_x", 0.90);
+  const double grasp_prep_y = declare_and_get_double("grasp_prep_y", 5.49);
+  const double grasp_prep_yaw = declare_and_get_double("grasp_prep_yaw", -3.14);
+  const double grasp_prep_y_tolerance = declare_and_get_double("grasp_prep_y_tolerance", 0.08);
+  const double grasp_prep_yaw_tolerance = declare_and_get_double("grasp_prep_yaw_tolerance", 0.20);
+  const double grasp_laser_target_distance = declare_and_get_double("laser_target_distance", 0.605);
+  const double grasp_laser_distance_tolerance = declare_and_get_double("laser_distance_tolerance", 0.005);
+
+  blackboard->set("grasp_target_name", selected_weapon);
+  blackboard->set("grasp_prep_x", grasp_prep_x);
+  blackboard->set("grasp_prep_y", grasp_prep_y);
+  blackboard->set("grasp_prep_yaw", grasp_prep_yaw);
+  blackboard->set("grasp_prep_y_tolerance", grasp_prep_y_tolerance);
+  blackboard->set("grasp_prep_yaw_tolerance", grasp_prep_yaw_tolerance);
+  blackboard->set("grasp_laser_target_distance", grasp_laser_target_distance);
+  blackboard->set("grasp_laser_distance_tolerance", grasp_laser_distance_tolerance);
+
+  RCLCPP_INFO(node->get_logger(),
+    "✓ ROS 节点 / TF buffer / 抓取参数已添加到黑板: target=%s prep=(%.3f, %.3f, %.3f) "
+    "prep_tol=(y=%.3f, yaw=%.3f) laser=%.3f±%.3f",
+    selected_weapon.c_str(), grasp_prep_x, grasp_prep_y, grasp_prep_yaw,
+    grasp_prep_y_tolerance, grasp_prep_yaw_tolerance,
+    grasp_laser_target_distance, grasp_laser_distance_tolerance);
 
   // 创建树 - 传递黑板作为根黑板
   auto tree = factory.createTreeFromFile(bt_xml, blackboard);

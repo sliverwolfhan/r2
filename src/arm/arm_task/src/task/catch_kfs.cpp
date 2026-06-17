@@ -193,13 +193,18 @@ std::string CatchKFS::process(const std::string last_task_name) {
         robot->node_->get_logger(), "物体在坐标: [%.3f, %.3f, %.3f]", object_pose.pose.position.x, object_pose.pose.position.y,
         object_pose.pose.position.z);
 
-    // 强制规定姿态
+    // 强制规定姿态：比较 |x| 和 |y|，较大的一方决定末端 Z 轴指向哪个坐标轴，
+    // 再按该分量的正负决定指向正方向还是负方向。
     tf2::Quaternion quat;
-    if (final_position_y_ > final_position_x_) {
-        quat.setRPY(-M_PI/2.2, 0, 0);
-    } else if(final_position_x_ > final_position_y_) {
-        quat.setRPY(0.0, M_PI/2.2, 0.0);
+    quat.setRPY(0, 0, 0);  // 兜底单位四元数，避免 |x|==|y| 时未初始化
+    if (std::abs(final_position_x_) >= std::abs(final_position_y_)) {
+        // 末端 Z 轴指向 base_link 的 ±X：绕 Y 轴旋转
+        quat.setRPY(0.0, final_position_x_ >= 0.0 ? M_PI / 2.0 : -M_PI / 2.0, 0.0);
+    } else {
+        // 末端 Z 轴指向 base_link 的 ±Y：绕 X 轴旋转
+        quat.setRPY(final_position_y_ >= 0.0 ? -M_PI / 2.0 : M_PI / 2.0, 0.0, 0.0);
     }
+    quat.normalize();
 
 
     object_pose.pose.orientation.w = quat.getW();

@@ -42,6 +42,37 @@ def launch_setup(context: LaunchContext) -> list:
     # Generate URDF from SDF
     urdf_generator = UrdfGenerator()
     urdf_generator.parse_from_sdf_string(robot_xml)
+
+    # 精简 TF 树：SDF 保留完整物理结构（轮子/横梁等供 Gazebo 仿真使用），
+    # 但发布给 robot_state_publisher 的 URDF 只保留以下 4 个坐标系：
+    #   base_footprint, base_link, chassis(底盘), mid360(雷达)
+    # 其余轮子/横梁/升降臂相关的 link 与 joint 在此从 URDF 中裁掉，
+    # 这样 /tf 里就不会出现一堆无用的坐标系。
+    # 注意：SDF->URDF 转换会重排 fixed joint 的父子方向并重命名 joint，
+    # 所以这里不能按 joint 名硬编码白名单，而是“只保留 parent 和 child
+    # 都在 keep_links 里的 joint”，从而保证裁剪后仍是单根连通树。
+    keep_links = {"base_footprint", "base_link", "chassis", "mid360"}
+    out_doc = urdf_generator.out_doc
+    keep_joints = set()
+    for joint in out_doc.getElementsByTagName("joint"):
+        parent = joint.getElementsByTagName("parent")[0].getAttribute("link")
+        child = joint.getElementsByTagName("child")[0].getAttribute("link")
+        if parent in keep_links and child in keep_links:
+            keep_joints.add(joint.getAttribute("name"))
+
+    all_links = [
+        n.getAttribute("name") for n in out_doc.getElementsByTagName("link")
+    ]
+    all_joints = [
+        n.getAttribute("name") for n in out_doc.getElementsByTagName("joint")
+    ]
+    for link_name in all_links:
+        if link_name not in keep_links:
+            urdf_generator.remove_link(link_name)
+    for joint_name in all_joints:
+        if joint_name not in keep_joints:
+            urdf_generator.remove_joint(joint_name)
+
     robot_urdf_xml = urdf_generator.to_string()
 
     # Create our own temporary YAML files that include substitutions

@@ -87,5 +87,5 @@ else
   exit 1
 fi
 
-echo "==> ros2 run virtual_serial_port virtual_serial_port_node ${RUN_ARGS[*]}"
-exec ros2 run virtual_serial_port virtual_serial_port_node "${RUN_ARGS[@]}"
+echo "==> ros2 run virtual_serial_port virtual_serial_port_node_test ${RUN_ARGS[*]}"
+exec ros2 run virtual_serial_port virtual_serial_port_node_test "${RUN_ARGS[@]}"

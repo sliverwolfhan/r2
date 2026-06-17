@@ -170,16 +170,22 @@
         <!-- 基础坐标系 -->
         <link name="base_footprint"/>
         <link name="base_link"/>
-
+    <!-- chassis   chassis -->
+    <!-- chassis   chassis -->
+    <!-- chassis   chassis -->
+    <!-- chassis   chassis -->
         <joint name="chassis_to_base_footprint" type="fixed">
-            <pose>0 0 0.08 0 0 0</pose>
+            <pose>0 0 0.23 0 0 0</pose>
             <parent>base_footprint</parent>
             <child>chassis</child>
         </joint>
-
-        <joint name="base_link_to_base_footptint" type="fixed">
-            <pose>0 -0.281 0 0 0 -1.5708</pose>
-            <parent>base_footprint</parent>
+    <!-- base_link   base_link -->
+    <!-- base_link   base_link -->
+    <!-- base_link   base_link -->
+    <!-- base_link   base_link -->
+        <joint name="base_link_to_chassis" type="fixed">
+            <pose>0 0.20 0 0 0 1.5708</pose>
+            <parent>chassis</parent>
             <child>base_link</child>
         </joint>
 
@@ -320,13 +326,16 @@
                 <xmacro_block name="geometry_box" x="0.02" y="0.56" z="0.02"/>
             </collision>
         </link>
-
+    <!-- mid360   mid360 -->
+    <!-- mid360   mid360 -->
+    <!-- mid360   mid360 -->
+    <!-- mid360   mid360 -->
         <xmacro_block name="liftable_mecanum_wheel_on_beam" prefix="rear_left" beam_link="rear_lift_beam" pose="0 0.28 0 0 0 0" wheel_side="right"/>
         <xmacro_block name="liftable_mecanum_wheel_on_beam" prefix="rear_right" beam_link="rear_lift_beam" pose="0 -0.28 0 0 0 0" wheel_side="left"/>
 
         <!--传感器-->
         <!--3D激光雷达-->
-        <xmacro_block name="livox" prefix="mid360" parent="chassis" pose="-0.304 -0.156 0.77 3.1415926 0.0 0.0" update_rate="20" samples="1875"/>
+        <xmacro_block name="livox" prefix="mid360" parent="chassis" pose="-0.390 -0.130 0.53 3.1415926 0.0 3.1415926" update_rate="20" samples="1875"/>
         <!--双目相机-->
         <!-- <xmacro_block name="industrial_camera" prefix="front_left" parent="chassis" pose="0.25 0.1 0.1 0 0 0" update_rate="30" horizontal_fov="1.2" width="1280" height="720"/>
         <xmacro_block name="industrial_camera" prefix="front_right" parent="chassis" pose="0.25 -0.1 0.1 0 0 0" update_rate="30" horizontal_fov="1.2" width="1280" height="720"/> -->
