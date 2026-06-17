@@ -98,20 +98,6 @@ static const Mat D = (Mat_<double>(1,5) <<
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ================================================================
 //  卡尔曼滤波器封装（对每个角点单独建一个 4 状态 KF：[x, y, vx, vy]）
 // ================================================================
@@ -598,6 +584,12 @@ int main(int argc, char** argv)
         
         // ----- 检测箱子角点 -----
         bool detected = detectBoxCorners(undistorted, prevGray, rawCorners, debugMask);
+
+        // [调试] 打印检测结果（每秒最多一次，避免刷屏）
+        RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
+            "[检测] detected=%s, KF已初始化=%s",
+            detected ? "是" : "否",
+            kfs[0].initialized ? "是" : "否");
         
         // ----- 卡尔曼平滑角点 -----
         vector<Point2f> smoothCorners(4);
@@ -643,9 +635,30 @@ int main(int argc, char** argv)
             
             // ----- solvePnP 计算位姿 -----
             Mat rvec, tvec;
+            // 先用 IPPE（平面四点专用，精度高但对点的顺序/退化很敏感），
+            // 失败则回退到 ITERATIVE（通用、容错性强），把条件放宽。
             bool pnp_ok = solvePnP(OBJ_PTS, smoothCorners, newK, zeroDist,
                                    rvec, tvec, false, SOLVEPNP_IPPE);
-            
+            if (!pnp_ok)
+            {
+                pnp_ok = solvePnP(OBJ_PTS, smoothCorners, newK, zeroDist,
+                                  rvec, tvec, false, SOLVEPNP_ITERATIVE);
+                RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
+                    "[PnP] IPPE 失败，已回退 ITERATIVE，结果=%s",
+                    pnp_ok ? "成功" : "仍失败");
+            }
+
+            // [调试] solvePnP 彻底失败时打印角点，便于排查（这种情况不发布 TF）
+            if (!pnp_ok)
+            {
+                RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
+                    "[PnP] 求解失败，本帧不发布 TF。角点=(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f)",
+                    smoothCorners[0].x, smoothCorners[0].y,
+                    smoothCorners[1].x, smoothCorners[1].y,
+                    smoothCorners[2].x, smoothCorners[2].y,
+                    smoothCorners[3].x, smoothCorners[3].y);
+            }
+
             if (pnp_ok)
             {
                 // ---- tvec 平滑 ----
@@ -688,7 +701,16 @@ int main(int argc, char** argv)
                 transformStamped.transform.rotation.w = q.w();
                 
                 tf_broadcaster->sendTransform(transformStamped);
-                
+
+                // [调试] 确认 TF 已发布，并打印发布的坐标（每秒最多一次）
+                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
+                    "[TF] 已发布 %s -> %s : xyz=(%.3f, %.3f, %.3f) m, detected=%s",
+                    CAMERA_FRAME_ID, OBJECT_FRAME_ID,
+                    transformStamped.transform.translation.x,
+                    transformStamped.transform.translation.y,
+                    transformStamped.transform.translation.z,
+                    detected ? "是(真实)" : "否(KF预测)");
+
                 // ---- 投影坐标轴（可视化物体坐标系） ----
                 Mat tvecSmoothed = (Mat_<double>(3,1) << X, Y, Z);
                 

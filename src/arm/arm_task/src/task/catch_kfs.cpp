@@ -76,25 +76,32 @@ std::string CatchKFS::process(const std::string last_task_name) {
     }
 
     geometry_msgs::msg::TransformStamped target_tf;
+    bool tf_ok = false;
     try {
-        if (!robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 2s)) {
-            RCLCPP_ERROR(robot->node_->get_logger(), "等待 TF %s -> %s 超时",
+        if (robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 2s)) {
+            target_tf = robot->tf_buffer_->lookupTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero);
+            tf_ok = true;
+        } else {
+            RCLCPP_WARN(robot->node_->get_logger(), "等待 TF %s -> %s 超时，改用 action 通信数据",
                          robot->base_frame_.c_str(), robot->object_frame_.c_str());
-            return "idel";
         }
-        target_tf = robot->tf_buffer_->lookupTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero);
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(robot->node_->get_logger(), "读取 TF 目标位姿失败: %s", e.what());
-        return "idel";
+        RCLCPP_WARN(robot->node_->get_logger(), "读取 TF 目标位姿失败: %s，改用 action 通信数据", e.what());
     }
 
-    double position_x_ = target_tf.transform.translation.x;
-    double position_y_ = target_tf.transform.translation.y;
-    double position_z_ = target_tf.transform.translation.z;
-    double orientation_x_ = target_tf.transform.rotation.x;
-    double orientation_y_ = target_tf.transform.rotation.y;
-    double orientation_z_ = target_tf.transform.rotation.z;
-    double orientation_w_ = target_tf.transform.rotation.w;
+    // TF 查询失败时的回退：必须有 action 数据才能继续，否则无目标可抓
+    if (!tf_ok && !(has_action_context && context.data.size() >= 8)) {
+        RCLCPP_ERROR(robot->node_->get_logger(), "TF 查询失败且无可用的 action 目标数据，无法抓取");
+        return fail_task("TF 查询失败且无 action 目标数据");
+    }
+
+    double position_x_ = tf_ok ? target_tf.transform.translation.x : action_position_x_;
+    double position_y_ = tf_ok ? target_tf.transform.translation.y : action_position_y_;
+    double position_z_ = tf_ok ? target_tf.transform.translation.z : action_position_z_;
+    double orientation_x_ = tf_ok ? target_tf.transform.rotation.x : action_orientation_x_;
+    double orientation_y_ = tf_ok ? target_tf.transform.rotation.y : action_orientation_y_;
+    double orientation_z_ = tf_ok ? target_tf.transform.rotation.z : action_orientation_z_;
+    double orientation_w_ = tf_ok ? target_tf.transform.rotation.w : action_orientation_w_;
 
     // 比较 TF 数据与 action 数据的位置偏差
     double final_position_x_ = position_x_;
@@ -105,7 +112,9 @@ std::string CatchKFS::process(const std::string last_task_name) {
     double final_orientation_z_ = orientation_z_;
     double final_orientation_w_ = orientation_w_;
 
-    if (has_action_context && context.data.size() >= 8) {
+    // 仅在 TF 查询成功且有 action 数据时，才做 TF/action 偏差比较；
+    // TF 失败时上面已直接采用 action 数据，无需再比较。
+    if (tf_ok && has_action_context && context.data.size() >= 8) {
         double dx = position_x_ - action_position_x_;
         double dy = position_y_ - action_position_y_;
         double dz = position_z_ - action_position_z_;
