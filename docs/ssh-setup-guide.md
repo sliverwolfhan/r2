@@ -79,3 +79,8 @@ ssh onboard
 ## 注意事项
 
 - 如果机载 PC 用的是 WiFi DHCP 分配的 IP，路由器重启后 IP 可能会变。连不上时去机载 PC 上重新执行 `ip addr show` 确认 IP，更新 `~/.ssh/config` 里的 `HostName`。
+
+ros2 run tf2_ros tf2_echo map base_footprint \
+  --ros-args \
+  -r /tf:=/AT_R2/tf \
+  -r /tf_static:=/AT_R2/tf_static

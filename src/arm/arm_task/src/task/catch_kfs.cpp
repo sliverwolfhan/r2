@@ -78,7 +78,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     geometry_msgs::msg::TransformStamped target_tf;
     bool tf_ok = false;
     try {
-        if (robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 2s)) {
+        if (robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 500ms)) {
             target_tf = robot->tf_buffer_->lookupTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero);
             tf_ok = true;
         } else {
@@ -120,7 +120,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
         double dz = position_z_ - action_position_z_;
         double pos_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-        const double POSITION_THRESHOLD = 0.1; // 10cm = 0.1m
+        const double POSITION_THRESHOLD = 0.5; // 10cm = 0.1m
 
         if (pos_distance > POSITION_THRESHOLD) {
             RCLCPP_WARN(robot->node_->get_logger(),
@@ -223,13 +223,13 @@ std::string CatchKFS::process(const std::string last_task_name) {
     object_pose.pose.position.x -= grasp_right_run_;
 
     RCLCPP_INFO(robot->node_->get_logger(), "执行抓取动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 1.5)) { // 0.8        
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.8)) { // 0.8        
         return fail_task("执行抓取轨迹失败");
     }
 
-    object_pose.pose.position.z += 10.0;
+    object_pose.pose.position.z += 0.2;  // 抬起 10cm
     RCLCPP_INFO(robot->node_->get_logger(), "执行抬起动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 1.0)) { // 0.8        
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8        
         return fail_task("执行抬起失败");
     }
     

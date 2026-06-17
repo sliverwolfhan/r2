@@ -15,8 +15,8 @@ steps:
     target_id: 12
     prep_pose: {x: 3.9, y: -3.0, theta: 0.0}
     grasp_yaw: 0.0
-    cube_x: 7.7
-    cube_y: 4.2
+    cube_x: 7.5
+    cube_y: 4.24
     block_height: 0.27
 
 #   - type: MOVE

@@ -106,7 +106,7 @@
                    x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
                    frame_id="map"
                    goal="{nav_goal}"/> -->
-      <PublishPumpCmd node="{node}" command="1"/> 
+      <!-- <PublishPumpCmd node="{node}" command="1"/>  -->
       <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
       <PublishPumpCmd node="{node}" command="1"/> 
       <ArmTask node="{node}"
@@ -123,10 +123,31 @@
                goal_data="{arm_goal_data}"
                err_code="{arm_err_code}"
                reason="{arm_reason}"/>
-      <ArmMoveNamed node="{node}"
+      <!-- <ArmMoveNamed node="{node}"
                 pose_name="hold_block"
                 server_name="robotic_task"
+                task_id="1"/> -->
+      <ArmMoveNamed node="{node}"
+                pose_name="lift_block"
+                server_name="robotic_task"
                 task_id="1"/>
+      <ArmMoveNamed node="{node}"
+                pose_name="stow_block"
+                server_name="robotic_task"
+                task_id="1"/>
+      <ArmMoveNamed node="{node}"
+                pose_name="place_block"
+                server_name="robotic_task"
+                task_id="1"/>                      
+      <PublishPumpCmd node="{node}" command="0"/>
+      <ArmMoveNamed node="{node}"
+                pose_name="stow_block"
+                server_name="robotic_task"
+                task_id="1"/>
+      <ArmMoveNamed node="{node}"
+                pose_name="stow_block"
+                server_name="robotic_task"
+                task_id="1"/>       
     </Sequence>
   </BehaviorTree>
 
