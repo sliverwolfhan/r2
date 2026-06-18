@@ -1,16 +1,3 @@
-/**
- * @file vision.cpp
- * @brief 红色箱子视觉识别与位姿估计节点
- * 
- * 功能说明：
- * 1. 从 USB 摄像头读取图像
- * 2. 通过 HSV 颜色分割检测红色箱子
- * 3. 使用卡尔曼滤波器平滑角点位置
- * 4. 使用 solvePnP 计算相机到物体的位姿
- * 5. 发布 TF 变换（camera_link -> target_object）
- * 6. 可视化显示检测结果
- */
-
 #include <iostream>
 #include <vector>
 #include <array>
@@ -19,6 +6,7 @@
 #include <deque>
 #include <memory>
 #include <opencv2/opencv.hpp>
+#include <opencv2/dnn.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2/LinearMath/Matrix3x3.h>
@@ -27,6 +15,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace cv::dnn;
 
 // ================================================================
 //  常量配置区 —— 只改这里就能适配你的箱子
@@ -38,6 +27,27 @@ using namespace cv;
 static const float BOX_MM      = 350.0f;      // 箱子顶面边长，单位：mm
 static const float HALF        = BOX_MM / 2.f;
 static const double MIN_AREA   = 8000.0;      // 最小有效红色面积阈值（像素），用于过滤噪声
+
+/**
+ * YOLO 模型参数
+ */
+static const char*  MODEL_PATH     = "/home/hao/arm/best.onnx";
+static const int    YOLO_INPUT_W   = 640;
+static const int    YOLO_INPUT_H   = 640;
+static const float  YOLO_CONF_THR  = 0.25f;
+static const float  YOLO_NMS_THR   = 0.45f;
+static const float  ROI_EXPAND_X   = 2.5f;        // YOLO框横向扩大倍数
+static const float  ROI_EXPAND_Y   = 2.0f;        // YOLO框纵向扩大倍数（1=原框, 3=三倍）
+static const int    YOLO_NUM_CLASSES = 32;
+
+// YOLO 类别名（仅 R_R1=0 和 B_R1=1 是我们关心的红色/蓝色箱子）
+static const vector<string> YOLO_CLASS_NAMES =
+{
+    "R_R1","B_R1","T_03","T_04","T_05","T_06","T_07","T_08",
+    "T_09","T_10","T_11","T_12","T_13","T_14","T_15","T_16",
+    "T_17","F_18","F_19","F_20","F_21","F_22","F_23","F_24",
+    "F_25","F_26","F_27","F_28","F_29","F_30","F_31","F_32"
+};
 
 /**
  * 平滑参数
@@ -89,12 +99,6 @@ static const Mat D = (Mat_<double>(1,5) <<
          0.001678,
         -0.006394,
          0.0);
-
-
-
-
-
-
 
 
 
@@ -187,24 +191,6 @@ struct CornerKF
         return Point2f((float)pred.at<double>(0), (float)pred.at<double>(1));
     }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -317,6 +303,83 @@ void putLabel(Mat& img, const string& text, Point org,
 
 
 // ================================================================
+//  YOLO 粗定位：检测红/蓝箱子，返回最大置信度的 bounding box
+// ================================================================
+/**
+ * @brief 用 YOLO11 ONNX 模型检测红色/蓝色箱子顶面
+ * @param frame 输入图像（BGR，任意尺寸）
+ * @param net   YOLO ONNX 网络
+ * @param yoloBox 输出检测框（原图坐标），检测失败返回空 Rect
+ */
+Rect runYoloDetection(const Mat& frame, Net& net)
+{
+    // ---- 1. 构造 blob ----
+    Mat blob;
+    blobFromImage(frame, blob, 1.0/255.0, Size(YOLO_INPUT_W, YOLO_INPUT_H),
+                  Scalar(), true, false);
+    net.setInput(blob);
+
+    // ---- 2. 推理 ----
+    vector<Mat> outputs;
+    net.forward(outputs, net.getUnconnectedOutLayersNames());
+    if (outputs.empty()) return Rect();
+
+    Mat output = outputs[0];
+    const int numBoxes = output.size[2];           // e.g. 8400
+    float* data = (float*)output.data;
+
+    float xFactor = (float)frame.cols / YOLO_INPUT_W;
+    float yFactor = (float)frame.rows / YOLO_INPUT_H;
+
+    // ---- 3. 解析所有检测框，收集 R_R1(0) 和 B_R1(1) ----
+    vector<Rect>   boxes;
+    vector<float>  confs;
+    vector<int>    clsIds;
+
+    for (int i = 0; i < numBoxes; i++)
+    {
+        float cx = data[0 * numBoxes + i];
+        float cy = data[1 * numBoxes + i];
+        float w  = data[2 * numBoxes + i];
+        float h  = data[3 * numBoxes + i];
+
+        // 找最佳类别
+        float bestScore = 0;
+        int   bestClass = -1;
+        for (int c = 0; c < YOLO_NUM_CLASSES; c++)  // 检测全部类别
+        {
+            float score = data[(4 + c) * numBoxes + i];
+            if (score > bestScore) { bestScore = score; bestClass = c; }
+        }
+
+        if (bestScore < YOLO_CONF_THR) continue;
+
+        int left   = int((cx - w * 0.5f) * xFactor);
+        int top    = int((cy - h * 0.5f) * yFactor);
+        int width  = int(w * xFactor);
+        int height = int(h * yFactor);
+
+        boxes.emplace_back(left, top, width, height);
+        confs.push_back(bestScore);
+        clsIds.push_back(bestClass);
+    }
+
+    if (boxes.empty()) return Rect();
+
+    // ---- 4. NMS ----
+    vector<int> indices;
+    NMSBoxes(boxes, confs, YOLO_CONF_THR, YOLO_NMS_THR, indices);
+    if (indices.empty()) return Rect();
+
+    // ---- 5. 返回置信度最高的那个框 ----
+    int bestIdx = indices[0];
+    for (int idx : indices)
+        if (confs[idx] > confs[bestIdx]) bestIdx = idx;
+
+    return boxes[bestIdx];
+}
+
+// ================================================================
 //  核心：从彩色帧里提取箱子四角
 //  返回 false 表示本帧检测失败
 // ================================================================
@@ -338,11 +401,20 @@ void putLabel(Mat& img, const string& text, Point org,
 bool detectBoxCorners(const Mat& frame, const Mat& prevGray,
                       vector<Point2f>& corners, Mat& debugMask)
 {
-    // ---- 1. HSV 红色分割 ----
+    // ---- 1. HSV 红色分割（自适应光照） ----
     // 转换到 HSV 颜色空间
     Mat hsv;
     cvtColor(frame, hsv, COLOR_BGR2HSV);
-    
+
+    // ---- 对 V 通道做 CLAHE 自适应直方图均衡，减少光照变化影响 ----
+    {
+        vector<Mat> hsvChannels;
+        split(hsv, hsvChannels);                    // H[0], S[1], V[2]
+        Ptr<CLAHE> clahe = createCLAHE(2.0, Size(8,8));  // clipLimit=2.0, tile=8x8
+        clahe->apply(hsvChannels[2], hsvChannels[2]);     // 只对 V 通道做均衡
+        merge(hsvChannels, hsv);
+    }
+
     // 红色在 HSV 中分布在两端（0° 附近和 180° 附近）
     // 需要两个阈值范围，然后合并
     Mat m1, m2, mask;
@@ -415,13 +487,20 @@ bool detectBoxCorners(const Mat& frame, const Mat& prevGray,
     // 转换为灰度图
     Mat gray;
     cvtColor(frame, gray, COLOR_BGR2GRAY);
-    
-    // 确保角点在图像范围内
+
+    // 检查角点是否在图像范围内，越界的角点说明检测不可靠，直接丢弃本帧
+    bool anyClamped = false;
     for (auto& p : raw)
     {
+        if (p.x < 0.f || p.x > (float)(frame.cols - 1) ||
+            p.y < 0.f || p.y > (float)(frame.rows - 1))
+        {
+            anyClamped = true;
+        }
         p.x = clamp(p.x, 0.f, (float)(frame.cols - 1));
         p.y = clamp(p.y, (float)0, (float)(frame.rows - 1));
     }
+    if (anyClamped) return false;  // 角点越界，本帧不可靠
     
     // 亚像素角点精化（提高精度到亚像素级）
     TermCriteria tc(TermCriteria::EPS + TermCriteria::MAX_ITER, 30, 0.01);
@@ -436,31 +515,61 @@ bool detectBoxCorners(const Mat& frame, const Mat& prevGray,
 // ================================================================
 /**
  * @struct PoseSmootherVec3
- * @brief 对位姿向量进行滑动平均平滑
- * 
- * 作用：减少位姿抖动，使输出更稳定
+ * @brief 对位姿向量进行中值滤波 + 异常剔除平滑
+ *
+ * 作用：减少位姿抖动，同时自动剔除异常值，使输出更稳定
  */
 struct PoseSmootherVec3
 {
     deque<Vec3d> buf;   // 历史数据缓冲区
     int maxN;           // 最大帧数
-    
+
     explicit PoseSmootherVec3(int n) : maxN(n) {}
-    
+
     /**
-     * @brief 添加新数据并返回平滑结果
+     * @brief 添加新数据并返回中值平滑结果（自动剔除异常值）
      * @param v 新的位姿向量
-     * @return 平滑后的位姿向量
+     * @return 平滑后的位姿向量（各分量取中位数）
      */
     Vec3d push(Vec3d v)
     {
+        // 异常值剔除：缓冲区已有足够数据时，先检查新值是否离群
+        if ((int)buf.size() >= 3)
+        {
+            Vec3d curMed = median();
+            double dev = norm(v - curMed);
+            // 偏离当前中值超过 200mm 视为异常值，直接丢弃
+            static const double OUTLIER_THRESH_MM = 200.0;
+            if (dev > OUTLIER_THRESH_MM) return curMed;
+        }
+
         buf.push_back(v);
         if ((int)buf.size() > maxN) buf.pop_front();  // 保持窗口大小
-        
-        // 计算均值
-        Vec3d sum(0,0,0);
-        for (auto& x : buf) sum += x;
-        return sum * (1.0 / buf.size());
+
+        return median();
+    }
+
+    /**
+     * @brief 取各分量的中位数
+     */
+    Vec3d median() const
+    {
+        int n = (int)buf.size();
+        if (n == 0) return Vec3d(0,0,0);
+
+        vector<double> xs(n), ys(n), zs(n);
+        for (int i = 0; i < n; i++) {
+            xs[i] = buf[i][0];
+            ys[i] = buf[i][1];
+            zs[i] = buf[i][2];
+        }
+
+        int mid = n / 2;
+        nth_element(xs.begin(), xs.begin() + mid, xs.end());
+        nth_element(ys.begin(), ys.begin() + mid, ys.end());
+        nth_element(zs.begin(), zs.begin() + mid, zs.end());
+
+        return Vec3d(xs[mid], ys[mid], zs[mid]);
     }
 };
 
@@ -489,36 +598,26 @@ int main(int argc, char** argv)
     auto node = rclcpp::Node::make_shared("vision_node");
     auto tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(node);
 
-    // ---------- 启动 USB 摄像头 ----------
-    VideoCapture cap;
-    const int camera_index = 0;  // 摄像头设备索引
-    
-    // 尝试多种后端打开摄像头（提高兼容性）
-    const std::array<int, 3> backends = {CAP_V4L2, CAP_ANY, CAP_GSTREAMER};
-    bool opened = false;
-    for (int backend : backends) {
-        cap.release();
-        if (!cap.open(camera_index, backend)) {
-            cerr << "后端 " << backend << " 打开摄像头索引 " << camera_index
-                 << " 失败\n";
-            continue;
-        }
+    // ---------- 启动 USB 摄像头（写死路径，插拔不变） ----------
+    // 插上相机后运行: ls /dev/v4l/by-id/usb-*video* | head -1
+    // 把输出填到下面 CAMERA_PATH
+    static const char* CAMERA_PATH = "/dev/v4l/by-id/usb-HD_Camera_Manufacturer_USB_2.0_Camera-video-index0";
 
-        // 获取并显示后端名称
-        std::string backend_name = "unknown";
-        try {
-            backend_name = cap.getBackendName();
-        } catch (...) {
-            backend_name = "unavailable";
-        }
-        cout << "摄像头打开成功，索引=" << camera_index
-             << "，后端=" << backend_name << "\n";
-        opened = true;
-        break;
+    VideoCapture cap;
+    bool opened = cap.open(CAMERA_PATH, CAP_V4L2);
+    if (opened)
+    {
+        cout << "摄像头打开成功: " << CAMERA_PATH << endl;
+    }
+    else
+    {
+        cerr << "无法打开摄像头: " << CAMERA_PATH
+             << "\n请运行: ls /dev/v4l/by-id/usb-*video* | head -1"
+             << "\n然后把结果填入 CAMERA_PATH\n";
     }
 
+
     if (!opened || !cap.isOpened()) {
-        cerr << "无法打开摄像头，请检查设备索引和占用情况\n";
         rclcpp::shutdown();
         return -1;
     }
@@ -548,7 +647,20 @@ int main(int argc, char** argv)
     // 预计算去畸变映射表（提高实时性能）
     Mat mapX, mapY;
     initUndistortRectifyMap(K, D, Mat(), newK, imgSize, CV_32FC1, mapX, mapY);
-    
+
+    // ========== 2.5 加载 YOLO ONNX 模型 ==========
+    Net yoloNet = readNet(MODEL_PATH);
+    if (yoloNet.empty())
+    {
+        cerr << "加载 YOLO 模型失败: " << MODEL_PATH << endl;
+        cap.release();
+        rclcpp::shutdown();
+        return -1;
+    }
+    yoloNet.setPreferableBackend(DNN_BACKEND_OPENCV);
+    yoloNet.setPreferableTarget(DNN_TARGET_CPU);
+    cout << "[INFO] YOLO model loaded: " << MODEL_PATH << endl;
+
     // ========== 3. 初始化滤波器 ==========
     // 卡尔曼滤波器：4 个角点各一个
     array<CornerKF, 4> kfs;
@@ -559,11 +671,24 @@ int main(int argc, char** argv)
     // 上一帧灰度图（预留，当前未使用）
     Mat prevGray;
     bool hasPrev = false;
-    
+
+    // 连续丢帧计数器（超过上限则复位卡尔曼滤波器并停止发布TF）
+    int consecutiveLost = 0;
+    static const int MAX_LOST_FRAMES = 10;
+
     // 零畸变系数（用于去畸变后的图像）
     Mat zeroDist = Mat::zeros(1, 5, CV_64F);
-    
+
+    // 上一帧 YOLO 检测框（YOLO 丢帧时复用）
+    Rect lastYoloBox;
+
+    // 全局平滑位姿（面板始终显示，不受 pnp_ok/detected 影响）
+    double gX = 0, gY = 0, gZ = 0, gDist = 0;
+    double gRoll = 0, gPitch = 0, gYaw = 0;
+    bool   gHavePose = false;
+
     // ========== 4. 主循环 ==========
+    // 流程：YOLO粗定位 → 框扩大3x → 裁剪ROI → HSV精提取角点 → KF平滑 → PnP → TF
     while (rclcpp::ok())
     {
         rclcpp::spin_some(node);
@@ -579,28 +704,82 @@ int main(int argc, char** argv)
         
         // 准备显示图像和调试数据
         Mat show = undistorted.clone();
-        Mat debugMask;
+        Mat debugMask = Mat::zeros(undistorted.size(), CV_8UC1);
         vector<Point2f> rawCorners;
-        
-        // ----- 检测箱子角点 -----
-        bool detected = detectBoxCorners(undistorted, prevGray, rawCorners, debugMask);
 
-        // [调试] 打印检测结果（每秒最多一次，避免刷屏）
-        RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
-            "[检测] detected=%s, KF已初始化=%s",
-            detected ? "是" : "否",
-            kfs[0].initialized ? "是" : "否");
-        
+        // ----- Step 1: YOLO 粗定位 -----
+        Rect yoloBox = runYoloDetection(undistorted, yoloNet);
+
+        // YOLO 丢帧时复用上一帧框
+        if (yoloBox.empty()) yoloBox = lastYoloBox;
+        else                 lastYoloBox = yoloBox;
+
+        // ----- Step 2: 在 YOLO 框扩大 3x 的 ROI 内做 HSV 精提取 -----
+        bool detected = false;
+        Rect roi;
+        bool hasRoi = false;
+        if (!yoloBox.empty())
+        {
+            // 扩大 ROI_EXPAND 倍，clamp 到图像边界
+            int cx = yoloBox.x + yoloBox.width / 2;
+            int cy = yoloBox.y + yoloBox.height / 2;
+            int halfW = (int)(yoloBox.width  * ROI_EXPAND_X / 2.0f);
+            int halfH = (int)(yoloBox.height * ROI_EXPAND_Y / 2.0f);
+            int roiX = max(0, cx - halfW);
+            int roiY = max(0, cy - halfH);
+            int roiW = min(undistorted.cols - roiX, halfW * 2);
+            int roiH = min(undistorted.rows - roiY, halfH * 2);
+            roi = Rect(roiX, roiY, roiW, roiH);
+            hasRoi = true;
+
+            // 裁剪图像送给 HSV 检测
+            Mat crop = undistorted(roi);
+            Mat cropMask;
+            vector<Point2f> cropCorners;
+            bool cropDetected = detectBoxCorners(crop, prevGray, cropCorners, cropMask);
+
+            if (cropDetected)
+            {
+                // 角点从 crop 坐标 → 原图坐标
+                for (auto& p : cropCorners)
+                {
+                    p.x += (float)roiX;
+                    p.y += (float)roiY;
+                }
+                rawCorners = cropCorners;
+                detected = true;
+
+                // mask 从 crop 坐标 → 原图坐标（嵌入全图 debugMask）
+                cropMask.copyTo(debugMask(roi));
+            }
+        }
+
+        // YOLO 彻底不可用时回退全帧 HSV
+        if (!detected && yoloBox.empty())
+        {
+            detected = detectBoxCorners(undistorted, prevGray, rawCorners, debugMask);
+        }
+
+        // 在 show 图上画 YOLO 原始框 + 扩大的 ROI 框
+        if (!yoloBox.empty())
+        {
+            rectangle(show, yoloBox, Scalar(255, 150, 0), 2, LINE_AA);  // 橙-原框
+            if (hasRoi)
+                rectangle(show, roi, Scalar(0, 255, 255), 1, LINE_AA);  // 黄-扩大ROI
+        }
+
         // ----- 卡尔曼平滑角点 -----
         vector<Point2f> smoothCorners(4);
         if (detected)
         {
+            consecutiveLost = 0;  // 检测成功，复位丢帧计数
             // 检测成功：使用测量值更新卡尔曼滤波器
             for (int i = 0; i < 4; i++)
                 smoothCorners[i] = kfs[i].update(rawCorners[i]);
         }
         else
         {
+            consecutiveLost++;
             // 检测失败：使用卡尔曼滤波器预测
             for (int i = 0; i < 4; i++)
             {
@@ -610,8 +789,19 @@ int main(int argc, char** argv)
                     smoothCorners[i] = Point2f(0,0);
             }
         }
-        
-        bool anyInited = kfs[0].initialized;
+
+        // 连续丢帧过多：复位卡尔曼滤波器，防止预测值漂移
+        bool kfTimedOut = (consecutiveLost > MAX_LOST_FRAMES);
+        if (kfTimedOut)
+        {
+            for (auto& kf : kfs) kf.initialized = false;
+            tvecSmoother.buf.clear();
+            consecutiveLost = 0;
+            cerr << "\n[WARN] KF timed out after " << MAX_LOST_FRAMES
+                 << " consecutive lost frames, resetting filters.\n";
+        }
+
+        bool anyInited = kfs[0].initialized && !kfTimedOut;
         
         // ----- 画角点框 -----
         if (anyInited)
@@ -635,60 +825,43 @@ int main(int argc, char** argv)
             
             // ----- solvePnP 计算位姿 -----
             Mat rvec, tvec;
-            // 先用 IPPE（平面四点专用，精度高但对点的顺序/退化很敏感），
-            // 失败则回退到 ITERATIVE（通用、容错性强），把条件放宽。
             bool pnp_ok = solvePnP(OBJ_PTS, smoothCorners, newK, zeroDist,
                                    rvec, tvec, false, SOLVEPNP_IPPE);
-            if (!pnp_ok)
-            {
-                pnp_ok = solvePnP(OBJ_PTS, smoothCorners, newK, zeroDist,
-                                  rvec, tvec, false, SOLVEPNP_ITERATIVE);
-                RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
-                    "[PnP] IPPE 失败，已回退 ITERATIVE，结果=%s",
-                    pnp_ok ? "成功" : "仍失败");
-            }
-
-            // [调试] solvePnP 彻底失败时打印角点，便于排查（这种情况不发布 TF）
-            if (!pnp_ok)
-            {
-                RCLCPP_WARN_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
-                    "[PnP] 求解失败，本帧不发布 TF。角点=(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f)",
-                    smoothCorners[0].x, smoothCorners[0].y,
-                    smoothCorners[1].x, smoothCorners[1].y,
-                    smoothCorners[2].x, smoothCorners[2].y,
-                    smoothCorners[3].x, smoothCorners[3].y);
-            }
-
-            if (pnp_ok)
+            
+            // ---- PnP + 显示 + TF：仅在真实检出四角点时执行 ----
+            if (pnp_ok && detected)
             {
                 // ---- tvec 平滑 ----
                 Vec3d tv(tvec.at<double>(0),
                         tvec.at<double>(1),
                         tvec.at<double>(2));
                 Vec3d tvSmooth = tvecSmoother.push(tv);
-                
+
                 double X    = tvSmooth[0];
                 double Y    = tvSmooth[1];
                 double Z    = tvSmooth[2];
-                double dist = sqrt(X*X + Y*Y + Z*Z);  // 计算距离
-                
+                double dist = sqrt(X*X + Y*Y + Z*Z);
+
+                // 更新全局显示变量
+                gX = X; gY = Y; gZ = Z; gDist = dist;
+                gHavePose = true;
+
                 // ---- 旋转矩阵 / 欧拉角 ----
                 Mat R;
-                Rodrigues(rvec, R);  // 旋转向量转旋转矩阵
-                Vec3d eu = euler(R);  // 旋转矩阵转欧拉角
+                Rodrigues(rvec, R);
+                Vec3d eu = euler(R);
+                gRoll = eu[0]; gPitch = eu[1]; gYaw = eu[2];
 
                 // ---- 发布 TF 变换 ----
                 geometry_msgs::msg::TransformStamped transformStamped;
                 transformStamped.header.stamp = node->get_clock()->now();
                 transformStamped.header.frame_id = CAMERA_FRAME_ID;
                 transformStamped.child_frame_id = OBJECT_FRAME_ID;
-                
-                // 平移部分（mm -> m）
+
                 transformStamped.transform.translation.x = X / 1000.0;
                 transformStamped.transform.translation.y = Y / 1000.0;
                 transformStamped.transform.translation.z = Z / 1000.0;
 
-                // 旋转部分（旋转矩阵 -> 四元数）
                 tf2::Matrix3x3 tf_rot(
                     R.at<double>(0,0), R.at<double>(0,1), R.at<double>(0,2),
                     R.at<double>(1,0), R.at<double>(1,1), R.at<double>(1,2),
@@ -699,106 +872,90 @@ int main(int argc, char** argv)
                 transformStamped.transform.rotation.y = q.y();
                 transformStamped.transform.rotation.z = q.z();
                 transformStamped.transform.rotation.w = q.w();
-                
+
                 tf_broadcaster->sendTransform(transformStamped);
 
-                // [调试] 确认 TF 已发布，并打印发布的坐标（每秒最多一次）
-                RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
-                    "[TF] 已发布 %s -> %s : xyz=(%.3f, %.3f, %.3f) m, detected=%s",
-                    CAMERA_FRAME_ID, OBJECT_FRAME_ID,
-                    transformStamped.transform.translation.x,
-                    transformStamped.transform.translation.y,
-                    transformStamped.transform.translation.z,
-                    detected ? "是(真实)" : "否(KF预测)");
+                // ---- 投影坐标轴（轴原点用角点质心，保证永远在框中心） ----
+                Point2f axisOrigin = (smoothCorners[0] + smoothCorners[1] +
+                                      smoothCorners[2] + smoothCorners[3]) * 0.25f;
 
-                // ---- 投影坐标轴（可视化物体坐标系） ----
+                // 投影方向端点（用于提取各轴在图像中的方向）
                 Mat tvecSmoothed = (Mat_<double>(3,1) << X, Y, Z);
-                
-                // 物体坐标系的三个坐标轴端点
                 vector<Point3f> axisPts = {
-                    {0,    0,    0},   // 原点
-                    {100,  0,    0},   // X 轴端点（红色）
-                    {0,    100,  0},   // Y 轴端点（绿色）
-                    {0,    0,    100}  // Z 轴端点（蓝色，朝向相机方向）
+                    {0,   0,   0},
+                    {100, 0,   0},
+                    {0,   100, 0},
+                    {0,   0, 100}
                 };
                 vector<Point2f> axisImg;
                 projectPoints(axisPts, rvec, tvecSmoothed, newK, zeroDist, axisImg);
-                
-                // 画坐标轴箭头
-                arrowedLine(show, axisImg[0], axisImg[1], Scalar(0,   0,   255), 3, LINE_AA, 0, 0.2);  // X-红
-                arrowedLine(show, axisImg[0], axisImg[2], Scalar(0,   255, 0  ), 3, LINE_AA, 0, 0.2);  // Y-绿
-                arrowedLine(show, axisImg[0], axisImg[3], Scalar(255, 0,   0  ), 3, LINE_AA, 0, 0.2);  // Z-蓝
-                
+
+                // 从投影结果提取方向向量，缩放到固定像素长度
+                Point2f dX = axisImg[1] - axisImg[0];
+                Point2f dY = axisImg[2] - axisImg[0];
+                Point2f dZ = axisImg[3] - axisImg[0];
+                const float AX = 50.0f;  // 轴长（像素）
+                float nx = (float)norm(dX), ny = (float)norm(dY), nz = (float)norm(dZ);
+                if (nx > 1e-3f) dX *= AX / nx;
+                if (ny > 1e-3f) dY *= AX / ny;
+                if (nz > 1e-3f) dZ *= AX / nz;
+
+                // 画坐标轴箭头（从角点质心出发）
+                arrowedLine(show, axisOrigin, axisOrigin + dX, Scalar(0,   0,   255), 3, LINE_AA, 0, 0.2);  // X-红
+                arrowedLine(show, axisOrigin, axisOrigin + dY, Scalar(0,   255, 0  ), 3, LINE_AA, 0, 0.2);  // Y-绿
+                arrowedLine(show, axisOrigin, axisOrigin + dZ, Scalar(255, 0,   0  ), 3, LINE_AA, 0, 0.2);  // Z-蓝
+
                 // 坐标轴标签
-                putLabel(show, "X", axisImg[1] + Point2f(5, 0),  0.6, Scalar(0,   0,   255));
-                putLabel(show, "Y", axisImg[2] + Point2f(5, 0),  0.6, Scalar(0,   255, 0  ));
-                putLabel(show, "Z", axisImg[3] + Point2f(5, 0),  0.6, Scalar(255, 100, 0  ));
-                
-                // ---- 投影箱子中心点 ----
-                vector<Point2f> centerImg;
-                projectPoints(vector<Point3f>{{0,0,0}},
-                             rvec, tvecSmoothed, newK, zeroDist, centerImg);
-                if (!centerImg.empty())
+                putLabel(show, "X", axisOrigin + dX + Point2f(5, 0),  0.6, Scalar(0,   0,   255));
+                putLabel(show, "Y", axisOrigin + dY + Point2f(5, 0),  0.6, Scalar(0,   255, 0  ));
+                putLabel(show, "Z", axisOrigin + dZ + Point2f(5, 0),  0.6, Scalar(255, 100, 0  ));
+
+                // ---- 箱子中心十字准星（用角点质心，不用 PnP 投影） ----
                 {
-                    // 十字准星标记中心点
-                    int cx = (int)centerImg[0].x;
-                    int cy = (int)centerImg[0].y;
+                    int cx = (int)axisOrigin.x;
+                    int cy = (int)axisOrigin.y;
                     line(show, Point(cx-14, cy),   Point(cx+14, cy),   Scalar(0,255,255), 2, LINE_AA);
                     line(show, Point(cx, cy-14),   Point(cx, cy+14),   Scalar(0,255,255), 2, LINE_AA);
-                    circle(show, centerImg[0], 5, Scalar(0,255,255), -1, LINE_AA);
+                    circle(show, axisOrigin, 5, Scalar(0,255,255), -1, LINE_AA);
                 }
-                
+
                 // ---- 信息面板（左上角半透明背景） ----
                 {
-                    // 画半透明黑底
                     Mat overlay = show.clone();
                     rectangle(overlay, Point(10, 10), Point(500, 185), Scalar(0,0,0), FILLED);
                     addWeighted(overlay, 0.45, show, 0.55, 0, show);
-                    
-                    int bx = 20, by = 35;
-                    int dy = 30;
+
+                    int bx = 20, by = 35, dy = 30;
                     char buf[256];
-                    
-                    // 距离（最重要，大字）
+
                     sprintf(buf, "Distance : %.1f mm", dist);
-                    putLabel(show, buf, Point(bx, by),
-                            0.78, Scalar(0, 255, 100), 2);
-                    
-                    // XYZ 坐标
+                    putLabel(show, buf, Point(bx, by), 0.78, Scalar(0,255,100), 2);
+
                     sprintf(buf, "X=%.1f  Y=%.1f  Z=%.1f  (mm)", X, Y, Z);
-                    putLabel(show, buf, Point(bx, by + dy),
-                            0.62, Scalar(0, 220, 255));
-                    
-                    // 欧拉角
-                    sprintf(buf, "Roll=%.1f  Pitch=%.1f  Yaw=%.1f  (deg)",
-                           eu[0], eu[1], eu[2]);
-                    putLabel(show, buf, Point(bx, by + dy*2),
-                            0.62, Scalar(255, 200, 0));
-                    
-                    // 检测状态
-                    string status = detected ? "[ DETECT: OK ]" : "[ DETECT: LOST - KF predict ]";
-                    Scalar  scol  = detected ? Scalar(0,255,0) : Scalar(0,100,255);
-                    putLabel(show, status, Point(bx, by + dy*3),
-                            0.62, scol);
-                    
-                    // 角点像素坐标
+                    putLabel(show, buf, Point(bx, by+dy), 0.62, Scalar(0,220,255));
+
+                    sprintf(buf, "Roll=%.1f  Pitch=%.1f  Yaw=%.1f  (deg)", eu[0], eu[1], eu[2]);
+                    putLabel(show, buf, Point(bx, by+dy*2), 0.62, Scalar(255,200,0));
+
+                    string yoloTag = yoloBox.empty() ? "YOLO:LOST" : "YOLO:OK";
+                    sprintf(buf, "[ DETECT: OK | %s ]", yoloTag.c_str());
+                    putLabel(show, buf, Point(bx, by+dy*3), 0.55, Scalar(0,255,0));
+
                     sprintf(buf, "Corners(px): (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f)",
                            smoothCorners[0].x, smoothCorners[0].y,
                            smoothCorners[1].x, smoothCorners[1].y,
                            smoothCorners[2].x, smoothCorners[2].y,
                            smoothCorners[3].x, smoothCorners[3].y);
-                    putLabel(show, buf, Point(bx, by + dy*4),
-                            0.52, Scalar(180, 180, 180));
-                    
-                    // 控制台输出
-                    printf("\rDist=%.1fmm  XYZ=[%.1f, %.1f, %.1f]mm  "
-                          "RPY=[%.1f, %.1f, %.1f]deg   ",
-                          dist, X, Y, Z, eu[0], eu[1], eu[2]);
+                    putLabel(show, buf, Point(bx, by+dy*4), 0.52, Scalar(180,180,180));
+
+                    printf("\rDist=%.1fmm  XYZ=[%.1f, %.1f, %.1f]mm  RPY=[%.1f, %.1f, %.1f]deg   ",
+                           dist, X, Y, Z, eu[0], eu[1], eu[2]);
                     fflush(stdout);
                 }
+
+            }  // end if (pnp_ok && detected)
             }
-        }
-        
+
         // ---- 更新 prevGray ----
         cvtColor(undistorted, prevGray, COLOR_BGR2GRAY);
         hasPrev = true;
@@ -826,6 +983,7 @@ int main(int argc, char** argv)
         {
             for (auto& kf : kfs) kf.initialized = false;
             tvecSmoother.buf.clear();
+            lastYoloBox = Rect();
             cout << "\n[INFO] Kalman reset.\n";
         }
     }
