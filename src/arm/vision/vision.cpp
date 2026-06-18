@@ -802,34 +802,33 @@ int main(int argc, char** argv)
         }
 
         bool anyInited = kfs[0].initialized && !kfTimedOut;
-        
-        // ----- 画角点框 -----
-        if (anyInited)
+
+        // ----- 画角点框 + PnP + 显示（仅在真实检出四角点时执行） -----
+        if (anyInited && detected)
         {
-            // 绘制箱子边框和角点
+            // ---- 绘制箱子边框和角点 ----
             for (int i = 0; i < 4; i++)
             {
                 Point2f a = smoothCorners[i];
                 Point2f b = smoothCorners[(i+1)%4];
-                
+
                 // 绿色边框
                 line(show, a, b, Scalar(0, 220, 0), 3, LINE_AA);
-                
+
                 // 角点圆（红色）
                 circle(show, a, 7, Scalar(0, 0, 255), -1, LINE_AA);
-                
+
                 // 角点编号
                 putLabel(show, to_string(i), a + Point2f(8, -8),
                         0.65, Scalar(255, 255, 0));
             }
-            
+
             // ----- solvePnP 计算位姿 -----
             Mat rvec, tvec;
             bool pnp_ok = solvePnP(OBJ_PTS, smoothCorners, newK, zeroDist,
                                    rvec, tvec, false, SOLVEPNP_IPPE);
-            
-            // ---- PnP + 显示 + TF：仅在真实检出四角点时执行 ----
-            if (pnp_ok && detected)
+
+            if (pnp_ok)
             {
                 // ---- tvec 平滑 ----
                 Vec3d tv(tvec.at<double>(0),
@@ -919,42 +918,45 @@ int main(int argc, char** argv)
                     circle(show, axisOrigin, 5, Scalar(0,255,255), -1, LINE_AA);
                 }
 
-                // ---- 信息面板（左上角半透明背景） ----
-                {
-                    Mat overlay = show.clone();
-                    rectangle(overlay, Point(10, 10), Point(500, 185), Scalar(0,0,0), FILLED);
-                    addWeighted(overlay, 0.45, show, 0.55, 0, show);
+                // ---- 控制台输出 ----
+                printf("\rDist=%.1fmm  XYZ=[%.1f, %.1f, %.1f]mm  RPY=[%.1f, %.1f, %.1f]deg   ",
+                       dist, X, Y, Z, eu[0], eu[1], eu[2]);
+                fflush(stdout);
+            }  // end if (pnp_ok)
+        }  // end if (anyInited && detected)
 
-                    int bx = 20, by = 35, dy = 30;
-                    char buf[256];
+        // ---- 信息面板：始终显示（只要有历史位姿数据） ----
+        if (gHavePose)
+        {
+            Mat overlay = show.clone();
+            rectangle(overlay, Point(10, 10), Point(520, 185), Scalar(0,0,0), FILLED);
+            addWeighted(overlay, 0.45, show, 0.55, 0, show);
 
-                    sprintf(buf, "Distance : %.1f mm", dist);
-                    putLabel(show, buf, Point(bx, by), 0.78, Scalar(0,255,100), 2);
+            int bx = 20, by = 35, dy = 30;
+            char buf[256];
 
-                    sprintf(buf, "X=%.1f  Y=%.1f  Z=%.1f  (mm)", X, Y, Z);
-                    putLabel(show, buf, Point(bx, by+dy), 0.62, Scalar(0,220,255));
+            sprintf(buf, "Distance : %.1f mm", gDist);
+            putLabel(show, buf, Point(bx, by), 0.78, Scalar(0,255,100), 2);
 
-                    sprintf(buf, "Roll=%.1f  Pitch=%.1f  Yaw=%.1f  (deg)", eu[0], eu[1], eu[2]);
-                    putLabel(show, buf, Point(bx, by+dy*2), 0.62, Scalar(255,200,0));
+            sprintf(buf, "X=%.1f  Y=%.1f  Z=%.1f  (mm)", gX, gY, gZ);
+            putLabel(show, buf, Point(bx, by+dy), 0.62, Scalar(0,220,255));
 
-                    string yoloTag = yoloBox.empty() ? "YOLO:LOST" : "YOLO:OK";
-                    sprintf(buf, "[ DETECT: OK | %s ]", yoloTag.c_str());
-                    putLabel(show, buf, Point(bx, by+dy*3), 0.55, Scalar(0,255,0));
+            sprintf(buf, "Roll=%.1f  Pitch=%.1f  Yaw=%.1f  (deg)", gRoll, gPitch, gYaw);
+            putLabel(show, buf, Point(bx, by+dy*2), 0.62, Scalar(255,200,0));
 
-                    sprintf(buf, "Corners(px): (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f)",
-                           smoothCorners[0].x, smoothCorners[0].y,
-                           smoothCorners[1].x, smoothCorners[1].y,
-                           smoothCorners[2].x, smoothCorners[2].y,
-                           smoothCorners[3].x, smoothCorners[3].y);
-                    putLabel(show, buf, Point(bx, by+dy*4), 0.52, Scalar(180,180,180));
+            string yoloTag = yoloBox.empty() ? "YOLO:LOST" : "YOLO:OK";
+            const char* detectTag = detected ? "OK" : "LOST";
+            sprintf(buf, "[ DETECT: %s | %s ]", detectTag, yoloTag.c_str());
+            putLabel(show, buf, Point(bx, by+dy*3), 0.55,
+                     detected ? Scalar(0,255,0) : Scalar(0,140,255));
 
-                    printf("\rDist=%.1fmm  XYZ=[%.1f, %.1f, %.1f]mm  RPY=[%.1f, %.1f, %.1f]deg   ",
-                           dist, X, Y, Z, eu[0], eu[1], eu[2]);
-                    fflush(stdout);
-                }
-
-            }  // end if (pnp_ok && detected)
-            }
+            sprintf(buf, "Corners(px): (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f)",
+                   smoothCorners[0].x, smoothCorners[0].y,
+                   smoothCorners[1].x, smoothCorners[1].y,
+                   smoothCorners[2].x, smoothCorners[2].y,
+                   smoothCorners[3].x, smoothCorners[3].y);
+            putLabel(show, buf, Point(bx, by+dy*4), 0.52, Scalar(180,180,180));
+        }
 
         // ---- 更新 prevGray ----
         cvtColor(undistorted, prevGray, COLOR_BGR2GRAY);
