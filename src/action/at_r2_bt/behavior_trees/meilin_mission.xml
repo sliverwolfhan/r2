@@ -11,6 +11,11 @@
                plan="{plan}"
                num_steps="{num_steps}"/>
 
+      <!-- PICK 计数器：用来区分第几个抓取动作（第1块放置到车上，第2块只举着） -->
+      <Script code="pick_count := 0"/>
+      <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
+      <Script code="need_finish := 0"/>
+
       <Repeat num_cycles="{num_steps}">
         <Sequence>
           <PopNextStep plan="{plan}"
@@ -62,10 +67,6 @@
                    frame_id="map"
                    goal="{nav_goal}"/> -->
       <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
-                        
-      <!-- <DelayMs delay_msec="4000">
-        <AlwaysSuccess/>
-      </DelayMs> -->
 
       <ParallelAll max_failures="1">
         <!-- 楼梯腿 -->
@@ -75,40 +76,79 @@
           <AlwaysSuccess/>
         </Switch2>
 
-        <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体） -->
+        <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体）。
+             先做"上一个 PICK 的收尾"（与楼梯腿并行），再做"为下一个 PICK 的预备"。 -->
         <ForceSuccess>
-          <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
-            <Sequence>
-              <SelectArmPrepName next_from_id="{next_from_id}"
-                                 next_target_id="{next_target_id}"
-                                 arm_prep_name="{arm_prep_name}"/>
-              <DelayMs delay_msec="4000">
-                <AlwaysSuccess/>
-              </DelayMs>
-              <ArmMoveNamed node="{node}"
-                            pose_name="{arm_prep_name}"
-                            server_name="robotic_task"
-                            task_id="1"/>
-            </Sequence>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch2>
+          <Sequence>
+            <!-- (1) 抓取收尾：仅当上一步刚抓完(need_finish==1)。放块/举着按 pick_count 分流 -->
+            <Switch2 variable="{need_finish}" case_1="1" case_2="0">
+              <Sequence>
+                <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+                  <!-- 第 1 块：抓后放到车上 -->
+                  <Sequence>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
+                    <PublishPumpCmd node="{node}" command="0"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+                  </Sequence>
+                  <!-- 第 2 块：抓后只举着 -->
+                  <Sequence>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
+                  </Sequence>
+                  <!-- default：计数异常兜底，只举着 -->
+                  <Sequence>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
+                  </Sequence>
+                </Switch2>
+                <!-- 收尾完成，清零，避免后续连续 MOVE 重复收尾 -->
+                <Script code="need_finish := 0"/>
+              </Sequence>
+              <AlwaysSuccess/>   <!-- need_finish==0：本次 MOVE 不做收尾 -->
+              <AlwaysSuccess/>   <!-- default -->
+            </Switch2>
+
+            <!-- (2) 预备：下一步是 PICK 才把手臂摆到下一次抓取的预备姿势 -->
+            <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+              <Sequence>
+                <SelectArmPrepName next_from_id="{next_from_id}"
+                                   next_target_id="{next_target_id}"
+                                   arm_prep_name="{arm_prep_name}"/>
+                <ArmMoveNamed node="{node}"
+                              pose_name="{arm_prep_name}"
+                              server_name="robotic_task"
+                              task_id="1"/>
+              </Sequence>
+              <AlwaysSuccess/>
+              <AlwaysSuccess/>
+            </Switch2>
+          </Sequence>
         </ForceSuccess>
       </ParallelAll>
     </Sequence>
   </BehaviorTree>
 
-  <!-- ================== PICK 子树 ==================
-       和 MOVE 一样先把机器人摆到 prep_pose 上对齐到 target 那一侧，再伸臂抓。 -->
+  <!-- ================== PICK 子树（瘦身版）==================
+       PICK 只做到"抓取"为止：对齐 + 开泵 + 视觉抓取(ArmTask)。
+       抓取后的机械臂收尾（lift/stow/place/hold）全部搬到紧跟的 MOVE 子树，
+       让收尾与爬楼梯并行。
+         - pick_count 自增，用来在 MOVE 里区分第几块（第1块放置、第2块举着）。
+         - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
   <BehaviorTree ID="PickAtBlock">
     <Sequence>
+      <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
+      <Script code="pick_count += 1"/>
+
+      <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
       <!-- <PublishGoal node="{node}"
                    x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
                    frame_id="map"
                    goal="{nav_goal}"/> -->
-      <!-- <PublishPumpCmd node="{node}" command="1"/>  -->
       <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
-      <PublishPumpCmd node="{node}" command="1"/> 
+      <PublishPumpCmd node="{node}" command="1"/>
       <ArmTask node="{node}"
                task_id="2"
                server_name="robotic_task"
@@ -123,31 +163,10 @@
                goal_data="{arm_goal_data}"
                err_code="{arm_err_code}"
                reason="{arm_reason}"/>
-      <!-- <ArmMoveNamed node="{node}"
-                pose_name="hold_block"
-                server_name="robotic_task"
-                task_id="1"/> -->
-      <ArmMoveNamed node="{node}"
-                pose_name="lift_block"
-                server_name="robotic_task"
-                task_id="1"/>
-      <ArmMoveNamed node="{node}"
-                pose_name="stow_block"
-                server_name="robotic_task"
-                task_id="1"/>
-      <ArmMoveNamed node="{node}"
-                pose_name="place_block"
-                server_name="robotic_task"
-                task_id="1"/>                      
-      <PublishPumpCmd node="{node}" command="0"/>
-      <ArmMoveNamed node="{node}"
-                pose_name="stow_block"
-                server_name="robotic_task"
-                task_id="1"/>
-      <ArmMoveNamed node="{node}"
-                pose_name="stow_block"
-                server_name="robotic_task"
-                task_id="1"/>       
+
+      <!-- 抓取成功，标记下一个 MOVE 需要做收尾（放块/举着）。
+           若 ArmTask 失败，Sequence 在此之前已返回 FAILURE，不会置位。 -->
+      <Script code="need_finish := 1"/>
     </Sequence>
   </BehaviorTree>
 
