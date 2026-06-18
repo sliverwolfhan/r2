@@ -143,13 +143,16 @@
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
+      <PublishHeadCmd node="{node}" command="3"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
       <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
 
       <!-- Step 5: 通知爪子抬起武器头, 留出抬起执行时间
            抬起后再后退, 避免武器头还在柜台上就拖动 -->
-      <PublishHeadCmd node="{node}" command="3"
+      <PublishHeadCmd node="{node}" command="4"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
       <DelayMs delay_msec="1000">
@@ -171,7 +174,7 @@
                       cmd_vel_topic="/AT_R2/cmd_vel_bt"
                       odom_topic="/AT_R2/odometry"/>
         </ForceSuccess>
-        <PublishHeadCmd node="{node}" command="4"
+        <PublishHeadCmd node="{node}" command="5"
                 topic="/AT_R2/head_gripper_cmd"
                 wait_done="false"/>
       </ParallelAll>       
@@ -207,7 +210,7 @@
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>  
-          <PublishHeadCmd node="{node}" command="5"
+          <PublishHeadCmd node="{node}" command="6"
                           topic="/AT_R2/head_gripper_cmd"
                           wait_done="false"/>
         </Sequence>
@@ -254,7 +257,7 @@
                           status_topic="/AT_R2/docking_status"
                           gripper_topic="/AT_R2/head_gripper_cmd"
                           target_status="1"
-                          release_cmd="6"
+                          release_cmd="7"
                           timeout="1000.0"/> -->
 
     </Sequence>

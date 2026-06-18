@@ -19,6 +19,12 @@ steps:
     cube_y: 4.24
     block_height: 0.27
 
+  - type: MOVE
+    from_id: 0
+    target_id: 2
+    prep_pose: {x: 8.55, y: 4.291, theta: 3.14}
+    abs_dh: 0.2
+    stair_dir: NONE
 #   - type: MOVE
 #     from_id: 2
 #     target_id: 5
