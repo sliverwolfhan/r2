@@ -78,12 +78,13 @@ public:
         RCLCPP_INFO(this->get_logger(), "   V - 下楼梯 400mm");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【武器头爪子 /head_gripper_cmd】");
-        RCLCPP_INFO(this->get_logger(), "   1 - 准备抓取");
-        RCLCPP_INFO(this->get_logger(), "   2 - 抓取");
-        RCLCPP_INFO(this->get_logger(), "   3 - 抬起武器头");
-        RCLCPP_INFO(this->get_logger(), "   4 - 对接准备动作");
-        RCLCPP_INFO(this->get_logger(), "   5 - 下降");
-        RCLCPP_INFO(this->get_logger(), "   6 - 松开");
+        RCLCPP_INFO(this->get_logger(), "   1 - 抬升");
+        RCLCPP_INFO(this->get_logger(), "   2 - 准备抓取");
+        RCLCPP_INFO(this->get_logger(), "   3 - 抓取");
+        RCLCPP_INFO(this->get_logger(), "   4 - 抬起武器头");
+        RCLCPP_INFO(this->get_logger(), "   5 - 对接准备动作");
+        RCLCPP_INFO(this->get_logger(), "   6 - 下降");
+        RCLCPP_INFO(this->get_logger(), "   T - 松开");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【区模式 /zone_mode】");
         RCLCPP_INFO(this->get_logger(), "   7 - 一区 (抓武器头/对接)");
@@ -224,6 +225,9 @@ private:
             case '6':
                 publishHeadGripper(6);  // 松开
                 break;
+            case 't': case 'T':
+                publishHeadGripper(7);  // 抓取武器头
+                break;
             // ========== 区模式切换 ==========
             case '7':
                 publishZoneMode(1);  // 一区
@@ -293,7 +297,8 @@ private:
                          : command == 3 ? "抬起武器头"
                          : command == 4 ? "对接准备动作"
                          : command == 5 ? "下降"
-                         : command == 6 ? "松开":"未知";
+                         : command == 6 ? "松开"
+                         : command == 7 ? "抓取武器头":"未知";
         RCLCPP_INFO(this->get_logger(), "武器头爪子指令: %d (%s)", command, desc);
         auto msg = std_msgs::msg::Int32();
         msg.data = command;
