@@ -227,7 +227,11 @@ std::string CatchKFS::process(const std::string last_task_name) {
         return fail_task("执行抓取轨迹失败");
     }
 
+<<<<<<< Updated upstream
     object_pose.pose.position.z += 0.2;  // 抬起 10cm
+=======
+    object_pose.pose.position.z += 0.1;  // 抬起 10cm
+>>>>>>> Stashed changes
     RCLCPP_INFO(robot->node_->get_logger(), "执行抬起动作");
     if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8        
         return fail_task("执行抬起失败");

@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 // #include <iostream>
 // #include <vector>
 // #include <array>
@@ -394,6 +395,306 @@
 //     }
 //     pp.stop(); destroyAllWindows(); rclcpp::shutdown(); return 0;
 // }
+=======
+// #include <opencv2/opencv.hpp>
+// #include <opencv2/dnn.hpp>
+// #include <iostream>
+// #include <vector>
+
+// using namespace cv;
+// using namespace cv::dnn;
+// using namespace std;
+
+// static const vector<string> class_names =
+// {
+//     "R_R1",
+//     "B_R1",
+//     "T_03",
+//     "T_04",
+//     "T_05",
+//     "T_06",
+//     "T_07",
+//     "T_08",
+//     "T_09",
+//     "T_10",
+//     "T_11",
+//     "T_12",
+//     "T_13",
+//     "T_14",
+//     "T_15",
+//     "T_16",
+//     "T_17",
+//     "F_18",
+//     "F_19",
+//     "F_20",
+//     "F_21",
+//     "F_22",
+//     "F_23",
+//     "F_24",
+//     "F_25",
+//     "F_26",
+//     "F_27",
+//     "F_28",
+//     "F_29",
+//     "F_30",
+//     "F_31",
+//     "F_32"
+// };
+
+// int main()
+// {
+//     string model_path = "/home/hao/arm/best.onnx";
+
+//     Net net = readNet(model_path);
+
+//     if(net.empty())
+//     {
+//         cerr << "加载模型失败: "
+//              << model_path
+//              << endl;
+//         return -1;
+//     }
+
+//     net.setPreferableBackend(DNN_BACKEND_OPENCV);
+//     net.setPreferableTarget(DNN_TARGET_CPU);
+
+//     VideoCapture cap(2);
+
+//     if(!cap.isOpened())
+//     {
+//         cerr << "打开摄像头失败" << endl;
+//         return -1;
+//     }
+
+//     cap.set(CAP_PROP_FRAME_WIDTH, 640);
+//     cap.set(CAP_PROP_FRAME_HEIGHT, 480);
+
+//     const int INPUT_W = 640;
+//     const int INPUT_H = 640;
+
+//     while(true)
+//     {
+//         Mat frame;
+//         cap >> frame;
+
+//         if(frame.empty())
+//             continue;
+
+//         Mat blob;
+
+//         blobFromImage(
+//             frame,
+//             blob,
+//             1.0 / 255.0,
+//             Size(INPUT_W, INPUT_H),
+//             Scalar(),
+//             true,
+//             false
+//         );
+
+//         net.setInput(blob);
+
+//         vector<Mat> outputs;
+
+//         net.forward(
+//             outputs,
+//             net.getUnconnectedOutLayersNames()
+//         );
+
+//         if(outputs.empty())
+//         {
+//             cout << "推理输出为空" << endl;
+//             continue;
+//         }
+
+//         Mat output = outputs[0];
+
+//         vector<int> class_ids;
+//         vector<float> confidences;
+//         vector<Rect> boxes;
+
+//         const int num_classes = 32;
+//         const int num_boxes = output.size[2];
+
+//         float* data =
+//             (float*)output.data;
+
+//         float x_factor =
+//             frame.cols / 640.0f;
+
+//         float y_factor =
+//             frame.rows / 640.0f;
+
+//         for(int i = 0; i < num_boxes; i++)
+//         {
+//             float cx =
+//                 data[0 * num_boxes + i];
+
+//             float cy =
+//                 data[1 * num_boxes + i];
+
+//             float w =
+//                 data[2 * num_boxes + i];
+
+//             float h =
+//                 data[3 * num_boxes + i];
+
+//             float max_score = 0.0f;
+//             int class_id = -1;
+
+//             for(int c = 0;
+//                 c < num_classes;
+//                 c++)
+//             {
+//                 float score =
+//                     data[(4 + c)
+//                     * num_boxes + i];
+
+//                 if(score > max_score)
+//                 {
+//                     max_score = score;
+//                     class_id = c;
+//                 }
+//             }
+
+//             if(max_score < 0.25f)
+//                 continue;
+
+//             int left =
+//                 int((cx - w * 0.5f)
+//                 * x_factor);
+
+//             int top =
+//                 int((cy - h * 0.5f)
+//                 * y_factor);
+
+//             int width =
+//                 int(w * x_factor);
+
+//             int height =
+//                 int(h * y_factor);
+
+//             boxes.emplace_back(
+//                 left,
+//                 top,
+//                 width,
+//                 height
+//             );
+
+//             confidences.push_back(
+//                 max_score
+//             );
+
+//             class_ids.push_back(
+//                 class_id
+//             );
+//         }
+
+//         vector<int> indices;
+
+//         NMSBoxes(
+//             boxes,
+//             confidences,
+//             0.25,
+//             0.45,
+//             indices
+//         );
+
+//         for(int idx : indices)
+//         {
+//             Rect box = boxes[idx];
+
+//             rectangle(
+//                 frame,
+//                 box,
+//                 Scalar(0,255,0),
+//                 2
+//             );
+
+//             string label;
+
+//             if(class_ids[idx] >= 0 &&
+//                class_ids[idx] < (int)class_names.size())
+//             {
+//                 label =
+//                     class_names[
+//                         class_ids[idx]
+//                     ]
+//                     + " "
+//                     + format(
+//                         "%.2f",
+//                         confidences[idx]
+//                     );
+//             }
+//             else
+//             {
+//                 label =
+//                     "unknown "
+//                     + format(
+//                         "%.2f",
+//                         confidences[idx]
+//                     );
+//             }
+
+//             putText(
+//                 frame,
+//                 label,
+//                 Point(
+//                     box.x,
+//                     max(
+//                         20,
+//                         box.y - 5
+//                     )
+//                 ),
+//                 FONT_HERSHEY_SIMPLEX,
+//                 0.6,
+//                 Scalar(0,255,0),
+//                 2
+//             );
+//         }
+
+//         putText(
+//             frame,
+//             "Detections: "
+//             + to_string(indices.size()),
+//             Point(10,30),
+//             FONT_HERSHEY_SIMPLEX,
+//             0.8,
+//             Scalar(0,0,255),
+//             2
+//         );
+
+//         imshow(
+//             "YOLO11 ONNX",
+//             frame
+//         );
+
+//         char key =
+//             (char)waitKey(1);
+
+//         if(key == 27)
+//             break;
+//     }
+
+//     cap.release();
+//     destroyAllWindows();
+
+//     return 0;
+// }
+/**
+ * @file vision.cpp
+ * @brief 红色箱子视觉识别与位姿估计节点
+ * 
+ * 功能说明：
+ * 1. 从 USB 摄像头读取图像
+ * 2. 通过 HSV 颜色分割检测红色箱子
+ * 3. 使用卡尔曼滤波器平滑角点位置
+ * 4. 使用 solvePnP 计算相机到物体的位姿
+ * 5. 发布 TF 变换（camera_link -> target_object）
+ * 6. 可视化显示检测结果
+ */
+
+>>>>>>> Stashed changes
 #include <iostream>
 #include <vector>
 #include <array>
@@ -1078,6 +1379,12 @@ int main(int argc, char** argv)
     int consecutiveLost = 0;
     static const int MAX_LOST_FRAMES = 10;
 
+<<<<<<< Updated upstream
+=======
+    // 上一帧有效距离（用于帧间跳变检测）
+    double prevValidDist = -1.0;
+
+>>>>>>> Stashed changes
     // 零畸变系数（用于去畸变后的图像）
     Mat zeroDist = Mat::zeros(1, 5, CV_64F);
 
@@ -1195,6 +1502,22 @@ int main(int argc, char** argv)
         // 连续丢帧过多：复位卡尔曼滤波器，防止预测值漂移
         bool kfTimedOut = (consecutiveLost > MAX_LOST_FRAMES);
         if (kfTimedOut)
+<<<<<<< Updated upstream
+=======
+        {
+            for (auto& kf : kfs) kf.initialized = false;
+            tvecSmoother.buf.clear();
+            consecutiveLost = 0;
+            prevValidDist = -1.0;
+            cerr << "\n[WARN] KF timed out after " << MAX_LOST_FRAMES
+                 << " consecutive lost frames, resetting filters.\n";
+        }
+
+        bool anyInited = kfs[0].initialized && !kfTimedOut;
+        
+        // ----- 画角点框 -----
+        if (anyInited)
+>>>>>>> Stashed changes
         {
             for (auto& kf : kfs) kf.initialized = false;
             tvecSmoother.buf.clear();
@@ -1232,6 +1555,12 @@ int main(int argc, char** argv)
 
             if (pnp_ok)
             {
+                // ========== 第一道防线：raw Z 直接检查（平滑前） ==========
+                // 必须用 raw tvec 而不是平滑后的值，否则离群值会被平滑器吞掉、
+                // z-range 形同虚设，画面数值卡死不动
+                double rawZ = tvec.at<double>(2);
+                if (rawZ >= 100.0 && rawZ <= 500.0)
+                {
                 // ---- tvec 平滑 ----
                 Vec3d tv(tvec.at<double>(0),
                         tvec.at<double>(1),
@@ -1241,11 +1570,44 @@ int main(int argc, char** argv)
                 double X    = tvSmooth[0];
                 double Y    = tvSmooth[1];
                 double Z    = tvSmooth[2];
+<<<<<<< Updated upstream
                 double dist = sqrt(X*X + Y*Y + Z*Z);
 
                 // 更新全局显示变量
                 gX = X; gY = Y; gZ = Z; gDist = dist;
                 gHavePose = true;
+=======
+                double dist = sqrt(X*X + Y*Y + Z*Z);  // 计算距离
+
+                // ========== PnP 结果二重校验 ==========
+                bool pnp_valid = true;
+                const char* rejectReason = "";
+
+                // 校验1：重投影误差（>5px 视为不可靠）
+                {
+                    vector<Point2f> reproj;
+                    projectPoints(OBJ_PTS, rvec, tvec, newK, zeroDist, reproj);
+                    double sumErr = 0;
+                    for (int i = 0; i < 4; i++)
+                        sumErr += norm(reproj[i] - smoothCorners[i]);
+                    double avgErr = sumErr / 4.0;
+                    if (avgErr > 5.0) { pnp_valid = false; rejectReason = "reproj"; }
+                }
+
+                // 校验2：帧间跳变（相邻帧 Z 变化 >30% 且绝对值 >200mm 丢弃）
+                if (pnp_valid && prevValidDist > 0)
+                {
+                    double jump = fabs(Z - prevValidDist);
+                    double relJump = jump / prevValidDist;
+                    if (relJump > 0.30 && jump > 200.0)
+                    {
+                        pnp_valid = false;
+                        rejectReason = "frame-jump";
+                    }
+                }
+
+                if (pnp_valid) prevValidDist = Z;
+>>>>>>> Stashed changes
 
                 // ---- 旋转矩阵 / 欧拉角 ----
                 Mat R;
@@ -1253,7 +1615,9 @@ int main(int argc, char** argv)
                 Vec3d eu = euler(R);
                 gRoll = eu[0]; gPitch = eu[1]; gYaw = eu[2];
 
-                // ---- 发布 TF 变换 ----
+                // ---- 发布 TF 变换（仅校验通过时） ----
+                if (pnp_valid)
+                {
                 geometry_msgs::msg::TransformStamped transformStamped;
                 transformStamped.header.stamp = node->get_clock()->now();
                 transformStamped.header.frame_id = CAMERA_FRAME_ID;
@@ -1275,6 +1639,23 @@ int main(int argc, char** argv)
                 transformStamped.transform.rotation.w = q.w();
 
                 tf_broadcaster->sendTransform(transformStamped);
+<<<<<<< Updated upstream
+=======
+                RCLCPP_INFO(node->get_logger(), "fabush TF: dist=%.1fmm, roll=%.1f, pitch=%.1f, yaw=%.1f",
+                            dist, eu[0], eu[1], eu[2]);
+
+                }
+                else
+                {
+                    // 校验失败，不发布TF（可视化仍继续，方便调试）
+                    static string lastReason;
+                    if (rejectReason != lastReason)
+                    {
+                        cerr << "\n[REJECT] PnP result discarded: " << rejectReason << "\n";
+                        lastReason = rejectReason;
+                    }
+                }
+>>>>>>> Stashed changes
 
                 // ---- 投影坐标轴（轴原点用角点质心，保证永远在框中心） ----
                 Point2f axisOrigin = (smoothCorners[0] + smoothCorners[1] +
@@ -1318,6 +1699,7 @@ int main(int argc, char** argv)
                     line(show, Point(cx-14, cy),   Point(cx+14, cy),   Scalar(0,255,255), 2, LINE_AA);
                     line(show, Point(cx, cy-14),   Point(cx, cy+14),   Scalar(0,255,255), 2, LINE_AA);
                     circle(show, axisOrigin, 5, Scalar(0,255,255), -1, LINE_AA);
+<<<<<<< Updated upstream
                 }
 
                 // ---- 控制台输出 ----
@@ -1358,6 +1740,70 @@ int main(int argc, char** argv)
                    smoothCorners[2].x, smoothCorners[2].y,
                    smoothCorners[3].x, smoothCorners[3].y);
             putLabel(show, buf, Point(bx, by+dy*4), 0.52, Scalar(180,180,180));
+=======
+                }
+                
+                // ---- 信息面板（左上角半透明背景） ----
+                {
+                    // 画半透明黑底
+                    Mat overlay = show.clone();
+                    rectangle(overlay, Point(10, 10), Point(520, 215), Scalar(0,0,0), FILLED);
+                    addWeighted(overlay, 0.45, show, 0.55, 0, show);
+                    
+                    int bx = 20, by = 35;
+                    int dy = 30;
+                    char buf[256];
+                    
+                    // 距离（最重要，大字）
+                    sprintf(buf, "Distance : %.1f mm", dist);
+                    putLabel(show, buf, Point(bx, by),
+                            0.78, Scalar(0, 255, 100), 2);
+                    
+                    // XYZ 坐标
+                    sprintf(buf, "X=%.1f  Y=%.1f  Z=%.1f  (mm)", X, Y, Z);
+                    putLabel(show, buf, Point(bx, by + dy),
+                            0.62, Scalar(0, 220, 255));
+                    
+                    // 欧拉角
+                    sprintf(buf, "Roll=%.1f  Pitch=%.1f  Yaw=%.1f  (deg)",
+                           eu[0], eu[1], eu[2]);
+                    putLabel(show, buf, Point(bx, by + dy*2),
+                            0.62, Scalar(255, 200, 0));
+                    
+                    // 检测状态
+                    string status = detected ? "[ DETECT: OK ]" : "[ DETECT: LOST - KF predict ]";
+                    Scalar  scol  = detected ? Scalar(0,255,0) : Scalar(0,100,255);
+                    putLabel(show, status, Point(bx, by + dy*3),
+                            0.62, scol);
+
+                    // PnP校验状态（仅校验失败时显示）
+                    if (!pnp_valid)
+                    {
+                        string pnpStatus = string("[ PNP REJECT: ") + rejectReason + " ]";
+                        putLabel(show, pnpStatus, Point(bx, by + dy*4),
+                                0.55, Scalar(0, 100, 255));
+                    }
+
+                    // 角点像素坐标
+                    int cornerLine = (!pnp_valid) ? 5 : 4;
+                    sprintf(buf, "Corners(px): (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f) (%.0f,%.0f)",
+                           smoothCorners[0].x, smoothCorners[0].y,
+                           smoothCorners[1].x, smoothCorners[1].y,
+                           smoothCorners[2].x, smoothCorners[2].y,
+                           smoothCorners[3].x, smoothCorners[3].y);
+                    putLabel(show, buf, Point(bx, by + dy*cornerLine),
+                            0.52, Scalar(180, 180, 180));
+                    
+                    // 控制台输出
+                    printf("\rDist=%.1fmm  XYZ=[%.1f, %.1f, %.1f]mm  "
+                          "RPY=[%.1f, %.1f, %.1f]deg   ",
+                          dist, X, Y, Z, eu[0], eu[1], eu[2]);
+                    fflush(stdout);
+                }
+
+            }  // end if (rawZ in range)
+            }
+>>>>>>> Stashed changes
         }
 
         // ---- 更新 prevGray ----

@@ -54,7 +54,11 @@ def generate_launch_description():
     package="tf2_ros",
     executable="static_transform_publisher",
     arguments=[
+<<<<<<< Updated upstream
         "0.1", "-0.105", "-0.025",
+=======
+        "0.1", "0.105", "-0.025",
+>>>>>>> Stashed changes
         "0.7071068", "0.0", "0.7071068", "0.0",
         "link4",
         "camera_link"
