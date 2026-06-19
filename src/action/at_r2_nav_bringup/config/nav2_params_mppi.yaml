@@ -189,6 +189,7 @@ small_gicp_relocalization:
     stable_required_count: 10
     stable_translation_threshold: 0.015
     stable_rotation_threshold: 0.015
+    transform_global_map: false   # 先验地图已经预处理到 odom 系，无需再做 base->lidar 变换
     map_frame: "map"
     odom_frame: "odom"
     base_frame: "base_footprint"

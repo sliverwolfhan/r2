@@ -45,6 +45,7 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("auto_disable_relocalization", true);
   this->declare_parameter("map_bounds_filter_enabled", true);
   this->declare_parameter("sliding_window_filter_enabled", true);
+  this->declare_parameter("transform_global_map", false);
   this->declare_parameter("stable_required_count", 5);
   this->declare_parameter("map_bounds_filter_min_points", 1);
   this->declare_parameter("sliding_window_filter_size", 3);
@@ -70,6 +71,7 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("auto_disable_relocalization", auto_disable_relocalization_);
   this->get_parameter("map_bounds_filter_enabled", map_bounds_filter_enabled_);
   this->get_parameter("sliding_window_filter_enabled", sliding_window_filter_enabled_);
+  this->get_parameter("transform_global_map", transform_global_map_);
   this->get_parameter("stable_required_count", stable_required_count_);
   this->get_parameter("map_bounds_filter_min_points", map_bounds_filter_min_points_);
   this->get_parameter("sliding_window_filter_size", sliding_window_filter_size_);
@@ -268,23 +270,29 @@ void SmallGicpRelocalizationNode::loadGlobalMap(const std::string & file_name)
   RCLCPP_INFO(this->get_logger(), "Loaded global map with %zu points", global_map_->points.size());
 
   // NOTE: Transform global pcd_map (based on `lidar_odom` frame) to the `odom` frame
-  Eigen::Affine3d odom_to_lidar_odom;
-  while (true) {
-    try {
-      auto tf_stamped = tf_buffer_->lookupTransform(
-        base_frame_, lidar_frame_, this->now(), rclcpp::Duration::from_seconds(1.0));
-      odom_to_lidar_odom = tf2::transformToEigen(tf_stamped.transform);
-      RCLCPP_INFO_STREAM(
-        this->get_logger(), "odom_to_lidar_odom: translation = "
-                              << odom_to_lidar_odom.translation().transpose() << ", rpy = "
-                              << odom_to_lidar_odom.rotation().eulerAngles(0, 1, 2).transpose());
-      break;
-    } catch (tf2::TransformException & ex) {
-      RCLCPP_WARN(this->get_logger(), "TF lookup failed: %s Retrying...", ex.what());
-      rclcpp::sleep_for(std::chrono::seconds(1));
+  if (transform_global_map_) {
+    Eigen::Affine3d odom_to_lidar_odom;
+    while (true) {
+      try {
+        auto tf_stamped = tf_buffer_->lookupTransform(
+          base_frame_, lidar_frame_, this->now(), rclcpp::Duration::from_seconds(1.0));
+        odom_to_lidar_odom = tf2::transformToEigen(tf_stamped.transform);
+        RCLCPP_INFO_STREAM(
+          this->get_logger(), "odom_to_lidar_odom: translation = "
+                                << odom_to_lidar_odom.translation().transpose() << ", rpy = "
+                                << odom_to_lidar_odom.rotation().eulerAngles(0, 1, 2).transpose());
+        break;
+      } catch (tf2::TransformException & ex) {
+        RCLCPP_WARN(this->get_logger(), "TF lookup failed: %s Retrying...", ex.what());
+        rclcpp::sleep_for(std::chrono::seconds(1));
+      }
     }
+    pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
+  } else {
+    RCLCPP_INFO(
+      this->get_logger(),
+      "transform_global_map is disabled, using prior PCD as-is without TF transform.");
   }
-  pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
 
   if (global_map_->empty()) {
     map_bounds_valid_ = false;

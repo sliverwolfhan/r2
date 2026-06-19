@@ -68,6 +68,7 @@ private:
   bool auto_disable_relocalization_;
   bool map_bounds_filter_enabled_;
   bool sliding_window_filter_enabled_;
+  bool transform_global_map_;
   int stable_required_count_;
   int map_bounds_filter_min_points_;
   int sliding_window_filter_size_;
