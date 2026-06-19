@@ -27,11 +27,13 @@ namespace nav2_bt_publish_goal
  * transient_local(latched) QoS，确保爪子节点稍晚连接也能收到最新指令。
  *
  * 同步模式：
- *   - wait_done = false (默认)：发完指令立即返回 SUCCESS (fire-and-forget)，
- *     由行为树自行用 DelayMs / 导航等动作来留出执行时间。
- *   - wait_done = true：订阅 done_topic (std_msgs/Int32)，直到收到的反馈值
- *     等于本次 command 才返回 SUCCESS；超过 timeout 秒仍未收到则返回 FAILURE
- *     (timeout <= 0 表示无限等待)。
+ *   - command = 4 (对接)：自动订阅 /AT_R2/grasp_status, 收到 data==2 才返回 SUCCESS,
+ *     否则一直 RUNNING (忽略 wait_done / done_topic / timeout 设置)。
+ *   - 其他 command：
+ *       - wait_done = false (默认)：发完指令立即返回 SUCCESS (fire-and-forget)。
+ *       - wait_done = true：订阅 done_topic (std_msgs/Int32)，直到收到的反馈值
+ *         等于本次 command 才返回 SUCCESS；超过 timeout 秒仍未收到则返回 FAILURE
+ *         (timeout <= 0 表示无限等待)。
  *
  * 输入端口:
  *   - node       (ROS node, 来自黑板)
@@ -57,11 +59,13 @@ public:
 
 private:
   void doneCallback(const std_msgs::msg::Int32::SharedPtr msg);
+  void graspStatusCallback(const std_msgs::msg::Int32::SharedPtr msg);
 
   // ROS2 components
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr cmd_pub_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr done_sub_;
+  rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_status_sub_;
 
   // 当前已创建的话题名(用于检测端口变更后重建 pub/sub)
   std::string cmd_topic_;
@@ -70,9 +74,11 @@ private:
   // 本次执行状态
   int32_t command_{0};
   bool wait_done_{false};
+  bool wait_grasp_done_{false};
   double timeout_{0.0};
   bool done_received_{false};
   int32_t done_value_{0};
+  bool grasp_done_{false};
   rclcpp::Time start_time_;
 };
 

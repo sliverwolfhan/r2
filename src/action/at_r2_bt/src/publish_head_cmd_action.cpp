@@ -62,6 +62,9 @@ BT::NodeStatus PublishHeadCmdAction::onStart()
   std::string done_topic = "/AT_R2/head_gripper_done";
   getInput("done_topic", done_topic);
 
+  // command=4 (对接) 强制等待 /AT_R2/grasp_status==2, 与 wait_done 无关
+  wait_grasp_done_ = (command_ == 4);
+
   // 按需(首次或话题变更)创建 latched publisher
   if (!cmd_pub_ || topic != cmd_topic_) {
     auto qos = rclcpp::QoS(1).transient_local().reliable();
@@ -73,7 +76,15 @@ BT::NodeStatus PublishHeadCmdAction::onStart()
   // 需要等待反馈时, 按需创建订阅
   done_received_ = false;
   done_value_ = 0;
-  if (wait_done_) {
+  grasp_done_ = false;
+  if (wait_grasp_done_) {
+    if (!grasp_status_sub_) {
+      grasp_status_sub_ = node_->create_subscription<std_msgs::msg::Int32>(
+        "/AT_R2/grasp_status", 10,
+        std::bind(&PublishHeadCmdAction::graspStatusCallback, this, std::placeholders::_1));
+      RCLCPP_INFO(node_->get_logger(), "head_gripper 抓取反馈话题: /AT_R2/grasp_status");
+    }
+  } else if (wait_done_) {
     if (!done_sub_ || done_topic != done_topic_) {
       done_sub_ = node_->create_subscription<std_msgs::msg::Int32>(
         done_topic, 10,
@@ -91,7 +102,7 @@ BT::NodeStatus PublishHeadCmdAction::onStart()
     node_->get_logger(), "已发布 head_gripper 指令: %d (%s)", command_,
     command_ == 1 ? "准备抓取" : command_ == 2 ? "抓取" : command_ == 3 ? "抬起武器头" : command_ == 4 ? "对接" : "未知");
 
-  if (!wait_done_) {
+  if (!wait_grasp_done_ && !wait_done_) {
     return BT::NodeStatus::SUCCESS;
   }
 
@@ -101,6 +112,15 @@ BT::NodeStatus PublishHeadCmdAction::onStart()
 
 BT::NodeStatus PublishHeadCmdAction::onRunning()
 {
+  // command=4 (对接): 等待 /AT_R2/grasp_status==2
+  if (wait_grasp_done_) {
+    if (grasp_done_) {
+      RCLCPP_INFO(node_->get_logger(), "✓ head_gripper 对接完成 (grasp_status=2)");
+      return BT::NodeStatus::SUCCESS;
+    }
+    return BT::NodeStatus::RUNNING;
+  }
+
   // 收到与本次指令匹配的反馈即成功
   if (done_received_ && done_value_ == command_) {
     RCLCPP_INFO(node_->get_logger(), "✓ head_gripper 动作 %d 完成", command_);
@@ -126,6 +146,7 @@ void PublishHeadCmdAction::onHalted()
   RCLCPP_INFO(node_->get_logger(), "PublishHeadCmd 被中断 (command=%d)", command_);
   done_received_ = false;
   done_value_ = 0;
+  grasp_done_ = false;
 }
 
 void PublishHeadCmdAction::doneCallback(const std_msgs::msg::Int32::SharedPtr msg)
@@ -133,6 +154,22 @@ void PublishHeadCmdAction::doneCallback(const std_msgs::msg::Int32::SharedPtr ms
   done_value_ = msg->data;
   done_received_ = true;
   RCLCPP_DEBUG(node_->get_logger(), "收到 head_gripper 反馈: %d", done_value_);
+}
+
+void PublishHeadCmdAction::graspStatusCallback(const std_msgs::msg::Int32::SharedPtr msg)
+{
+  // 仅在等待对接反馈时关注, 且只接受发布 cmd 之后到达的 data==2
+  if (!wait_grasp_done_) {
+    return;
+  }
+  rclcpp::Time stamp = node_->now();
+  if (stamp < start_time_) {
+    return;
+  }
+  if (msg->data == 2) {
+    grasp_done_ = true;
+  }
+  RCLCPP_DEBUG(node_->get_logger(), "收到 grasp_status: %d", msg->data);
 }
 
 }  // namespace nav2_bt_publish_goal

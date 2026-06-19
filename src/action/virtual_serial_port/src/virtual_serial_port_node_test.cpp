@@ -132,6 +132,10 @@ public:
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/climber_status", 10);
 
+        // 创建抓取状态发布器 (一区时由下位机 climber_status 字段复用)
+        grasp_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/grasp_status", 10);
+
         // 创建距离发布器
         distance_pub_ = this->create_publisher<std_msgs::msg::Float64>(
             "/AT_R2/distance", 10);
@@ -170,7 +174,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
         RCLCPP_INFO(this->get_logger(), "已订阅气泵使能话题: /AT_R2/pump_cmd (连续发送, 1=吸气 0=放气)");
-        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, 距离发布器: /AT_R2/distance");
+        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance");
     }
 
     ~VirtualSerialPortNode()
@@ -237,9 +241,29 @@ private:
 
     void mode_callback(const std_msgs::msg::Int32::SharedPtr msg)
     {
-        std::lock_guard<std::mutex> lock(velocity_mutex_);
-        current_mode_ = static_cast<uint8_t>(msg->data);
+        uint8_t new_mode = static_cast<uint8_t>(msg->data);
+        uint8_t old_mode;
+        {
+            std::lock_guard<std::mutex> lock(velocity_mutex_);
+            old_mode = current_mode_;
+            current_mode_ = new_mode;
+        }
         RCLCPP_INFO(this->get_logger(), "收到区模式: %d", msg->data);
+
+        // mode 切换时清零对应的状态发布与去重缓存，避免跨区残留
+        if (old_mode != new_mode) {
+            std::lock_guard<std::mutex> lock(status_mutex_);
+            last_climber_raw_ = 0xFF;
+            if (old_mode == 1) {
+                auto zero_msg = std_msgs::msg::Int32();
+                zero_msg.data = 0;
+                grasp_status_pub_->publish(zero_msg);
+            }
+            if (old_mode == 2) {
+                climber_running_ = false;
+                climber_finish_once_ = false;
+            }
+        }
     }
 
     void grasp_callback(const std_msgs::msg::Int32::SharedPtr msg)
@@ -377,22 +401,39 @@ private:
             }
             last_climber_raw_ = new_status;
 
-            if (new_status == 1) {
-                std::lock_guard<std::mutex> lock(status_mutex_);
-                climber_running_ = true;
-                climber_finish_once_ = false;
-                RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 开始执行 (1)");
-            } else if (new_status == 2) {
-                {
+            uint8_t mode_snapshot;
+            {
+                std::lock_guard<std::mutex> lock(velocity_mutex_);
+                mode_snapshot = current_mode_;
+            }
+
+            if (mode_snapshot == 1) {
+                if (new_status == 1 || new_status == 2) {
+                    auto grasp_msg = std_msgs::msg::Int32();
+                    grasp_msg.data = static_cast<int32_t>(new_status);
+                    grasp_status_pub_->publish(grasp_msg);
+                    RCLCPP_INFO(this->get_logger(),
+                        "抓取状态更新: %s (%d)",
+                        new_status == 1 ? "开始执行" : "执行完成", new_status);
+                }
+            } else if (mode_snapshot == 2) {
+                if (new_status == 1) {
                     std::lock_guard<std::mutex> lock(status_mutex_);
-                    climber_finish_once_ = true;
+                    climber_running_ = true;
+                    climber_finish_once_ = false;
+                    RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 开始执行 (1)");
+                } else if (new_status == 2) {
+                    {
+                        std::lock_guard<std::mutex> lock(status_mutex_);
+                        climber_finish_once_ = true;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lock(velocity_mutex_);
+                        current_climb_action_ = ClimbAction::NONE;
+                        current_climb_height_ = 0;
+                    }
+                    RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 执行完成 (2)");
                 }
-                {
-                    std::lock_guard<std::mutex> lock(velocity_mutex_);
-                    current_climb_action_ = ClimbAction::NONE;
-                    current_climb_height_ = 0;
-                }
-                RCLCPP_INFO(this->get_logger(), "爬楼梯状态更新: 执行完成 (2)");
             }
         } else {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -416,6 +457,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
