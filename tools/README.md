@@ -9,7 +9,7 @@ Point-LIO 启动那一刻机器人当前位置就是原点 (0,0,0)，朝向就�
 ## 文件
 
 ```
-src/location/point_lio/scripts/
+tools/
 ├── align_pcd_to_map.py        # 主脚本
 ├── anchors.example.yaml       # 锚点表样例
 └── README.md                  # 本文
@@ -76,7 +76,7 @@ cloudcompare.CloudCompare              # snap 安装
 复制示例改名：
 
 ```bash
-cd src/location/point_lio/scripts
+cd tools
 cp anchors.example.yaml my_anchors.yaml
 ```
 
@@ -101,15 +101,15 @@ anchors:
 
 ```bash
 cd ~/wulin_r2
-python3 src/location/point_lio/scripts/align_pcd_to_map.py \
-  --anchors src/location/point_lio/scripts/my_anchors.yaml
+python3 tools/align_pcd_to_map.py \
+  --anchors tools/my_anchors.yaml
 ```
 
 **一步到位算矩阵 + 输出对齐后的 PCD**：
 
 ```bash
-python3 src/location/point_lio/scripts/align_pcd_to_map.py \
-  --anchors src/location/point_lio/scripts/my_anchors.yaml \
+python3 tools/align_pcd_to_map.py \
+  --anchors tools/my_anchors.yaml \
   --in  src/location/point_lio/PCD/scans1.pcd \
   --out src/location/point_lio/PCD/scans1_map.pcd \
   --matrix-out src/location/point_lio/PCD/T_map_lio.yaml
@@ -117,7 +117,7 @@ python3 src/location/point_lio/scripts/align_pcd_to_map.py \
 
 ### 7. 配到重定位包
 
-把对齐后的 PCD 路径填到 [small_gicp_relocalization_launch.py:52](../../small_gicp_relocalization/launch/small_gicp_relocalization_launch.py#L52)：
+把对齐后的 PCD 路径填到 [small_gicp_relocalization_launch.py:52](../src/location/small_gicp_relocalization/launch/small_gicp_relocalization_launch.py#L52)：
 
 ```python
 "prior_pcd_file": "/home/zk/wulin_r2/src/location/point_lio/PCD/scans1_map.pcd",

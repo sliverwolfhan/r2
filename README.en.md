@@ -6,9 +6,29 @@ Hebei University of Science and Technology A&T Team - R2 High-Level Software**
 A ROS2 workspace for coordinated control of an omnidirectional swerve-drive
 chassis and a manipulator arm.
 
-> Author: Xuguang
+> Author: LiHao Guo’s Family
 >
 > English | [中文](README.md)
+
+---
+
+## 0. Git Workflow
+
+> ⚠️ **Run this sequence before AND after every coding session. It keeps everyone’s work from clobbering each other.**
+>
+> ⚠️ **Always make sure `colcon build` succeeds before pushing. Do not commit code that fails to compile.**
+
+```bash
+git stash          # 1. Stash local uncommitted changes
+git pull           # 2. Pull the latest from remote
+git stash pop      # 3. Re-apply your stash (resolve conflicts in place if any)
+colcon build       # 4. Make sure the workspace builds before going further
+git add .          # 5. Stage the files you want to commit
+git commit -m "your message"
+git push           # 6. Push to remote
+```
+
+Write meaningful commit messages, e.g. `feat: add arm bringup script`, `fix: relocalization transform flag`. Avoid `update`, `123`, `.`, etc.
 
 ---
 
@@ -57,7 +77,7 @@ source install/setup.bash
 
 ## 2. Launch Scripts
 
-Four launch scripts are provided at the workspace root. They share the same
+Five launch scripts are provided at the workspace root. They share the same
 common options for build control and argument forwarding.
 
 Common options:
@@ -121,6 +141,18 @@ communication during simulation or debugging.
 ./run_virtual_serial.sh -- --ros-args -p baudrate:=115200     # forward ROS args
 ```
 
+### 2.5 `run_arm_real.sh` - Launch the real manipulator arm
+
+Starts `launch_pack arm_real.launch.py`, bringing up the real arm driver,
+kinematics, vision, and task nodes.
+
+```bash
+./run_arm_real.sh                              # launch as-is
+./run_arm_real.sh -b                           # build then launch
+./run_arm_real.sh -p "launch_pack arm_task"    # build selected packages
+./run_arm_real.sh -- use_sim_time:=true        # forward launch args
+```
+
 ---
 
 ## 3. Directory Layout and Packages
@@ -137,6 +169,7 @@ AT_RC/
 ├── run_bt_runner.sh
 ├── run_plan_publisher.sh
 ├── run_virtual_serial.sh
+├── run_arm_real.sh
 └── README.md
 ```
 
@@ -219,4 +252,4 @@ script to rebuild before launching.
 
 ---
 
-> Author: Xuguang
+> Author: 郭力豪

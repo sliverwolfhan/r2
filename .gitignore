@@ -50,7 +50,7 @@ docs/
 
 *.pt
 src/location/point_lio/PCD/scans.pcd
-
+*.onnx
 
 
 

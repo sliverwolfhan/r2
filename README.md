@@ -4,9 +4,29 @@
 
 全向舵轮底盘 + 机械臂 协同控制 ROS2 工作空间。
 
-> 制作人：旭光
+> 代码制作人：郭力豪的一家人
 >
 > [English](README.en.md) | 中文
+
+---
+
+## 〇、Git 提交须知
+
+> ⚠️ **每次写代码前后都按这套流程走，避免互相覆盖、冲突丢代码。**
+>
+> ⚠️ **提交前一定要先 `colcon build` 编译通过，不要把编译不过的代码推上去坑队友。**
+
+```bash
+git stash          # 1. 暂存当前未提交的本地改动
+git pull           # 2. 拉取远程最新
+git stash pop      # 3. 把本地改动叠回来（如有冲突就地解决）
+colcon build       # 4. 确认编译通过，再继续往下走
+git add .          # 5. 添加要提交的文件
+git commit -m "提交信息"
+git push           # 6. 推到远程
+```
+
+**提交信息**写清楚做了什么，比如：`feat: 添加机械臂启动脚本`、`fix: 修复重定位变换参数`，不要写 `update`、`123`、`.` 这种。
 
 ---
 
@@ -53,7 +73,7 @@ source install/setup.bash
 
 ## 二、启动脚本
 
-工作空间根目录提供了 4 个启动脚本，统一支持 `-b` 编译选项和参数透传。
+工作空间根目录提供了 5 个启动脚本，统一支持 `-b` 编译选项和参数透传。
 
 通用参数：
 
@@ -112,6 +132,17 @@ source install/setup.bash
 ./run_virtual_serial.sh -- --ros-args -p baudrate:=115200  # 透传参数
 ```
 
+### 5. `run_arm_real.sh` — 启动真实机械臂
+
+启动 `launch_pack arm_real.launch.py`，拉起真实机械臂的驱动、解算、视觉以及任务节点。
+
+```bash
+./run_arm_real.sh                        # 直接启动
+./run_arm_real.sh -b                     # 编译后启动
+./run_arm_real.sh -p "launch_pack arm_task"  # 仅编译指定包后启动
+./run_arm_real.sh -- use_sim_time:=true  # 透传 launch 参数
+```
+
 ---
 
 ## 三、目录结构与功能包说明
@@ -128,6 +159,7 @@ AT_RC/
 ├── run_bt_runner.sh
 ├── run_plan_publisher.sh
 ├── run_virtual_serial.sh
+├── run_arm_real.sh
 └── README.md
 ```
 
@@ -209,4 +241,4 @@ AT_RC/
 
 ---
 
-> 制作人：旭光
+> 制作人：郭力豪
