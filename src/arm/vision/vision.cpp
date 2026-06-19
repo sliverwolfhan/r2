@@ -1,3 +1,399 @@
+// #include <iostream>
+// #include <vector>
+// #include <array>
+// #include <cmath>
+// #include <algorithm>
+// #include <deque>
+// #include <librealsense2/rs.hpp>
+// #include <opencv2/opencv.hpp>
+// #include <opencv2/dnn.hpp>
+// #include <rclcpp/rclcpp.hpp>
+// #include <geometry_msgs/msg/transform_stamped.hpp>
+// #include <tf2/LinearMath/Matrix3x3.h>
+// #include <tf2/LinearMath/Quaternion.h>
+// #include <tf2_ros/transform_broadcaster.h>
+
+// using namespace std;
+// using namespace cv;
+// using namespace cv::dnn;
+
+// // ================================================================
+// // 配置
+// // ================================================================
+// // 32种图案物理尺寸 (宽,高) mm, 索引 = YOLO class_id
+// static const float PS[32][2] = {
+//     {185,330},{185,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},
+//     {300,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},
+//     {300,330},{185,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},
+//     {300,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},{300,330},
+// };
+
+// static vector<Point3f> makeObjPts(int cls) {
+//     int i = clamp(cls, 0, 31);
+//     float hw = PS[i][0] / 2.f, hh = PS[i][1] / 2.f;
+//     return { {-hw,-hh,0}, {hw,-hh,0}, {hw,hh,0}, {-hw,hh,0} };
+// }
+
+// static const int   SMOOTH_N   = 6;
+// static const char* MODEL_PATH = "/home/hao/arm/best.onnx";
+// static const int   YOLO_W     = 640, YOLO_H = 640;
+// static const float YOLO_CONF  = 0.25f, YOLO_NMS = 0.45f;
+// static const int   YOLO_NC    = 32;
+// static const char* CAM_FRAME  = "camera_link";
+// static const char* OBJ_FRAME  = "target_object";
+
+// // ================================================================
+// // CornerKF
+// // ================================================================
+// struct CornerKF {
+//     KalmanFilter kf;
+//     bool ok = false;
+
+//     void init(Point2f pt) {
+//         kf.init(4, 2, 0, CV_64F);
+//         setIdentity(kf.transitionMatrix);
+//         kf.transitionMatrix.at<double>(0,2) = 1;
+//         kf.transitionMatrix.at<double>(1,3) = 1;
+//         kf.measurementMatrix = Mat::zeros(2, 4, CV_64F);
+//         kf.measurementMatrix.at<double>(0,0) = 1;
+//         kf.measurementMatrix.at<double>(1,1) = 1;
+//         setIdentity(kf.processNoiseCov,     Scalar(0.05));
+//         setIdentity(kf.measurementNoiseCov, Scalar(0.8));
+//         setIdentity(kf.errorCovPost,        Scalar(1));
+//         kf.statePost = (Mat_<double>(4,1) << pt.x, pt.y, 0, 0);
+//         ok = true;
+//     }
+//     Point2f update(Point2f m) {
+//         if (!ok) init(m);
+//         kf.predict();
+//         Mat meas = (Mat_<double>(2,1) << m.x, m.y);
+//         Mat est  = kf.correct(meas);
+//         return Point2f((float)est.at<double>(0), (float)est.at<double>(1));
+//     }
+//     Point2f predictOnly() {
+//         Mat p = kf.predict();
+//         return Point2f((float)p.at<double>(0), (float)p.at<double>(1));
+//     }
+// };
+
+// // ================================================================
+// // 工具
+// // ================================================================
+// Vec3d euler(const Mat& R) {
+//     double sy = sqrt(R.at<double>(0,0)*R.at<double>(0,0)
+//                    + R.at<double>(1,0)*R.at<double>(1,0));
+//     if (sy < 1e-6)
+//         return Vec3d(atan2(-R.at<double>(1,2), R.at<double>(1,1)) * 180/CV_PI,
+//                      atan2(-R.at<double>(2,0), sy) * 180/CV_PI, 0);
+//     return Vec3d(atan2(R.at<double>(2,1), R.at<double>(2,2)) * 180/CV_PI,
+//                  atan2(-R.at<double>(2,0), sy) * 180/CV_PI,
+//                  atan2(R.at<double>(1,0), R.at<double>(0,0)) * 180/CV_PI);
+// }
+
+// void putLabel(Mat& im, const string& t, Point o,
+//               double s = 0.65, Scalar c = Scalar(0,255,255), int th = 2) {
+//     putText(im, t, o, FONT_HERSHEY_SIMPLEX, s, Scalar(0,0,0), th+2);
+//     putText(im, t, o, FONT_HERSHEY_SIMPLEX, s, c, th);
+// }
+
+// // ================================================================
+// // YOLO
+// // ================================================================
+// struct YoloResult { Rect box; int cls = 0; };
+
+// YoloResult yoloDetect(const Mat& fr, Net& net) {
+//     Mat blob;
+//     blobFromImage(fr, blob, 1.0/255.0, Size(YOLO_W,YOLO_H), Scalar(), true, false);
+//     net.setInput(blob);
+//     vector<Mat> outs;
+//     net.forward(outs, net.getUnconnectedOutLayersNames());
+//     if (outs.empty()) return {Rect(), -1};
+
+//     Mat out = outs[0];
+//     int nb = out.size[2];
+//     float* d = (float*)out.data;
+//     float xf = (float)fr.cols / YOLO_W, yf = (float)fr.rows / YOLO_H;
+
+//     vector<Rect> bx; vector<float> cf; vector<int> cl;
+//     for (int i = 0; i < nb; i++) {
+//         float cx = d[0*nb+i], cy = d[1*nb+i], w = d[2*nb+i], h = d[3*nb+i];
+//         float bs = 0; int bc = -1;
+//         for (int c = 0; c < YOLO_NC; c++) {
+//             float s = d[(4+c)*nb+i]; if (s > bs) { bs = s; bc = c; }
+//         }
+//         if (bs < YOLO_CONF) continue;
+//         bx.emplace_back(int((cx-w*.5f)*xf), int((cy-h*.5f)*yf), int(w*xf), int(h*yf));
+//         cf.push_back(bs); cl.push_back(bc);
+//     }
+//     if (bx.empty()) return {Rect(), -1};
+
+//     vector<int> idx;
+//     NMSBoxes(bx, cf, YOLO_CONF, YOLO_NMS, idx);
+//     if (idx.empty()) return {Rect(), -1};
+
+//     int best = idx[0];
+//     for (int i : idx) if (cf[i] > cf[best]) best = i;
+//     return {bx[best], cl[best]};
+// }
+
+// static vector<Point2f> boxCorners(const Rect& r) {
+//     return {Point2f(r.x,r.y), Point2f(r.x+r.width,r.y),
+//             Point2f(r.x+r.width,r.y+r.height), Point2f(r.x,r.y+r.height)};
+// }
+
+// // ================================================================
+// // 指数移动平均平滑 (避免中值滤波的死值问题)
+// // ================================================================
+// struct Ema3 {
+//     double vx = 0, vy = 0, vz = 0;
+//     bool   initd = false;
+//     static constexpr double A = 0.35;   // 平滑系数 (越小越平滑)
+
+//     Vec3d push(double x, double y, double z) {
+//         if (!initd) { vx = x; vy = y; vz = z; initd = true; }
+//         else { vx += A * (x - vx); vy += A * (y - vy); vz += A * (z - vz); }
+//         return Vec3d(vx, vy, vz);
+//     }
+//     void reset() { initd = false; }
+// };
+
+// // ================================================================
+// // main
+// // ================================================================
+// int main(int argc, char** argv) {
+//     rclcpp::init(argc, argv);
+//     auto nd = rclcpp::Node::make_shared("vision_node");
+//     auto tb = std::make_shared<tf2_ros::TransformBroadcaster>(nd);
+
+//     // ---- RealSense ----
+//     rs2::pipeline pp;
+//     rs2::config   cfg;
+//     cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, 30);
+//     cfg.enable_stream(RS2_STREAM_DEPTH, 848,  480, RS2_FORMAT_Z16,  30);
+
+//     rs2::pipeline_profile pr;
+//     try { pr = pp.start(cfg); }
+//     catch (const rs2::error& e) {
+//         cerr << "RealSense: " << e.what() << endl;
+//         rclcpp::shutdown(); return -1;
+//     }
+//     rs2::align al2c(RS2_STREAM_COLOR);
+//     float ds = pr.get_device().first<rs2::depth_sensor>().get_depth_scale();
+//     auto cpr = pr.get_stream(RS2_STREAM_COLOR).as<rs2::video_stream_profile>();
+//     rs2_intrinsics ci = cpr.get_intrinsics();
+
+//     Mat K = (Mat_<double>(3,3) << ci.fx, 0, ci.ppx, 0, ci.fy, ci.ppy, 0, 0, 1);
+//     Mat D = Mat::zeros(1, 5, CV_64F);
+//     double fx = ci.fx, fy = ci.fy, cx = ci.ppx, cy = ci.ppy;
+//     cout << "K:\n" << K << "  scale=" << ds << endl;
+
+//     // ---- YOLO ----
+//     Net net = readNet(MODEL_PATH);
+//     if (net.empty()) { cerr << "YOLO fail" << endl; pp.stop(); rclcpp::shutdown(); return -1; }
+//     net.setPreferableBackend(DNN_BACKEND_OPENCV);
+//     net.setPreferableTarget(DNN_TARGET_CPU);
+//     cout << "YOLO loaded\n";
+
+//     // ---- 状态 ----
+//     array<CornerKF, 4> kfs;
+//     Ema3               sm;               // XYZ 指数平滑
+//     Rect               lastBox;
+//     bool               live = false;
+
+//     // 面板显示值（每帧都更新）
+//     double dX = 0, dY = 0, dZ_px = 0, dDist = 0;
+//     double dRoll = 0, dPitch = 0, dYaw = 0;
+//     bool   havePose = false;
+//     bool   haveRpy  = false;
+
+//     while (rclcpp::ok()) {
+//         rclcpp::spin_some(nd);
+
+//         // ---- 取帧 ----
+//         rs2::frameset fs;
+//         try { fs = pp.wait_for_frames(); fs = al2c.process(fs); }
+//         catch (const rs2::error&) { break; }
+//         rs2::video_frame cf = fs.get_color_frame();
+//         rs2::depth_frame df = fs.get_depth_frame();
+//         if (!cf) break;
+
+//         Mat bgr(Size(ci.width, ci.height), CV_8UC3,
+//                 (void*)cf.get_data(), Mat::AUTO_STEP);
+//         bgr = bgr.clone();
+//         Mat depth;
+//         if (df) {
+//             depth = Mat(Size(ci.width, ci.height), CV_16UC1,
+//                         (void*)df.get_data(), Mat::AUTO_STEP);
+//             depth = depth.clone();
+//         }
+//         Mat show = bgr.clone();
+
+//         // ---- Step 1: YOLO ----
+//         YoloResult yr = yoloDetect(bgr, net);
+//         live = !yr.box.empty();
+//         if (!live) {
+//             // 没检测到：重置 KF，只显示画面，不发 TF，不预测
+//             for (auto& kf : kfs) kf.ok = false;
+//             sm.reset();
+//             imshow("Box PnP", show);
+//             char key = (char)waitKey(1);
+//             if (key == 27) break;
+//             if (key == 'r') lastBox = Rect();
+//             continue;
+//         }
+//         int cls = (yr.cls >= 0) ? yr.cls : 0;
+//         auto objPts = makeObjPts(cls);
+
+//         // ---- Step 2: KF 平滑角点 ----
+//         vector<Point2f> raw = boxCorners(yr.box);
+//         vector<Point2f> smCorners(4);
+//         for (int i = 0; i < 4; i++) smCorners[i] = kfs[i].update(raw[i]);
+
+//         // ---- Step 3: 深度 Z + 针孔 X,Y + PnP 旋转 ----
+//         bool pnp_ok = false;
+//         double z_mm = 0;
+//         haveRpy = false;
+
+//         if (kfs[0].ok) {
+//             // 3a. 读深度中值
+//             int bpx = yr.box.x + yr.box.width/2, bpy = yr.box.y + yr.box.height/2;
+//             bpx = clamp(bpx, 0, bgr.cols-1); bpy = clamp(bpy, 0, bgr.rows-1);
+//             if (!depth.empty()) {
+//                 vector<uint16_t> dv;
+//                 const int R = 7;
+//                 for (int dy = -R; dy <= R; dy++)
+//                     for (int dx = -R; dx <= R; dx++) {
+//                         int sx = clamp(bpx+dx, 0, bgr.cols-1);
+//                         int sy = clamp(bpy+dy, 0, bgr.rows-1);
+//                         uint16_t v = depth.at<uint16_t>(sy, sx);
+//                         if (v > 0) dv.push_back(v);
+//                     }
+//                 if (!dv.empty()) {
+//                     size_t mid = dv.size()/2;
+//                     nth_element(dv.begin(), dv.begin()+mid, dv.end());
+//                     z_mm = (double)dv[mid] * ds * 1000.0;
+//                 }
+//             }
+
+//             // 3b. 针孔反投影
+//             double ppx = yr.box.x + yr.box.width/2.0;
+//             double ppy = yr.box.y + yr.box.height/2.0;
+//             double Zmm = (z_mm > 0) ? z_mm : 500.0;
+//             double Xmm = (ppx - cx) * Zmm / fx;
+//             double Ymm = (ppy - cy) * Zmm / fy;
+
+//             // 指数平滑（无死值问题）
+//             Vec3d sv = sm.push(Xmm, Ymm, Zmm);
+//             dX = sv[0]; dY = sv[1]; dZ_px = sv[2];
+//             dDist = sqrt(dX*dX + dY*dY + dZ_px*dZ_px);
+//             havePose = true;
+
+//             // 3c. PnP → 旋转 + TF
+//             if (z_mm > 0) {   // 深度有效才做 PnP
+//                 Mat rvec, tvec;
+//                 pnp_ok = solvePnP(objPts, smCorners, K, D, rvec, tvec, false, SOLVEPNP_IPPE);
+//                 if (pnp_ok) {
+//                     Mat R; Rodrigues(rvec, R);
+//                     Vec3d eu = euler(R);
+//                     dRoll = eu[0]; dPitch = eu[1]; dYaw = eu[2];
+//                     haveRpy = true;
+
+//                     // TF: PnP 成功即发
+//                     {
+//                         geometry_msgs::msg::TransformStamped tf;
+//                         tf.header.stamp    = nd->get_clock()->now();
+//                         tf.header.frame_id = CAM_FRAME;
+//                         tf.child_frame_id  = OBJ_FRAME;
+//                         // ROS 坐标系: X前 Y左 Z上  ← 相机: X右 Y下 Z前
+//                         tf.transform.translation.x = dZ_px / 1000.0;   // Z前 → X
+//                         tf.transform.translation.y = -dX   / 1000.0;   // X右 → -Y
+//                         tf.transform.translation.z = -dY   / 1000.0;   // Y下 → -Z
+//                         tf2::Matrix3x3 mr(
+//                             R.at<double>(0,0),R.at<double>(0,1),R.at<double>(0,2),
+//                             R.at<double>(1,0),R.at<double>(1,1),R.at<double>(1,2),
+//                             R.at<double>(2,0),R.at<double>(2,1),R.at<double>(2,2));
+//                         tf2::Quaternion q; mr.getRotation(q);
+//                         tf.transform.rotation.x = q.x();
+//                         tf.transform.rotation.y = q.y();
+//                         tf.transform.rotation.z = q.z();
+//                         tf.transform.rotation.w = q.w();
+//                         tb->sendTransform(tf);
+//                         printf("\r>>> TF sent! (cam XYZ=%.0f %.0f %.0f mm)                              \n", dX, dY, dZ_px);
+//                     }
+
+//                     // 坐标轴
+//                     Point2f ao = (smCorners[0]+smCorners[1]+smCorners[2]+smCorners[3])*0.25f;
+//                     Mat tvm = (Mat_<double>(3,1) << dX, dY, dZ_px);
+//                     vector<Point3f> ax3 = {{0,0,0},{100,0,0},{0,100,0},{0,0,100}};
+//                     vector<Point2f> ax2;
+//                     projectPoints(ax3, rvec, tvm, K, D, ax2);
+//                     Point2f vx = ax2[1]-ax2[0], vy = ax2[2]-ax2[0], vz = ax2[3]-ax2[0];
+//                     const float AL = 50;
+//                     float nx = norm(vx), ny = norm(vy), nz = norm(vz);
+//                     if (nx>1e-3f) vx *= AL/nx;
+//                     if (ny>1e-3f) vy *= AL/ny;
+//                     if (nz>1e-3f) vz *= AL/nz;
+//                     arrowedLine(show, ao, ao+vx, Scalar(0,0,255),   3, LINE_AA, 0, 0.2);
+//                     arrowedLine(show, ao, ao+vy, Scalar(0,255,0),   3, LINE_AA, 0, 0.2);
+//                     arrowedLine(show, ao, ao+vz, Scalar(255,0,0),   3, LINE_AA, 0, 0.2);
+//                     putLabel(show, "X", ao+vx+Point2f(5,0), 0.6, Scalar(0,0,255));
+//                     putLabel(show, "Y", ao+vy+Point2f(5,0), 0.6, Scalar(0,255,0));
+//                     putLabel(show, "Z", ao+vz+Point2f(5,0), 0.6, Scalar(255,100,0));
+//                     line(show, Point((int)ao.x-14,(int)ao.y), Point((int)ao.x+14,(int)ao.y), Scalar(0,255,255),2);
+//                     line(show, Point((int)ao.x,(int)ao.y-14), Point((int)ao.x,(int)ao.y+14), Scalar(0,255,255),2);
+//                     circle(show, ao, 5, Scalar(0,255,255), -1);
+
+//                     printf("\rD=%.0f XYZ=[%.0f %.0f %.0f]mm rawZ=%.0f Zmm=%.0f RPY=[%.1f %.1f %.1f]   ",
+//                            dDist, dX, dY, dZ_px, z_mm, Zmm, dRoll, dPitch, dYaw);
+//                     fflush(stdout);
+//                 }
+//             }
+//             if (!pnp_ok) {
+//                 printf("\rD=%.0f XYZ=[%.0f %.0f %.0f]mm rawZ=%.0f RPY=---         ",
+//                        dDist, dX, dY, dZ_px, z_mm);
+//                 fflush(stdout);
+//             }
+//         }
+
+//         // ---- 画框 + 角点 + ID ----
+//         {
+//             Scalar bc = pnp_ok ? Scalar(0,220,0) : Scalar(0,140,255);
+//             rectangle(show, yr.box, bc, 2);
+//             for (int i = 0; i < 4; i++)
+//                 circle(show, smCorners[i], 5, Scalar(0,0,255), -1);
+//             char tag[64];
+//             sprintf(tag, "ID=%d %.0fx%.0f", cls, PS[cls][0], PS[cls][1]);
+//             putLabel(show, tag, Point(yr.box.x, yr.box.y-8), 0.45, Scalar(0,255,255));
+//         }
+
+//         // ---- 面板 ----
+//         if (havePose) {
+//             Mat ov = show.clone();
+//             rectangle(ov, Point(8,8), Point(340,110), Scalar(0,0,0), FILLED);
+//             addWeighted(ov, 0.45, show, 0.55, 0, show);
+//             int bx = 18, by = 30, dy = 25;
+//             char buf[128];
+//             sprintf(buf, "Dist: %.0f mm", dDist);
+//             putLabel(show, buf, Point(bx,by), 0.65, Scalar(0,255,100), 2);
+//             sprintf(buf, "XYZ: %.0f  %.0f  %.0f mm", dX, dY, dZ_px);
+//             putLabel(show, buf, Point(bx,by+dy), 0.55, Scalar(0,220,255));
+//             if (haveRpy)
+//                 sprintf(buf, "RPY: %.1f  %.1f  %.1f deg", dRoll, dPitch, dYaw);
+//             else
+//                 sprintf(buf, "RPY: --- (no PnP)");
+//             putLabel(show, buf, Point(bx,by+dy*2), 0.55, Scalar(255,200,0));
+//         }
+
+//         imshow("Box PnP", show);
+//         char key = (char)waitKey(1);
+//         if (key == 27) break;
+//         if (key == 'r') {
+//             for (auto& kf : kfs) kf.ok = false;
+//             sm.reset(); lastBox = Rect();
+//         }
+//     }
+//     pp.stop(); destroyAllWindows(); rclcpp::shutdown(); return 0;
+// }
 #include <iostream>
 #include <vector>
 #include <array>
@@ -31,7 +427,7 @@ static const double MIN_AREA   = 8000.0;      // 最小有效红色面积阈值�
 /**
  * YOLO 模型参数
  */
-static const char*  MODEL_PATH     = "/home/hao/arm/best.onnx";
+static const char*  MODEL_PATH     = "/home/pc1/AT_RC/src/arm/vision/best.onnx";
 static const int    YOLO_INPUT_W   = 640;
 static const int    YOLO_INPUT_H   = 640;
 static const float  YOLO_CONF_THR  = 0.25f;
@@ -313,16 +709,22 @@ void putLabel(Mat& img, const string& text, Point org,
  */
 Rect runYoloDetection(const Mat& frame, Net& net)
 {
+    // cout << "1" << endl;
+
     // ---- 1. 构造 blob ----
     Mat blob;
     blobFromImage(frame, blob, 1.0/255.0, Size(YOLO_INPUT_W, YOLO_INPUT_H),
                   Scalar(), true, false);
+    // cout << "2" << endl;
+
     net.setInput(blob);
+    // cout << "3" << endl;
 
     // ---- 2. 推理 ----
     vector<Mat> outputs;
     net.forward(outputs, net.getUnconnectedOutLayersNames());
     if (outputs.empty()) return Rect();
+    // cout << "4" << endl;
 
     Mat output = outputs[0];
     const int numBoxes = output.size[2];           // e.g. 8400
