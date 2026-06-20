@@ -21,7 +21,10 @@ BT::PortsList PeekNextStepAction::providedPorts()
     BT::OutputPort<int32_t>("next_from_id", "From node id of the next step"),
     BT::OutputPort<double>("next_cube_x", "Cube x of the next step (PICK/PUSH)"),
     BT::OutputPort<double>("next_cube_y", "Cube y of the next step (PICK/PUSH)"),
-    BT::OutputPort<double>("next_block_height", "Block height of the next step")
+    BT::OutputPort<double>("next_block_height", "Block height of the next step"),
+    BT::OutputPort<double>("next_prep_x", "Preparation pose x of the next step"),
+    BT::OutputPort<double>("next_prep_y", "Preparation pose y of the next step"),
+    BT::OutputPort<double>("next_prep_yaw", "Preparation pose yaw of the next step")
   };
 }
 
@@ -37,6 +40,9 @@ BT::NodeStatus PeekNextStepAction::tick()
     setOutput<double>("next_cube_x", 0.0);
     setOutput<double>("next_cube_y", 0.0);
     setOutput<double>("next_block_height", 0.0);
+    setOutput<double>("next_prep_x", 0.0);
+    setOutput<double>("next_prep_y", 0.0);
+    setOutput<double>("next_prep_yaw", 0.0);
     return BT::NodeStatus::SUCCESS;
   }
 
@@ -56,6 +62,9 @@ BT::NodeStatus PeekNextStepAction::tick()
   setOutput<double>("next_cube_x", step.cube_x);
   setOutput<double>("next_cube_y", step.cube_y);
   setOutput<double>("next_block_height", step.block_height);
+  setOutput<double>("next_prep_x", step.prep_pose.x);
+  setOutput<double>("next_prep_y", step.prep_pose.y);
+  setOutput<double>("next_prep_yaw", step.prep_pose.theta);
 
   RCLCPP_INFO(
     rclcpp::get_logger("PeekNextStep"),
