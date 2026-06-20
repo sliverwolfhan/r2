@@ -12,6 +12,8 @@
 #include <rclcpp/utilities.hpp>
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Vector3.hpp>
+#include <tf2/LinearMath/Transform.hpp>
 #include <tf2/exceptions.h>
 #include <thread>
 
@@ -246,9 +248,22 @@ std::string CatchKFS::process(const std::string last_task_name) {
         return fail_task("执行抓取轨迹失败");
     }
     std::this_thread::sleep_for(500ms);
-    object_pose.pose.position.z += 0.2;  // 抬起 10cm
-    RCLCPP_INFO(robot->node_->get_logger(), "执行抬起动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8        
+
+    const double lift_up_z_ = 0.10;          // 垂直向上抬升量
+    const double lift_retract_along_tcp_ = 0.15;  // 沿末端 -Z 方向回退量
+
+    object_pose.pose.position.z += lift_up_z_;
+    tf2::Vector3 retract_in_tcp(0.0, 0.0, -lift_retract_along_tcp_);
+    tf2::Vector3 retract_in_base = tf2::quatRotate(quat, retract_in_tcp);
+    object_pose.pose.position.x += retract_in_base.x();
+    object_pose.pose.position.y += retract_in_base.y();
+    object_pose.pose.position.z += retract_in_base.z();
+
+    RCLCPP_INFO(robot->node_->get_logger(),
+        "执行抬起动作: 垂直 +%.3f m, 沿末端-Z 回退 %.3f m (base 偏移 dx=%.3f dy=%.3f dz=%.3f)",
+        lift_up_z_, lift_retract_along_tcp_,
+        retract_in_base.x(), retract_in_base.y(), retract_in_base.z());
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8
         return fail_task("执行抬起失败");
     }
     
