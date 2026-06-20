@@ -31,7 +31,7 @@ static const double MIN_AREA   = 8000.0;      // 最小有效红色面积阈值�
 /**
  * YOLO 模型参数
  */
-static const char*  MODEL_PATH     = "/home/hao/arm/build/best.onnx";
+static const char*  MODEL_PATH     = "/home/pc1/AT_RC/src/arm/vision/best.onnx";
 static const int    YOLO_INPUT_W   = 640;
 static const int    YOLO_INPUT_H   = 640;
 static const float  YOLO_CONF_THR  = 0.25f;

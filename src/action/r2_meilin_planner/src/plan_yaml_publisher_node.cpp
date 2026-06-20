@@ -68,7 +68,7 @@ public:
   {
     const std::string yaml_path =
       ament_index_cpp::get_package_share_directory("r2_meilin_planner") +
-      "/config/plan_meilin1.yaml";
+      "/config/plan_meilin.yaml";
 
     plan_msg_ = load_plan(yaml_path);
     pub_ = this->create_publisher<robot_interfaces::msg::Plan>(

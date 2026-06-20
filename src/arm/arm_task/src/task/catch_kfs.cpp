@@ -151,22 +151,6 @@ std::string CatchKFS::process(const std::string last_task_name) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -244,7 +228,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     object_pose.pose.orientation.z = quat.getZ();
 
     RCLCPP_INFO(robot->node_->get_logger(), "执行抓取动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.8)) { // 0.8
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 1.5)) { // 0.8
         return fail_task("执行抓取轨迹失败");
     }
     std::this_thread::sleep_for(500ms);
@@ -263,7 +247,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
         "执行抬起动作: 垂直 +%.3f m, 沿末端-Z 回退 %.3f m (base 偏移 dx=%.3f dy=%.3f dz=%.3f)",
         lift_up_z_, lift_retract_along_tcp_,
         retract_in_base.x(), retract_in_base.y(), retract_in_base.z());
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 1.0)) { // 0.8
         return fail_task("执行抬起失败");
     }
     

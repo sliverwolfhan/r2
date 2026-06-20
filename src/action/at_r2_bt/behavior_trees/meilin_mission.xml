@@ -6,6 +6,7 @@
        然后路由到 MOVE/PICK/PUSH 子树。 -->
   <BehaviorTree ID="MainTree">
     <Sequence>
+      <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
       <GetPlan node="{node}"
                topic="/r2_planner/plan"
                plan="{plan}"
@@ -15,6 +16,12 @@
       <Script code="pick_count := 0"/>
       <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
       <Script code="need_finish := 0"/>
+
+      <WaitForEnter node="{node}"
+                    prompt="参数已设置完成，按 Enter 开始导航"
+                    require_tty="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
 
       <Repeat num_cycles="{num_steps}">
         <Sequence>
@@ -41,7 +48,6 @@
                         next_cube_x="{next_cube_x}"
                         next_cube_y="{next_cube_y}"
                         next_block_height="{next_block_height}"/>
-
           <Switch3 variable="{step_type}"
                    case_1="MOVE"
                    case_2="PICK"
@@ -90,8 +96,11 @@
                     <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
                     <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
                     <PublishPumpCmd node="{node}" command="0"/>
+                    <DelayMs delay_msec="1500">
+                      <AlwaysSuccess/>
+                    </DelayMs>  
                     <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
                   </Sequence>
                   <!-- 第 2 块：抓后只举着 -->
                   <Sequence>
