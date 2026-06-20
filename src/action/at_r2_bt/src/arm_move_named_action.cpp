@@ -26,6 +26,7 @@ BT::PortsList ArmMoveNamedAction::providedPorts()
     BT::InputPort<std::string>("pose_name", "Name of the named pose in arm_position.yaml"),
     BT::InputPort<std::string>("server_name", "robotic_task", "Action server name"),
     BT::InputPort<int32_t>("task_id", 1, "Arm task id (move_kfs = 1)"),
+    BT::InputPort<double>("duration", 3.0, "Trajectory duration in seconds"),
     BT::InputPort<std::string>(
       "arm_yaml", "",
       "Absolute path to a yaml with `arm_positions:` map. "
@@ -142,6 +143,9 @@ BT::NodeStatus ArmMoveNamedAction::onStart()
   int32_t task_id = 1;
   (void)getInput("task_id", task_id);
 
+  double duration = 3.0;
+  (void)getInput("duration", duration);
+
   std::string server_name{"robotic_task"};
   (void)getInput("server_name", server_name);
 
@@ -155,7 +159,7 @@ BT::NodeStatus ArmMoveNamedAction::onStart()
   ArmTask::Goal goal_msg;
   goal_msg.task_id = task_id;
   goal_msg.data = it->second;  // 6 joints
-  goal_msg.data.push_back(3.0);  // 7th value: trajectory duration (seconds)
+  goal_msg.data.push_back(duration);  // 7th value: trajectory duration (seconds)
 
   goal_handle_.reset();
   goal_rejected_ = false;
@@ -175,7 +179,8 @@ BT::NodeStatus ArmMoveNamedAction::onStart()
 
   action_client_->async_send_goal(goal_msg, send_goal_options);
   RCLCPP_INFO(node_->get_logger(),
-    "ArmMoveNamed goal sent: name=%s task_id=%d", pose_name.c_str(), task_id);
+    "ArmMoveNamed goal sent: name=%s task_id=%d duration=%.2fs",
+    pose_name.c_str(), task_id, duration);
 
   return BT::NodeStatus::RUNNING;
 }

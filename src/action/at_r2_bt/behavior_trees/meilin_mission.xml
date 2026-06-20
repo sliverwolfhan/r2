@@ -93,7 +93,7 @@
                   <!-- 第 1 块：抓后放到车上 -->
                   <Sequence>
                     <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.5"/>
                     <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
                     <PublishPumpCmd node="{node}" command="0"/>
                     <DelayMs delay_msec="1500">
