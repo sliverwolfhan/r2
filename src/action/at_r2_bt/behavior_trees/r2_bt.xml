@@ -48,8 +48,11 @@
                 plan="{plan}"
                 num_steps="{num_steps}"/>
 
+        <!-- PICK 计数器：用来区分第几个抓取动作（第1块放置到车上，第2块只举着） -->
+        <Script code="pick_count := 0"/>
+
         <Repeat num_cycles="{num_steps}">
-            <Sequence>
+          <Sequence>
             <PopNextStep plan="{plan}"
                         step_type="{step_type}"
                         target_id="{target_id}"
@@ -64,127 +67,138 @@
                         cube_y="{cube_y}"
                         block_height="{block_h}"/>
 
+            <!-- Pop 已经把当前步从 plan 队首移走，
+                PeekNextStep 看到的就是真正的"下一步"。 -->
+            <PeekNextStep plan="{plan}"
+                          next_step_type="{next_step_type}"
+                          next_target_id="{next_target_id}"
+                          next_from_id="{next_from_id}"
+                          next_cube_x="{next_cube_x}"
+                          next_cube_y="{next_cube_y}"
+                          next_block_height="{next_block_height}"/>
+
             <Switch3 variable="{step_type}"
                     case_1="MOVE"
                     case_2="PICK"
                     case_3="PUSH">
-                <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
-                <SubTree ID="PickAtBlock" _autoremap="true"/>
-                <SubTree ID="PushAtBlock" _autoremap="true"/>
-                <AlwaysFailure/>
+              <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
+              <SubTree ID="PickAtBlock" _autoremap="true"/>
+              <SubTree ID="PushAtBlock" _autoremap="true"/>
+              <AlwaysFailure/>
             </Switch3>
-            </Sequence>
+          </Sequence>
         </Repeat>
       </Sequence>
+    </BehaviorTree>
 
-      <!-- <Sequence>
-        <SetCostmapInflation node="{node}"
-                    local_radius="0.45"
-                    global_radius="0.45"
-                    local_cost_scaling_factor="1.0"
-                    global_cost_scaling_factor="4.0"/>
-        <SetMppiParams node="{node}"
-                    controller_node="/AT_R2/controller_server"
-                    plugin_prefix="FollowPath"
-                    goal_angle_weight="5.0"
-                    goal_angle_threshold="0.3"
-                    wait_after_set="0.3"
-                    wz_std="0.45"
-                    vx_std="0.45"
-                    vy_std="0.45"/>
-        <PublishGoal node="{node}" x="8.6" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
-        <PublishGoal node="{node}" x="11.45" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
-        <SetMppiParams node="{node}"
-                    controller_node="/AT_R2/controller_server"
-                    plugin_prefix="FollowPath"
-                    goal_angle_threshold="1.0"
-                    wait_after_set="0.3"/>
-        <PublishGoal node="{node}" x="10.75" y="-3.0" yaw="-1.57" frame_id="map" goal="{goal}"/>
-      </Sequence> -->
-    </Sequence>
-  </BehaviorTree>
+    <!-- ================== MOVE 子树 ==================
+        只做"移动"：按 stair_dir 选择爬楼梯/下楼梯/不动。
+        机械臂相关动作（收尾、预备）全部搬到 PICK 子树内串行执行，
+        遵循"移动时只移动，抓块时只抓块"原则。 -->
+    <BehaviorTree ID="MoveBetweenBlocks">
+      <Sequence>
+        <!-- <PublishGoal node="{node}"
+                    x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/> -->
+        <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
 
-  <!-- ================== MOVE 子树 ==================
-       预备点 = 当前方块的中心，朝向 = 指向目标方块；
-       PreSteerAlign 让舵轮对齐；按 stair_dir 决定上/下楼或平移。 -->
-  <BehaviorTree ID="MoveBetweenBlocks">
-    <Sequence>
-      <Fallback>
-        <IsPrepSkippable node="{node}"
-                  target_x="{prep_x}"
-                  target_y="{prep_y}"
-                  target_yaw="{prep_yaw}"
-                  x_tolerance="0.20"
-                  y_tolerance="0.20"
-                  yaw_tolerance="0.05"
-                  base_frame="base_footprint"/>
-        <Sequence>
-          <PublishGoal node="{node}"
-                      x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                      frame_id="map"
-                      goal="{nav_goal}"/>
-                      
-          <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.0" publish_rate_hz="50"/> -->
-        </Sequence>
-      </Fallback>
-      <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-        <ClimbStair   node="{node}" height="{abs_dh}"/>
-        <DescendStair node="{node}" height="{abs_dh}"/>
-        <AlwaysSuccess/>
-      </Switch2>
-    </Sequence>
-    
-  </BehaviorTree>
+        <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+          <ClimbStair   node="{node}" height="{abs_dh}"/>
+          <DescendStair node="{node}" height="{abs_dh}"/>
+          <AlwaysSuccess/>
+        </Switch2>
+      </Sequence>
+    </BehaviorTree>
 
-  <!-- ================== PICK 子树 ==================
-       和 MOVE 一样先把机器人摆到 prep_pose 上对齐到 target 那一侧，再伸臂抓。 -->
-  <BehaviorTree ID="PickAtBlock">
-    <Sequence>
-      <!-- <PublishGoal node="{node}"
-                   x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
-                   frame_id="map"
-                   goal="{nav_goal}"/> -->
-      <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/> -->
-      <ArmTask node="{node}"
-               task_id="2"
-               server_name="robotic_task"
-               base_frame="base_link"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="1.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="{block_h}"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
-    </Sequence>
-  </BehaviorTree>
+    <!-- ================== PICK 子树 ==================
+        预备姿势 + 对齐 + 开泵 + 视觉抓取(ArmTask) + 抓后收尾。
+        全部串行：移动时只移动，抓块时只抓块。
+        收尾按 pick_count 分流：第 1 块放置到车上，第 2 块只举着。 -->
+    <BehaviorTree ID="PickAtBlock">
+      <Sequence>
+        <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
+        <Script code="pick_count += 1"/>
 
-  <!-- ================== PUSH 子树 ================== -->
-  <BehaviorTree ID="PushAtBlock">
-    <Sequence>
-      <PublishGoal node="{node}"
-                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                   frame_id="map"
-                   goal="{nav_goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <ArmTask node="{node}"
-               task_id="3"
-               server_name="robotic_task"
-               base_frame="base_footprint"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="5.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="0.0"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
-    </Sequence>
-  </BehaviorTree>
+        <!-- ===== 预备：根据当前步的 from_id/target_id 摆出抓取预备姿势 ===== -->
+        <SelectArmPrepName next_from_id="{from_id}"
+                          next_target_id="{target_id}"
+                          arm_prep_name="{arm_prep_name}"/>
+        <ArmMoveNamed node="{node}"
+                      pose_name="{arm_prep_name}"
+                      server_name="robotic_task"
+                      task_id="1"/>
 
-</root>
+        <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
+        <!-- <PublishGoal node="{node}"
+                    x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/> -->
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
+        <PublishPumpCmd node="{node}" command="1"/>
+        <ArmTask node="{node}"
+                task_id="2"
+                server_name="robotic_task"
+                base_frame="base_link"
+                target_frame="target_object"
+                map_frame="map"
+                tf_timeout="1.0"
+                cube_x="{cube_x}"
+                cube_y="{cube_y}"
+                block_height="{block_h}"
+                grasp_height="{block_h}"
+                goal_data="{arm_goal_data}"
+                err_code="{arm_err_code}"
+                reason="{arm_reason}"/>
+
+        <!-- ===== 抓取收尾：放块/举着按 pick_count 分流 ===== -->
+        <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+          <!-- 第 1 块：抓后放到车上 -->
+          <Sequence>
+            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
+            <PublishPumpCmd node="{node}" command="0"/>
+            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
+          </Sequence>
+          <!-- 第 2 块：抓后只举着 -->
+          <Sequence>
+            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
+          </Sequence>
+          <!-- default：计数异常兜底，只举着 -->
+          <Sequence>
+            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
+          </Sequence>
+        </Switch2>
+      </Sequence>
+    </BehaviorTree>
+
+    <!-- ================== PUSH 子树 ================== -->
+    <BehaviorTree ID="PushAtBlock">
+      <Sequence>
+        <PublishGoal node="{node}"
+                    x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/>
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+        <ArmTask node="{node}"
+                task_id="3"
+                server_name="robotic_task"
+                base_frame="base_footprint"
+                target_frame="target_object"
+                map_frame="map"
+                tf_timeout="5.0"
+                cube_x="{cube_x}"
+                cube_y="{cube_y}"
+                block_height="{block_h}"
+                grasp_height="0.0"
+                goal_data="{arm_goal_data}"
+                err_code="{arm_err_code}"
+                reason="{arm_reason}"/>
+      </Sequence>
+    </BehaviorTree>
+
+  </root>

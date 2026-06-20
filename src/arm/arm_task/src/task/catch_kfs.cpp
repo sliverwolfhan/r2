@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <exception>
+#include <string>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -111,6 +113,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     double final_orientation_y_ = orientation_y_;
     double final_orientation_z_ = orientation_z_;
     double final_orientation_w_ = orientation_w_;
+    bool using_tf_data = tf_ok;  // 标记最终目标位姿来源：true=TF，false=action
 
     // 仅在 TF 查询成功且有 action 数据时，才做 TF/action 偏差比较；
     // TF 失败时上面已直接采用 action 数据，无需再比较。
@@ -133,6 +136,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
             final_orientation_y_ = action_orientation_y_;
             final_orientation_z_ = action_orientation_z_;
             final_orientation_w_ = action_orientation_w_;
+            using_tf_data = false;
         } else {
             RCLCPP_INFO(robot->node_->get_logger(),
                 "TF 与 action 位置偏差 %.4f m 在阈值 %.2f m 内，使用 TF 数据作为目标位姿",
@@ -171,7 +175,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     RCLCPP_INFO(robot->node_->get_logger(), "准备获取抓取目标位姿");
     geometry_msgs::msg::PoseStamped object_pose;
 
-    double grasp_right_run_ = 0.0;
+    double grasp_right_run_ = 0.15;
     double grasp_right_run_qian_ = 0.0;
     double grasp_duration_ = 0.8;
     double grasp_height = 0.0;
@@ -204,14 +208,30 @@ std::string CatchKFS::process(const std::string last_task_name) {
 
     // 强制规定姿态：比较 |x| 和 |y|，较大的一方决定末端 Z 轴指向哪个坐标轴，
     // 再按该分量的正负决定指向正方向还是负方向。
+    // 同时沿接近方向回退 grasp_right_run_，避免末端顶到目标。
+    // 注：TF 数据来源时，认为坐标已经准确，不再做回退处理。
+    // 回退采用"朝 0 收缩"的方式，保证 |new| ≤ |old|，不会跨过 0 反而变大。
+    auto shrink_toward_zero = [](double v, double offset) {
+        if (v >= 0.0) return std::max(0.0, v - offset);
+        return std::min(0.0, v + offset);
+    };
+
     tf2::Quaternion quat;
     quat.setRPY(0, 0, 0);  // 兜底单位四元数，避免 |x|==|y| 时未初始化
     if (std::abs(final_position_x_) >= std::abs(final_position_y_)) {
         // 末端 Z 轴指向 base_link 的 ±X：绕 Y 轴旋转
-        quat.setRPY(0.0, final_position_x_ >= 0.0 ? M_PI / 2.0 : -M_PI / 2.0, 0.0);
+        const bool x_positive = final_position_x_ >= 0.0;
+        quat.setRPY(0.0, x_positive ? M_PI / 2.0 : -M_PI / 2.0, 0.0);
+        if (!using_tf_data) {
+            object_pose.pose.position.x = shrink_toward_zero(object_pose.pose.position.x, grasp_right_run_);
+        }
     } else {
         // 末端 Z 轴指向 base_link 的 ±Y：绕 X 轴旋转
-        quat.setRPY(final_position_y_ >= 0.0 ? -M_PI / 2.0 : M_PI / 2.0, 0.0, 0.0);
+        const bool y_positive = final_position_y_ >= 0.0;
+        quat.setRPY(y_positive ? -M_PI / 2.0 : M_PI / 2.0, 0.0, 0.0);
+        if (!using_tf_data) {
+            object_pose.pose.position.y = shrink_toward_zero(object_pose.pose.position.y, grasp_right_run_);
+        }
     }
     quat.normalize();
 
@@ -220,12 +240,12 @@ std::string CatchKFS::process(const std::string last_task_name) {
     object_pose.pose.orientation.x = quat.getX();
     object_pose.pose.orientation.y = quat.getY();
     object_pose.pose.orientation.z = quat.getZ();
-    object_pose.pose.position.x -= grasp_right_run_;
 
     RCLCPP_INFO(robot->node_->get_logger(), "执行抓取动作");
-    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.8)) { // 0.8        
+    if (!robot->execute_cartesian_space_trajectory(object_pose, 0.8)) { // 0.8
         return fail_task("执行抓取轨迹失败");
     }
+    std::this_thread::sleep_for(500ms);
     object_pose.pose.position.z += 0.2;  // 抬起 10cm
     RCLCPP_INFO(robot->node_->get_logger(), "执行抬起动作");
     if (!robot->execute_cartesian_space_trajectory(object_pose, 0.5)) { // 0.8        
