@@ -97,9 +97,19 @@
               x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
               frame_id="map"
               goal="{nav_goal}"/>
-          <DelayMs delay_msec="5000">
+          <!-- 收尾延时：给机械臂腿先跑收尾动作再开楼梯。
+               need_finish==0：无收尾，不延时；
+               need_finish==1 且 pick_count==1：第 1 次抓取(放置到车)，延时 5s；
+               need_finish==1 且 pick_count==2：第 2 次抓取(只举着)，延时 1s。 -->
+          <Switch2 variable="{need_finish}" case_1="1" case_2="0">
+            <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+              <DelayMs delay_msec="5000"><AlwaysSuccess/></DelayMs>
+              <DelayMs delay_msec="1000"><AlwaysSuccess/></DelayMs>
+              <AlwaysSuccess/>
+            </Switch2>
             <AlwaysSuccess/>
-          </DelayMs>  
+            <AlwaysSuccess/>
+          </Switch2>
           <!-- 楼梯腿 -->
           <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
             <ClimbStair   node="{node}" height="{abs_dh}"/>
