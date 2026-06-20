@@ -82,10 +82,10 @@
         遵循"移动时只移动，抓块时只抓块"原则。 -->
     <BehaviorTree ID="MoveBetweenBlocks">
       <Sequence>
-        <PublishGoal node="{node}"
+        <!-- <PublishGoal node="{node}"
                     x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                     frame_id="map"
-                    goal="{nav_goal}"/>
+                    goal="{nav_goal}"/> -->
         <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
 
         <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
@@ -104,18 +104,19 @@
       <Sequence>
         <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
         <Script code="pick_count += 1"/>
-        <PublishGoal node="{node}"
+        <!-- <PublishGoal node="{node}"
                     x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                     frame_id="map"
-                    goal="{nav_goal}"/>
+                    goal="{nav_goal}"/> -->
         <!-- ===== 预备：根据当前步的 from_id/target_id 摆出抓取预备姿势 ===== -->
         <SelectArmPrepName next_from_id="{from_id}"
-                          next_target_id="{target_id}"
+                           next_target_id="{target_id}"
                           arm_prep_name="{arm_prep_name}"/>
         <ArmMoveNamed node="{node}"
                       pose_name="{arm_prep_name}"
                       server_name="robotic_task"
-                      task_id="1"/>
+                      task_id="1"
+                      duration="1.5"/>
 
         <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
 
@@ -140,16 +141,16 @@
         <Switch2 variable="{pick_count}" case_1="1" case_2="2">
           <!-- 第 1 块：抓后放到车上 -->
           <Sequence>
-            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
-            <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+            <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
             <PublishPumpCmd node="{node}" command="0"/>
             <DelayMs delay_msec="5000">
               <AlwaysSuccess/>
             </DelayMs>  
-            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
-            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-            <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1"/>
+            <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+            <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+            <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.5"/>
           </Sequence>
           <!-- 第 2 块：抓后只举着 -->
           <Sequence>

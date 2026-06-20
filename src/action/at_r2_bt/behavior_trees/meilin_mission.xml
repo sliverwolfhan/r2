@@ -6,59 +6,76 @@
        然后路由到 MOVE/PICK/PUSH 子树。 -->
   <BehaviorTree ID="MainTree">
     <Sequence>
-      <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
-      <GetPlan node="{node}"
-               topic="/r2_planner/plan"
-               plan="{plan}"
-               num_steps="{num_steps}"/>
+      <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="6.0"
+                wait_after_set="0.3"
+                goal_angle_threshold="2.0"
+                wz_std="0.3"
+                vx_std="0.3"
+                vy_std="0.3"/>
+      <SetCostmapInflation node="{node}"
+                local_radius="0.3"
+                global_radius="0.3"
+                local_cost_scaling_factor="1.0"
+                global_cost_scaling_factor="4.0"/>
 
-      <!-- PICK 计数器：用来区分第几个抓取动作（第1块放置到车上，第2块只举着） -->
-      <Script code="pick_count := 0"/>
-      <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
-      <Script code="need_finish := 0"/>
+      <Sequence>
+        <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
+        <GetPlan node="{node}"
+                topic="/r2_planner/plan"
+                plan="{plan}"
+                num_steps="{num_steps}"/>
 
-      <WaitForEnter node="{node}"
-                    prompt="参数已设置完成，按 Enter 开始导航"
-                    require_tty="true"
-                    clear_buffer="true"
-                    timeout="0.0"/>
+        <!-- PICK 计数器：用来区分第几个抓取动作（第1块放置到车上，第2块只举着） -->
+        <Script code="pick_count := 0"/>
+        <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
+        <Script code="need_finish := 0"/>
 
-      <Repeat num_cycles="{num_steps}">
-        <Sequence>
-          <PopNextStep plan="{plan}"
-                       step_type="{step_type}"
-                       target_id="{target_id}"
-                       from_id="{from_id}"
-                       prep_x="{prep_x}"
-                       prep_y="{prep_y}"
-                       prep_yaw="{prep_yaw}"
-                       grasp_yaw="{grasp_yaw}"
-                       abs_dh="{abs_dh}"
-                       stair_dir="{stair_dir}"
-                       cube_x="{cube_x}"
-                       cube_y="{cube_y}"
-                       block_height="{block_h}"/>
+        <WaitForEnter node="{node}"
+                      prompt="参数已设置完成，按 Enter 开始导航"
+                      require_tty="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
 
-          <!-- Pop 已经把当前步从 plan 队首移走，
-               PeekNextStep 看到的就是真正的"下一步"。 -->
-          <PeekNextStep plan="{plan}"
-                        next_step_type="{next_step_type}"
-                        next_target_id="{next_target_id}"
-                        next_from_id="{next_from_id}"
-                        next_cube_x="{next_cube_x}"
-                        next_cube_y="{next_cube_y}"
-                        next_block_height="{next_block_height}"/>
-          <Switch3 variable="{step_type}"
-                   case_1="MOVE"
-                   case_2="PICK"
-                   case_3="PUSH">
-            <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
-            <SubTree ID="PickAtBlock" _autoremap="true"/>
-            <SubTree ID="PushAtBlock" _autoremap="true"/>
-            <AlwaysFailure/>
-          </Switch3>
-        </Sequence>
-      </Repeat>
+        <Repeat num_cycles="{num_steps}">
+          <Sequence>
+            <PopNextStep plan="{plan}"
+                        step_type="{step_type}"
+                        target_id="{target_id}"
+                        from_id="{from_id}"
+                        prep_x="{prep_x}"
+                        prep_y="{prep_y}"
+                        prep_yaw="{prep_yaw}"
+                        grasp_yaw="{grasp_yaw}"
+                        abs_dh="{abs_dh}"
+                        stair_dir="{stair_dir}"
+                        cube_x="{cube_x}"
+                        cube_y="{cube_y}"
+                        block_height="{block_h}"/>
+
+            <!-- Pop 已经把当前步从 plan 队首移走，
+                PeekNextStep 看到的就是真正的"下一步"。 -->
+            <PeekNextStep plan="{plan}"
+                          next_step_type="{next_step_type}"
+                          next_target_id="{next_target_id}"
+                          next_from_id="{next_from_id}"
+                          next_cube_x="{next_cube_x}"
+                          next_cube_y="{next_cube_y}"
+                          next_block_height="{next_block_height}"/>
+            <Switch3 variable="{step_type}"
+                    case_1="MOVE"
+                    case_2="PICK"
+                    case_3="PUSH">
+              <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
+              <SubTree ID="PickAtBlock" _autoremap="true"/>
+              <SubTree ID="PushAtBlock" _autoremap="true"/>
+              <AlwaysFailure/>
+            </Switch3>
+          </Sequence>
+        </Repeat>
+      </Sequence>
     </Sequence>
   </BehaviorTree>
 
@@ -68,20 +85,29 @@
        机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
   <BehaviorTree ID="MoveBetweenBlocks">
     <Sequence>
-      <!-- <PublishGoal node="{node}"
+      <PublishGoal node="{node}"
                    x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                    frame_id="map"
-                   goal="{nav_goal}"/> -->
+                   goal="{nav_goal}"/>
       <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
 
       <ParallelAll max_failures="1">
-        <!-- 楼梯腿 -->
-        <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-          <ClimbStair   node="{node}" height="{abs_dh}"/>
-          <DescendStair node="{node}" height="{abs_dh}"/>
-          <AlwaysSuccess/>
-        </Switch2>
+        <Sequence>
+          <PublishGoal node="{node}"
+              x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+              frame_id="map"
+              goal="{nav_goal}"/>
+          <DelayMs delay_msec="5000">
+            <AlwaysSuccess/>
+          </DelayMs>  
+          <!-- 楼梯腿 -->
+          <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+            <ClimbStair   node="{node}" height="{abs_dh}"/>
+            <DescendStair node="{node}" height="{abs_dh}"/>
+            <AlwaysSuccess/>
+          </Switch2>
 
+        </Sequence>
         <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体）。
              先做"上一个 PICK 的收尾"（与楼梯腿并行），再做"为下一个 PICK 的预备"。 -->
         <ForceSuccess>
@@ -92,25 +118,26 @@
                 <Switch2 variable="{pick_count}" case_1="1" case_2="2">
                   <!-- 第 1 块：抓后放到车上 -->
                   <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
+                    <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
                     <PublishPumpCmd node="{node}" command="0"/>
-                    <DelayMs delay_msec="1500">
+                    <DelayMs delay_msec="5000">
                       <AlwaysSuccess/>
                     </DelayMs>  
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.5"/>
                   </Sequence>
                   <!-- 第 2 块：抓后只举着 -->
                   <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
-                  </Sequence>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                  </Sequence>9
                   <!-- default：计数异常兜底，只举着 -->
                   <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1"/>
+                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
                   </Sequence>
                 </Switch2>
                 <!-- 收尾完成，清零，避免后续连续 MOVE 重复收尾 -->
@@ -129,7 +156,8 @@
                 <ArmMoveNamed node="{node}"
                               pose_name="{arm_prep_name}"
                               server_name="robotic_task"
-                              task_id="1"/>
+                              task_id="1"
+                              duration="1.5"/>
               </Sequence>
               <AlwaysSuccess/>
               <AlwaysSuccess/>
@@ -152,11 +180,16 @@
       <Script code="pick_count += 1"/>
 
       <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
-      <!-- <PublishGoal node="{node}"
-                   x="{prep_x}" y="{prep_y}" yaw="{grasp_yaw}"
+      <PublishGoal node="{node}"
+                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                    frame_id="map"
-                   goal="{nav_goal}"/> -->
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/>
+                   goal="{nav_goal}"/>
+      <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/> -->
+      <!-- <ArmMoveNamed node="{node}"
+                    pose_name="pick_front_up200"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="1.5"/> -->
       <PublishPumpCmd node="{node}" command="1"/>
       <ArmTask node="{node}"
                task_id="2"
