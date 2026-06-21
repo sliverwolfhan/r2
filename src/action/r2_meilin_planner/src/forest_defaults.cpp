@@ -43,21 +43,21 @@ void fill_default_forest_topology(ForestConfig & config)
   config.adjacency_list[12].push_back(13);
   config.adjacency_list[13] = {};
 
-  // 高度保持原物理布局（新编号 = 13 - 旧编号）
-  config.node_heights[1] = 200;
-  config.node_heights[2] = 400;
-  config.node_heights[3] = 200;
-  config.node_heights[4] = 400;
-  config.node_heights[5] = 600;
-  config.node_heights[6] = 400;
-  config.node_heights[7] = 200;
-  config.node_heights[8] = 400;
-  config.node_heights[9] = 600;
-  config.node_heights[10] = 400;
-  config.node_heights[11] = 200;
-  config.node_heights[12] = 400;
-  config.node_heights[0] = 0;
-  config.node_heights[13] = 0;
+  // 高度按梅林方块序号写死（单位：米，红/蓝区一致，与 block_*.yaml 同源）
+  config.node_heights[1] = 0.40;
+  config.node_heights[2] = 0.20;
+  config.node_heights[3] = 0.40;
+  config.node_heights[4] = 0.20;
+  config.node_heights[5] = 0.40;
+  config.node_heights[6] = 0.60;
+  config.node_heights[7] = 0.40;
+  config.node_heights[8] = 0.60;
+  config.node_heights[9] = 0.40;
+  config.node_heights[10] = 0.20;
+  config.node_heights[11] = 0.40;
+  config.node_heights[12] = 0.20;
+  config.node_heights[0] = 0.0;
+  config.node_heights[13] = 0.0;
 }
 
 }  // namespace r2_planner

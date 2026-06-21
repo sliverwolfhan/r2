@@ -1,0 +1,30 @@
+# R2 梅林规划器调参文件
+# 被 kfs_subscriber_node 读取，驱动 A* 路径规划的代价与红蓝区选择。
+kfs_subscriber_node:
+  ros__parameters:
+    # 赛区选择：red / blue
+    zone: "red"
+
+    # 基础动作代价
+    move_cost: 1.0        # 平移一格的基础代价
+    descend_200_cost: 0.2 # 下台阶 高度差落在 [-0.2, 0) 的额外代价
+    descend_400_cost: 0.4 # 下台阶 高度差落在 [-0.4, -0.2) 的额外代价
+    pick_cost: 2.0        # 抓取一个 R2 KFS
+    push_cost: 4.0        # 推走挡路 KFS
+
+    # 爬高代价
+    climb_200_cost: 1.5   # 高度差 (0, 0.2] m
+    climb_400_cost: 3.5   # 高度差 (0.2, 0.4] m，仅当 can_climb_400=true 生效
+
+    # 转弯代价：每转 90° 加一次，掉头 180°=2×。
+    turn_cost: 0.5
+
+    # 400 台阶开关：
+    can_climb_400: true
+
+    # 高度开关：true 时忽略台阶高度（升/降代价清零、强制可上 400）。
+    ignore_height: false
+
+    # 准备位姿偏移量（米）：准备点 = 目标中心沿单轴退此距离，越小越靠近目标。
+    move_prep_offset: 0.1   # MOVE 准备点
+    grasp_prep_offset: 0.1  # PICK / PUSH 准备点

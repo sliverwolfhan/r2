@@ -33,22 +33,53 @@ uint16_t R2MeilinPlanner::clearNodeOccupied(uint16_t mask, int node_id) const {
 }
 
 double R2MeilinPlanner::calculateMoveCost(int from_node, int to_node) const {
-    double translation_cost = 1.0;
+    const CostConfig & c = config_.cost;
+    double translation_cost = c.move_cost;
     double height_diff = 0.0;
     if (config_.node_heights.count(to_node) && config_.node_heights.count(from_node)) {
         height_diff = config_.node_heights.at(to_node) - config_.node_heights.at(from_node);
     }
     double climb_cost = 0.0;
-    if (height_diff > 0) {
-        if (height_diff <= 200.0) climb_cost = 1.5;
-        else if (height_diff <= 400.0) climb_cost = 3.5;
-        else climb_cost = 10000.0;
-    } else if (height_diff < 0) climb_cost = 0.2;
+    if (height_diff > 1e-3) {                         // 米制：高度差分两档
+        if (height_diff <= 0.2 + 1e-3) {
+            climb_cost = c.climb_200_cost;
+        } else if (height_diff <= 0.4 + 1e-3) {
+            climb_cost = c.can_climb_400 ? c.climb_400_cost : c.prohibitive_cost;
+        } else {
+            climb_cost = c.prohibitive_cost;          // >0.4（含 600）不可上
+        }
+    } else if (height_diff < -1e-3) {
+        const double drop = -height_diff;            // 下台阶也分两档
+        if (drop <= 0.2 + 1e-3) {
+            climb_cost = c.descend_200_cost;
+        } else {
+            // 下 400：与上 400 用同一开关，can_climb_400=false 时下行也禁止（绕开）。
+            climb_cost = c.can_climb_400 ? c.descend_400_cost : c.prohibitive_cost;
+        }
+    }
     return translation_cost + climb_cost;
 }
 
-double R2MeilinPlanner::calculatePickCost() const { return 2.0; }
-double R2MeilinPlanner::calculatePushCost() const { return 4.0; } // 推走 KFS 代价比拾取高
+double R2MeilinPlanner::calculatePickCost() const { return config_.cost.pick_cost; }
+double R2MeilinPlanner::calculatePushCost() const { return config_.cost.push_cost; }
+
+int R2MeilinPlanner::moveHeading(int from_node, int to_node) const {
+    // 进出场（涉及入口 0 / 出口 13）一律视为 +x 前进，与 prep_pose 规则一致。
+    if (from_node == ENTRY_NODE_ID || to_node == EXIT_NODE_ID) return 0;   // +x
+    if (to_node == ENTRY_NODE_ID || from_node == EXIT_NODE_ID) return 2;   // -x（防御）
+    const int diff = to_node - from_node;
+    if (diff == 3)  return 0;   // 同列上一行 → +x 前进
+    if (diff == -3) return 2;   // -x 后退
+    if (diff == 1)  return 1;   // 同行下一列 → +y 左
+    if (diff == -1) return 3;   // -y 右
+    return 0;                   // 理论不会到这（相邻必差 ±1/±3）
+}
+
+int R2MeilinPlanner::turnQuarters(int from_heading, int to_heading) const {
+    int d = std::abs(from_heading - to_heading) % 4;   // 0/1/2/3
+    if (d == 3) d = 1;                                 // 270° 等价 90°
+    return d;                                          // 0 直行 / 1 转 90° / 2 掉头
+}
 
 double R2MeilinPlanner::calculateHeuristic(const SearchState& state) const {
     int remaining = KFS_TARGET_COUNT - state.kfs_held_count;
@@ -82,8 +113,9 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
     std::unordered_set<SearchState, StateHasher> closed_set;
 
     auto start = std::make_shared<SearchState>();
-    start->current_node_id = ENTRY_NODE_ID; start->kfs_held_count = 0; start->r1_cleared_count = 0;
+    start->current_node_id = ENTRY_NODE_ID; start->kfs_held_count = 0;
     start->env_mask = generateInitialMask(); start->g_cost = 0.0;
+    start->heading = 0;  // 车头朝 +x，对着 1/2/3
     start->f_cost = calculateHeuristic(*start); start->parent = nullptr; start->action_taken = "START";
     open_list.push(start);
 
@@ -100,23 +132,23 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
         if (config_.adjacency_list.count(current->current_node_id) == 0) continue;
         const auto& neighbors = config_.adjacency_list.at(current->current_node_id);
 
-        // 1. MOVE 动作
+        // 强制态：前排(1/2/3)有 R2 目标且一个都还没抓时，必须先抓一个前排 R2 才能上台阶。
+        // 此态下禁止移动(上台阶)与推走，唯一允许的动作是抓前排 R2。
+        const bool is_forced_pick = (front_row_has_target && current->kfs_held_count == 0);
+
+        // 1. MOVE 动作（强制态下禁止移动，必须先抓前排）
         for (int next : neighbors) {
+            if (is_forced_pick) break;
             if (!isNodeOccupied(current->env_mask, next)) {
                 auto ns = std::make_shared<SearchState>(*current);
-                ns->current_node_id = next; ns->g_cost += calculateMoveCost(current->current_node_id, next);
+                const int nh = moveHeading(current->current_node_id, next);
+                const int q = turnQuarters(current->heading, nh);
+                ns->current_node_id = next;
+                ns->heading = nh;
+                ns->g_cost += calculateMoveCost(current->current_node_id, next)
+                              + q * config_.cost.turn_cost;
                 ns->f_cost = ns->g_cost + calculateHeuristic(*ns); ns->parent = current;
                 ns->action_taken = "MOVE to " + std::to_string(next);
-                if (!closed_set.count(*ns)) open_list.push(ns);
-            }
-            else if (config_.initial_items.count(next) && config_.initial_items.at(next) == BlockState::R1_KFS 
-                     && current->r1_cleared_count < 2) {
-                auto ns = std::make_shared<SearchState>(*current);
-                ns->current_node_id = next; ns->r1_cleared_count += 1;
-                ns->env_mask = clearNodeOccupied(ns->env_mask, next);
-                ns->g_cost += (calculateMoveCost(current->current_node_id, next) + R1_ASSIST_COST);
-                ns->f_cost = ns->g_cost + calculateHeuristic(*ns); ns->parent = current;
-                ns->action_taken = "R1_CLEAR " + std::to_string(next) + " then MOVE";
                 if (!closed_set.count(*ns)) open_list.push(ns);
             }
         }
@@ -124,24 +156,31 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
         // 2. 对相邻的绿色秘籍 (R2_KFS) 的操作
         for (int adj : neighbors) {
             if (isNodeOccupied(current->env_mask, adj) && config_.initial_items.at(adj) == BlockState::R2_KFS) {
-                
-                // 规则 4.4.15 修正：如果前排有目标，且还没抓过，则必须先抓前排的
-                bool is_forced_pick = (front_row_has_target && current->kfs_held_count == 0);
+
+                // 规则 4.4.15：强制态下只能抓前排 R2（既不能上台阶也不能推）
                 bool is_adj_in_front = std::find(front_row.begin(), front_row.end(), adj) != front_row.end();
-                
-                // PICK
-                if (current->kfs_held_count < KFS_TARGET_COUNT) {
-                    if (!is_forced_pick || is_adj_in_front) {
-                        auto ns = std::make_shared<SearchState>(*current);
-                        ns->kfs_held_count += 1; ns->env_mask = clearNodeOccupied(ns->env_mask, adj);
-                        ns->g_cost += calculatePickCost(); ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
-                        ns->parent = current; ns->action_taken = "PICK at " + std::to_string(adj);
-                        if (!closed_set.count(*ns)) open_list.push(ns);
-                    }
+
+                // PICK 准入：
+                //   held==0：强制态只能抓前排 R2；非强制态可自由抓。
+                //   held==1：挡道的相邻 R2 直接抓——抓走它既凑满 2 个、又顺手让开了路，
+                //            优于推（pick 比 push 便宜，A* 会自动取代推）；
+                //            万一抓满后反被堵死到不了出口，A* 会回退到"先推、后面再抓"。
+                bool pick_allowed = false;
+                if (current->kfs_held_count == 0) {
+                    pick_allowed = (!is_forced_pick || is_adj_in_front);
+                } else if (current->kfs_held_count == 1) {
+                    pick_allowed = true;
+                }
+                if (pick_allowed && current->kfs_held_count < KFS_TARGET_COUNT) {
+                    auto ns = std::make_shared<SearchState>(*current);
+                    ns->kfs_held_count += 1; ns->env_mask = clearNodeOccupied(ns->env_mask, adj);
+                    ns->g_cost += calculatePickCost(); ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
+                    ns->parent = current; ns->action_taken = "PICK at " + std::to_string(adj);
+                    if (!closed_set.count(*ns)) open_list.push(ns);
                 }
 
-                // PUSH
-                if (!is_forced_pick || is_adj_in_front) {
+                // PUSH（强制态下禁止推走，必须先抓前排 R2；抓满 2 个后失去推走能力）
+                if (!is_forced_pick && current->kfs_held_count < KFS_TARGET_COUNT) {
                     auto ns_push = std::make_shared<SearchState>(*current);
                     ns_push->env_mask = clearNodeOccupied(ns_push->env_mask, adj);
                     ns_push->g_cost += calculatePushCost(); ns_push->f_cost = ns_push->g_cost + calculateHeuristic(*ns_push);
@@ -163,7 +202,7 @@ double normalize_angle(double a) {
 
 // 字符串解析助手；返回 false 表示该步格式异常应跳过。
 struct ParsedAction {
-    enum Op { MOVE, PICK, PUSH, R1_CLEAR_MOVE, UNKNOWN } op = UNKNOWN;
+    enum Op { MOVE, PICK, PUSH, UNKNOWN } op = UNKNOWN;
     int target = 0;
 };
 
@@ -178,12 +217,6 @@ ParsedAction parseAction(const std::string & s) {
     } else if (s.rfind("PUSH ", 0) == 0) {
         p.op = ParsedAction::PUSH;
         try { p.target = std::stoi(s.substr(5)); } catch (...) { p.op = ParsedAction::UNKNOWN; }
-    } else if (s.rfind("R1_CLEAR ", 0) == 0) {
-        p.op = ParsedAction::R1_CLEAR_MOVE;
-        try {
-            const auto pos = s.find(" then");
-            p.target = std::stoi(s.substr(9, (pos == std::string::npos ? std::string::npos : pos - 9)));
-        } catch (...) { p.op = ParsedAction::UNKNOWN; }
     }
     return p;
 }
@@ -201,14 +234,17 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
     }
 
     int robot_node = ENTRY_NODE_ID;  // 机器人初始位置 = 入口
+    double prev_heading = 0.0;       // 车头初始朝 +x（对着 1/2/3 侧），与 A* 起点一致
+    bool has_prev_heading = true;
 
-    // prep = 从 target_center 沿主方向(±x 或 ±y)退 1 格距离的位置，机器人在 from
-    // 上对齐到这一点；yaw 朝向 target。MOVE/PICK/PUSH 共用同一套规则。
+    // prep = 机器人站立的 from 格中心，沿主方向(±x 或 ±y)朝目标轻推 offset 的位置。
+    // 机器人在 from 格上对齐到这一点。MOVE/PICK/PUSH 共用，仅偏移量(offset)不同。
     //   - 进入/离开赛场（涉及 0 或 13 strip）强制 +x 轴；
     //   - 否则取 |dx|, |dy| 中较大者作主方向；浮点等量时退化为 +x 兜底。
-    constexpr double CELL_PITCH = 1.2;  // m
+    // theta 在外部按动作类型另行设置（MOVE 朝向目标；PICK/PUSH 用离散方位规则）。
     constexpr double AXIS_EPS = 1e-3;   // m，浮点比较容差
-    auto fill_prep_pose = [&](int from_id, int target_id, robot_interfaces::msg::PlanStep & step) {
+    auto fill_prep_pose = [&](int from_id, int target_id, double offset,
+                              robot_interfaces::msg::PlanStep & step) {
         if (!blocks_.has(from_id) || !blocks_.has(target_id)) {
             throw std::runtime_error(
                 "BlockTable missing id " +
@@ -234,9 +270,9 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             ux = (dx >= 0.0) ? 1.0 : -1.0;
         }
 
-        step.prep_pose.x = t.x - CELL_PITCH * ux;
-        step.prep_pose.y = t.y - CELL_PITCH * uy;
-        step.prep_pose.theta = std::atan2(uy, ux);
+        step.prep_pose.x = f.x + offset * ux;   // 锚在 from 格，朝目标推 offset
+        step.prep_pose.y = f.y + offset * uy;
+        step.prep_pose.theta = std::atan2(uy, ux);  // 默认朝向目标；PICK/PUSH 在外部覆盖
     };
 
     for (const std::string & line : raw) {
@@ -247,12 +283,20 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
 
         robot_interfaces::msg::PlanStep step;
 
-        if (a.op == ParsedAction::MOVE || a.op == ParsedAction::R1_CLEAR_MOVE) {
+        if (a.op == ParsedAction::MOVE) {
             step.type = robot_interfaces::msg::PlanStep::TYPE_MOVE;
             step.from_id = robot_node;
             step.target_id = a.target;
 
-            fill_prep_pose(step.from_id, step.target_id, step);
+            fill_prep_pose(step.from_id, step.target_id, config_.move_prep_offset, step);
+
+            // 转角 = 本段行进朝向 - 上一段行进朝向（仅 MOVE 之间累计；PICK/PUSH 不转底盘）。
+            const double cur_heading = step.prep_pose.theta;
+            step.turn_deg = has_prev_heading
+                ? normalize_angle(cur_heading - prev_heading) * 180.0 / M_PI
+                : 0.0;
+            prev_heading = cur_heading;
+            has_prev_heading = true;
 
             const auto & f = blocks_.at(step.from_id);
             const auto & t = blocks_.at(step.target_id);
@@ -275,12 +319,19 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             step.target_id = a.target;
 
             // PICK/PUSH 复用 prep 公式：robot 在 from 块上对齐到 target 那一侧
-            fill_prep_pose(step.from_id, step.target_id, step);
+            fill_prep_pose(step.from_id, step.target_id, config_.grasp_prep_offset, step);
             const auto & f = blocks_.at(step.from_id);
             const auto & t = blocks_.at(step.target_id);
-            const double dir_to_target = std::atan2(t.y - f.y, t.x - f.x);
-            // 机械臂在车体右侧：让 base 的右侧方向(yaw - pi/2)对准目标方向。
-            step.grasp_yaw = normalize_angle(dir_to_target + M_PI_2);
+            const double dx = t.x - f.x;
+            const double dy = t.y - f.y;
+            // 准备角度按目标在世界系下的方位离散取值（无后方情况）：
+            //   前(+x) 或 左(+y) → 0；右(-y) → -pi/2。
+            double prep_theta = 0.0;
+            if (std::abs(dy) > std::abs(dx) + AXIS_EPS && dy < 0.0) {
+                prep_theta = -M_PI_2;          // 目标在右方
+            }
+            step.prep_pose.theta = prep_theta;
+            step.grasp_yaw = prep_theta;       // 已弃用，留同值兼容下游 BT
 
             step.cube_x = t.cube_x;
             step.cube_y = t.cube_y;

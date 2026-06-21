@@ -7,16 +7,16 @@
 #include "robot_interfaces/msg/plan.hpp"
 
 #include "r2_meilin_planner/block_table.hpp"
-#include "r2_meilin_planner/r2_qt_planner_window.hpp"
+#include "r2_meilin_planner/r2_planner_qt_test_window.hpp"
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
   QApplication app(argc, argv);
-  QApplication::setApplicationName("r2_qt_planner_node");
+  QApplication::setApplicationName("r2_planner_qt_test");
 
-  auto node = rclcpp::Node::make_shared("r2_qt_planner_node");
+  auto node = rclcpp::Node::make_shared("r2_planner_qt_test");
   RCLCPP_INFO(node->get_logger(), "Qt planner UI (12 cells, Plan button).");
 
   // 加载方块表（默认使用包内 config/blocks.yaml，支持 ROS 参数 blocks_yaml 覆盖）

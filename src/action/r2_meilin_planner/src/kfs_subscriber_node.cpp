@@ -1,0 +1,193 @@
+#include <array>
+#include <atomic>
+#include <string>
+
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
+
+#include "ament_index_cpp/get_package_share_directory.hpp"
+#include "robot_interfaces/msg/plan.hpp"
+
+#include "r2_meilin_planner/planner.hpp"
+#include "r2_meilin_planner/forest_defaults.hpp"
+#include "r2_meilin_planner/block_table.hpp"
+
+namespace {
+
+// 下位机 kfs_data 取值约定（见 at_r2_serial_bridge）：
+//   0:空  1:R1要取走的  2:R2  3:Fake  4:R1留下未取的KFS
+// 对 R2 而言：1(R1已取走)与 0 一样是空的、无 KFS、可通行；
+//             4(R1未取，实物还在) 当障碍处理，归为 R1_KFS。
+r2_planner::BlockState state_from_code(int32_t code)
+{
+  using r2_planner::BlockState;
+  switch (code) {
+    case 0:
+      return BlockState::EMPTY;
+    case 1:
+      return BlockState::EMPTY;    // R1 要取走，等 R2 上场已是空
+    case 2:
+      return BlockState::R2_KFS;
+    case 3:
+      return BlockState::FAKE_KFS;
+    case 4:
+      return BlockState::R1_KFS;  // R1未取，实物仍在，当障碍
+    default:
+      return BlockState::EMPTY;   // 未知值兜底为空
+  }
+}
+
+const char * state_name(r2_planner::BlockState s)
+{
+  using r2_planner::BlockState;
+  switch (s) {
+    case BlockState::EMPTY:    return "EMPTY";
+    case BlockState::R1_KFS:   return "R1_KFS";
+    case BlockState::R2_KFS:   return "R2_KFS";
+    case BlockState::FAKE_KFS: return "FAKE_KFS";
+  }
+  return "?";
+}
+
+}  // namespace
+
+class KfsSubscriberNode : public rclcpp::Node
+{
+public:
+  KfsSubscriberNode()
+  : Node("kfs_subscriber_node")
+  {
+    // 红蓝区：red → block_red.yaml，blue → block_blue.yaml
+    const std::string zone = this->declare_parameter<std::string>("zone", "red");
+    const std::string share =
+      ament_index_cpp::get_package_share_directory("r2_meilin_planner");
+    const std::string block_file =
+      (zone == "blue") ? "block_blue.yaml" : "block_red.yaml";
+    blocks_path_ = share + "/config/" + block_file;
+
+    std::string err;
+    if (!blocks_.loadFromYaml(blocks_path_, &err)) {
+      RCLCPP_FATAL(this->get_logger(), "加载 %s 失败: %s", blocks_path_.c_str(), err.c_str());
+      throw std::runtime_error(err);
+    }
+
+    // 代价参数（默认值与 CostConfig 默认一致）
+    cost_.move_cost        = this->declare_parameter<double>("move_cost", cost_.move_cost);
+    cost_.descend_200_cost = this->declare_parameter<double>("descend_200_cost", cost_.descend_200_cost);
+    cost_.descend_400_cost = this->declare_parameter<double>("descend_400_cost", cost_.descend_400_cost);
+    cost_.pick_cost        = this->declare_parameter<double>("pick_cost", cost_.pick_cost);
+    cost_.push_cost        = this->declare_parameter<double>("push_cost", cost_.push_cost);
+    cost_.climb_200_cost   = this->declare_parameter<double>("climb_200_cost", cost_.climb_200_cost);
+    cost_.climb_400_cost   = this->declare_parameter<double>("climb_400_cost", cost_.climb_400_cost);
+    cost_.turn_cost        = this->declare_parameter<double>("turn_cost", cost_.turn_cost);
+    cost_.can_climb_400    = this->declare_parameter<bool>("can_climb_400", cost_.can_climb_400);
+
+    // 准备位姿偏移量（米，越小越靠近目标），MOVE 与 PICK/PUSH 分开设
+    move_prep_offset_  = this->declare_parameter<double>("move_prep_offset", 0.6);
+    grasp_prep_offset_ = this->declare_parameter<double>("grasp_prep_offset", 0.6);
+
+    // 高度开关：true 时把升/降代价清零并强制可上 400，使路径规划完全忽略高度
+    const bool ignore_height = this->declare_parameter<bool>("ignore_height", false);
+    if (ignore_height) {
+      cost_.climb_200_cost   = 0.0;
+      cost_.climb_400_cost   = 0.0;
+      cost_.descend_200_cost = 0.0;
+      cost_.descend_400_cost = 0.0;
+      cost_.can_climb_400    = true;
+    }
+
+    // 与 plan_yaml_publisher_node 一致：同话题、同 QoS（latched），下游 BT 无需改动
+    plan_pub_ = this->create_publisher<robot_interfaces::msg::Plan>(
+      "/r2_planner/plan", rclcpp::QoS(1).transient_local().reliable());
+
+    sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
+      "/AT_R2/kfs_positions", 10,
+      std::bind(&KfsSubscriberNode::on_kfs, this, std::placeholders::_1));
+
+    RCLCPP_INFO(
+      this->get_logger(),
+      "zone=%s, 方块表 %s，can_climb_400=%s，ignore_height=%s，等待 KFS 数据后规划并发布 /r2_planner/plan",
+      zone.c_str(), blocks_path_.c_str(),
+      cost_.can_climb_400 ? "true" : "false", ignore_height ? "true" : "false");
+  }
+
+private:
+  void on_kfs(const std_msgs::msg::Int32MultiArray::SharedPtr msg)
+  {
+    if (msg->data.size() != 12) {
+      RCLCPP_WARN(
+        this->get_logger(), "kfs_positions 长度异常: 期望 12, 收到 %zu", msg->data.size());
+      return;
+    }
+
+    // 数据只发一次：规划成功后就不再重复处理
+    if (planned_.load()) {
+      return;
+    }
+
+    // 1) 解析：data[i] 对应方块 id = i + 1（1..12）
+    r2_planner::ForestConfig config;
+    r2_planner::fill_default_forest_topology(config);
+    config.cost = cost_;  // 应用可调代价
+    config.move_prep_offset  = move_prep_offset_;
+    config.grasp_prep_offset = grasp_prep_offset_;
+
+    std::string line;
+    for (int i = 0; i < 12; ++i) {
+      const r2_planner::BlockState s = state_from_code(msg->data[static_cast<size_t>(i)]);
+      config.initial_items[i + 1] = s;
+      line += " [" + std::to_string(i + 1) + "]" + state_name(s);
+    }
+    RCLCPP_INFO(this->get_logger(), "解析 KFS 布局:%s", line.c_str());
+
+    // 用 block yaml 的 height（米）覆写节点高度，使代价与坐标用同一份数据
+    for (int id = 0; id <= 13; ++id) {
+      if (blocks_.has(id)) {
+        config.node_heights[id] = blocks_.at(id).height;
+      }
+    }
+
+    // 2) 规划：注入 blocks 后产出带 map 系坐标的结构化步骤
+    r2_planner::R2MeilinPlanner planner(config, blocks_);
+    std::vector<robot_interfaces::msg::PlanStep> steps;
+    try {
+      steps = planner.planPathStruct();
+    } catch (const std::exception & ex) {
+      RCLCPP_ERROR(this->get_logger(), "规划失败: %s", ex.what());
+      return;
+    }
+
+    if (steps.empty()) {
+      RCLCPP_WARN(this->get_logger(), "规划无可行路径（KFS 布局可能不可解），等待下一帧");
+      return;
+    }
+
+    // 3) 发布
+    robot_interfaces::msg::Plan plan;
+    plan.header.stamp = this->get_clock()->now();
+    plan.notes = "plan from /AT_R2/kfs_positions";
+    plan.steps = std::move(steps);
+    plan_pub_->publish(plan);
+    planned_.store(true);
+
+    RCLCPP_INFO(
+      this->get_logger(), "已规划 %zu 步并发布到 /r2_planner/plan", plan.steps.size());
+  }
+
+  rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr sub_;
+  rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub_;
+  r2_planner::BlockTable blocks_;
+  r2_planner::CostConfig cost_;
+  double move_prep_offset_ = 0.6;
+  double grasp_prep_offset_ = 0.6;
+  std::string blocks_path_;
+  std::atomic<bool> planned_{false};
+};
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<KfsSubscriberNode>());
+  rclcpp::shutdown();
+  return 0;
+}

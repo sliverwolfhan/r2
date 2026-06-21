@@ -90,7 +90,7 @@ private:
 
     out.notes = root["notes"] ? root["notes"].as<std::string>() : std::string();
     if (!root["steps"] || !root["steps"].IsSequence()) {
-      throw std::runtime_error("plan_meilin.yaml missing key 'steps' sequence");
+      throw std::runtime_error("plan_meilin1.yaml missing key 'steps' sequence");
     }
 
     out.steps.reserve(root["steps"].size());

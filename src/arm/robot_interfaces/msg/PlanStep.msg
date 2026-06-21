@@ -22,6 +22,9 @@ uint8 STAIR_UP   = 1
 uint8 STAIR_DOWN = 2
 uint8 stair_dir
 
+float64 turn_deg                  # 进入本段相对上一段朝向的转角(度)：+左转 -右转 0直行 ±180掉头
+                                  # 车头初始朝向 1/2/3 侧；仅 MOVE 有意义
+
 # === PICK / PUSH 用 ===
 float64 cube_x                    # 物块在 map 下的 x
 float64 cube_y                    # 物块在 map 下的 y
