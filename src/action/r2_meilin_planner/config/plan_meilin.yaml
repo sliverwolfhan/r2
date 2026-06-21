@@ -33,49 +33,49 @@ steps:
     abs_dh: 0.2
     stair_dir: UP
 
-  # - type: MOVE
-  #   from_id: 12
-  #   target_id: 9
-  #   prep_pose: {x: 7.3, y: 4.2, theta: 3.14}
-  #   abs_dh: 0.2
-  #   stair_dir: UP
+  - type: MOVE
+    from_id: 12
+    target_id: 9
+    prep_pose: {x: 7.4, y: 4.2, theta: 3.14}
+    abs_dh: 0.2
+    stair_dir: UP
 
-  # - type: PICK
-  #   from_id: 9
-  #   target_id: 8
-  #   prep_pose: {x: 6.2, y: 4.1, theta: 3.14}
-  #   grasp_yaw: 0.0
-  #   cube_x: 6.2
-  #   cube_y: 3.0
-  #   block_height: 0.17
+  - type: PICK
+    from_id: 9
+    target_id: 8
+    prep_pose: {x: 6.2, y: 4.1, theta: 3.14}
+    grasp_yaw: 0.0
+    cube_x: 6.2
+    cube_y: 3.0
+    block_height: 0.17
 
-  # - type: MOVE
-  #   from_id: 9
-  #   target_id: 6
-  #   prep_pose: {x: 6.2, y: 4.2, theta: 3.14}
-  #   abs_dh: 0.2
-  #   stair_dir: UP
+  - type: MOVE
+    from_id: 9
+    target_id: 6
+    prep_pose: {x: 6.2, y: 4.2, theta: 3.14}
+    abs_dh: 0.2
+    stair_dir: UP
 
-  # - type: MOVE
-  #   from_id: 6
-  #   target_id: 5
-  #   prep_pose: {x: 5.0, y: 4.2, theta: -1.57}
-  #   abs_dh: 0.2
-  #   stair_dir: DOWN
+  - type: MOVE
+    from_id: 6
+    target_id: 5
+    prep_pose: {x: 5.0, y: 4.2, theta: -1.57}
+    abs_dh: 0.2
+    stair_dir: DOWN
 
-  # - type: MOVE
-  #   from_id: 5
-  #   target_id: 2
-  #   prep_pose: {x: 5.0, y: 3.0, theta: 3.14}
-  #   abs_dh: 0.2
-  #   stair_dir: DOWN
+  - type: MOVE
+    from_id: 5
+    target_id: 2
+    prep_pose: {x: 5.0, y: 3.0, theta: 3.14}
+    abs_dh: 0.2
+    stair_dir: DOWN
 
-  # - type: MOVE
-  #   from_id: 2
-  #   target_id: 0
-  #   prep_pose: {x: 3.8, y: 3.0, theta: 3.14}
-  #   abs_dh: 0.2
-  #   stair_dir: DOWN
+  - type: MOVE
+    from_id: 2
+    target_id: 0
+    prep_pose: {x: 3.8, y: 3.0, theta: 3.14}
+    abs_dh: 0.2
+    stair_dir: DOWN
 
 
 

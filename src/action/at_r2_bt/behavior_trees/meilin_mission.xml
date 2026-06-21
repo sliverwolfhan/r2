@@ -194,7 +194,7 @@
                   <AlwaysSuccess/>
                   <AlwaysSuccess/>
                   <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-                    <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
+                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
                     <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
                     <AlwaysSuccess/>
                   </Switch2>

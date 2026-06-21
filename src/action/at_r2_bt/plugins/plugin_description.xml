@@ -71,11 +71,14 @@
   </class>
   <class type="nav2_bt_publish_goal::SelectArmPrepNameAction" base_class_type="BT::ActionNodeBase">
     <description>
-      Reads block_blue.yaml and computes the named arm preparation pose for an
-      upcoming PICK based on (next_from_id, next_target_id): direction (front /
-      right) by sign of dy, height bucket by round(dh / 0.2). Outputs the name
-      string (pick_front_up400 / pick_front_up200 / pick_front_down200 /
-      pick_right_up200 / pick_right_down200) into arm_prep_name.
+      Reads block_blue.yaml + arm_ready_position.yaml and computes the named arm
+      preparation pose for an upcoming PICK based on (next_from_id,
+      next_target_id). The arm only reaches to the body's left, so when the
+      target is on map +y (dy > 0) and a `pick_left_<suffix>` exists in
+      arm_ready_position.yaml it is preferred; otherwise falls back to
+      `pick_front_<suffix>`. Suffix is decided by round(dh / 0.2):
+      +1 → up200, +2 → up400, -1 → down200, -2 → down400. Outputs the chosen
+      name into arm_prep_name; FAILURE if neither candidate exists.
     </description>
   </class>
   <class type="nav2_bt_publish_goal::IsPrepSkippableCondition" base_class_type="BT::ConditionNode">

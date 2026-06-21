@@ -82,7 +82,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     geometry_msgs::msg::TransformStamped target_tf;
     bool tf_ok = false;
     try {
-        if (robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 2s)) {
+        if (robot->tf_buffer_->canTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero, 200ms)) {
             target_tf = robot->tf_buffer_->lookupTransform(robot->base_frame_, robot->object_frame_, tf2::TimePointZero);
             tf_ok = true;
         } else {
