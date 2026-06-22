@@ -12,9 +12,9 @@
                 goal_angle_weight="6.0"
                 wait_after_set="0.3"
                 goal_angle_threshold="2.0"
-                wz_std="0.3"
-                vx_std="0.3"
-                vy_std="0.3"/>
+                wz_std="0.4"
+                vx_std="0.4"
+                vy_std="0.4"/>
       <SetCostmapInflation node="{node}"
                 local_radius="0.3"
                 global_radius="0.3"
@@ -79,7 +79,28 @@
           </Sequence>
         </Repeat>
       </Sequence>
+      <Sequence>
+        <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="6.0"
+                wait_after_set="0.3"
+                goal_angle_threshold="6.0"
+                wz_std="0.4"
+                vx_std="0.4"
+                vy_std="0.4"/>
+        <PublishGoal node="{node}" x="8.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="11.5" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <SetCostmapInflation node="{node}"
+                local_radius="0.45"
+                global_radius="0.45"
+                local_cost_scaling_factor="1.0"
+                global_cost_scaling_factor="4.0"/>
+        <PublishGoal node="{node}" x="10.7" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+
+      </Sequence>
     </Sequence>
+
   </BehaviorTree>
 
   <!-- ================== MOVE 子树 ==================
@@ -96,10 +117,25 @@
 
       <ParallelAll max_failures="1">
         <Sequence>
-          <PublishGoal node="{node}"
-              x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-              frame_id="map"
-              goal="{nav_goal}"/>
+          <!-- 仅在"无收尾动作"时检查能否跳过导航：
+               need_finish==0 且当前已经在 prep 容差内 → 不发 goal；
+               否则正常 PublishGoal，等到达再继续。 -->
+          <Fallback>
+            <Sequence>
+              <ScriptCondition code="need_finish == 0"/>
+              <IsPrepSkippable node="{node}"
+                               target_x="{prep_x}"
+                               target_y="{prep_y}"
+                               target_yaw="{prep_yaw}"
+                               x_tolerance="0.10"
+                               y_tolerance="0.10"
+                               yaw_tolerance="0.08"/>
+            </Sequence>
+            <PublishGoal node="{node}"
+                x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                frame_id="map"
+                goal="{nav_goal}"/>
+          </Fallback>
           <!-- 收尾延时：给机械臂腿先跑收尾动作再开楼梯。
                need_finish==0：无收尾，不延时；
                need_finish==1 且 pick_count==1：第 1 次抓取(放置到车)，延时 5s；
@@ -107,11 +143,11 @@
                need_finish==2：PUSH 收尾，延时 1s。 -->
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
-              <DelayMs delay_msec="5000"><AlwaysSuccess/></DelayMs>
-              <DelayMs delay_msec="1000"><AlwaysSuccess/></DelayMs>
+              <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
+              <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
               <AlwaysSuccess/>
             </Switch2>
-            <DelayMs delay_msec="1000"><AlwaysSuccess/></DelayMs>
+            <DelayMs delay_msec="2500"><AlwaysSuccess/></DelayMs>
             <AlwaysSuccess/>
             <AlwaysSuccess/>
           </Switch3>
@@ -150,12 +186,12 @@
                     <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
                     <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
                     <PublishPumpCmd node="{node}" command="0"/>
-                    <DelayMs delay_msec="5000">
+                    <DelayMs delay_msec="3000">
                       <AlwaysSuccess/>
                     </DelayMs>
                     <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
                     <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.0"/>
                   </Sequence>
                   <!-- 第 2 块：抓后只举着 -->
                   <Sequence>
@@ -173,10 +209,10 @@
               </Sequence>
               <!-- PUSH 收尾占位：等具体动作敲定再替换 pose_name -->
               <Sequence>
-                <ArmMoveNamed node="{node}" pose_name="push_finish_a" server_name="robotic_task" task_id="1" duration="1.5"/>
-                <ArmMoveNamed node="{node}" pose_name="push_finish_b" server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="push_finish" server_name="robotic_task" task_id="1" duration="1.5"/>
                 <PublishPumpCmd node="{node}" command="0"/>
-                <ArmMoveNamed node="{node}" pose_name="ready"         server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="ready"       server_name="robotic_task" task_id="1" duration="3.0"/>
                 <Script code="need_finish := 0"/>
               </Sequence>
               <AlwaysSuccess/>   <!-- need_finish==0：本次 MOVE 不做收尾 -->
@@ -195,7 +231,7 @@
                   <AlwaysSuccess/>
                   <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
                     <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-                    <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
+                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
                     <AlwaysSuccess/>
                   </Switch2>
                   <AlwaysSuccess/>

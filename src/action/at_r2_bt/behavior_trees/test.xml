@@ -1,56 +1,511 @@
 <?xml version="1.0"?>
 <root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <Sequence name="MultiGoalPatrol">
-      <!-- First goal -->
-      <!-- <Sequence name="Climb1">
-        <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0"/>
-        <PreSteerAlign node="{node}" vx="0.1" duration="0.5"/>
-        <ClimbStair node="{node}" height="0.25"/>
-      </Sequence> -->
-      <!-- Second goal -->
-      <PublishGoal node="{node}" x="3.8" y="-0.6" yaw="1.57" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <PublishGoal node="{node}" x="5.0" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <PublishGoal node="{node}" x="6.2" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <PublishGoal node="{node}" x="7.4" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <PublishGoal node="{node}" x="2.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <PublishGoal node="{node}" x="7.4" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-     <PublishGoal node="{node}" x="3.8" y="-0.6" yaw="3.14" frame_id="map" goal="{goal}"/>
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      
-      <!-- ArmTask example: TF first, fallback_data(7) + grasp_height -->
-      <ArmTask node="{node}"
-               task_id="2"
-               server_name="robotic_task"
-               base_frame="base_link"
-               target_frame="target_object"
-               tf_timeout="1.0"
-               fallback_data="-0.10;0.20;0.35;0.0;0.0;0.0;1.0"
-               grasp_height="0.41"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
+    <Sequence>
+      <Sequence>
 
-      <!-- <Sequence name="Climb1">
-        <PublishGoal node="{node}" x="2.6" y="-3.0" yaw="0.0"/>
-        <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-        <ClimbStair node="{node}" height="0.25"/>
+        <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
+
+        <SetCostmapInflation node="{node}"
+                      local_radius="0.05"
+                      global_radius="0.15"
+                      local_cost_scaling_factor="5.0"
+                      global_cost_scaling_factor="5.0"/>
+        <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="6.0"
+                goal_angle_threshold="2.0"
+                vx_max="0.8"
+                vx_min="-0.8"
+                vy_max="0.8"
+                wz_max="4.0"
+                vx_std="0.25"
+                vy_std="0.25"
+                wz_std="0.25"
+                goal_x_tolerance="0.03"
+                goal_y_tolerance="0.05"
+                goal_yaw_tolerance="0.05"
+                goal_stable_duration="0.3"
+                wait_after_set="0.2"/>
+
+        <!-- 一键启动门控: 参数已提前设置完成后停在这里，比赛开始时按 Enter 立即开始导航。 -->
+        <WaitForEnter node="{node}"
+                      prompt="参数已设置完成，按 Enter 开始导航"
+                      require_tty="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
+
+        <ParallelAll max_failures="1">
+          <!-- 1腿 -->
+            <PublishGoal node="{node}"
+                    x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/>
+                    
+          <!-- 2 -->
+          <Sequence>
+            <DelayMs delay_msec="400">
+              <AlwaysSuccess/>
+            </DelayMs>  
+            <PublishHeadCmd node="{node}" command="1"
+                            topic="/AT_R2/head_gripper_cmd"
+                            wait_done="false"/>
+          </Sequence>
+        </ParallelAll>         
+
+        <!-- Step 3: 侧向贴靠柜台
+            vy > 0 向左贴, vy < 0 向右贴, 根据柜台方向调整
+            stall_threshold: 位移阈值, stall_duration: 连续被挡确认时间 -->
+        <ForceSuccess>
+          <DockToWall node="{node}"
+                      vy="-0.2"
+                      vx="0.0"
+                      wz="0.0"
+                      stall_threshold="0.02"
+                      stall_duration="0.4"
+                      timeout="1.0"
+                      publish_rate_hz="50.0"
+                      cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                      odom_topic="/AT_R2/odometry"/>
+        </ForceSuccess>
+
+        <Fallback>
+          <GraspReadyByPoseDistance node="{node}"
+                                    map_frame="map"
+                                    base_frame="base_link"
+                                    target_y="{grasp_prep_y}"
+                                    y_tolerance="{grasp_prep_y_tolerance}"
+                                    target_yaw="{grasp_prep_yaw}"
+                                    yaw_tolerance="{grasp_prep_yaw_tolerance}"
+                                    distance_topic="/AT_R2/distance"
+                                    distance_scale="0.001"
+                                    target_distance="{grasp_laser_target_distance}"
+                                    distance_tolerance="{grasp_laser_distance_tolerance}"
+                                    stable_count="3"
+                                    max_data_age="0.5"/>
+
+          <DistanceServoAlign node="{node}"
+                              distance_topic="/AT_R2/distance"
+                              distance_scale="0.001"
+                              target_distance="{grasp_laser_target_distance}"
+                              tolerance="{grasp_laser_distance_tolerance}"
+                              kp="0.5"
+                              max_speed="0.1"
+                              min_speed="0.015"
+                              stable_count="2"
+                              max_data_age="0.5"
+                              timeout="8.0"
+                              publish_rate_hz="50.0"
+                              cmd_axis="x"
+                              positive_error_direction="-1.0"
+                              side_speed_scale="0.7"
+                              side_speed_direction="-1.0"
+                              cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+        </Fallback>
+        <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间
+            若爪子有完成反馈, 改成: wait_done="true" timeout="10.0" 并删掉下面的 DelayMs -->
+        <PublishHeadCmd node="{node}" command="2"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"/>
+        <DelayMs delay_msec="500">
+          <AlwaysSuccess/>
+        </DelayMs>
+        <PublishHeadCmd node="{node}" command="3"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"/>
+        <DelayMs delay_msec="2000">
+          <AlwaysSuccess/>
+        </DelayMs>
+
+        <!-- Step 5: 通知爪子抬起武器头, 留出抬起执行时间
+            抬起后再后退, 避免武器头还在柜台上就拖动 -->
+        <ForceSuccess>
+          <PublishHeadCmd node="{node}" command="4"
+                          topic="/AT_R2/head_gripper_cmd"
+                          wait_done="false"
+                          timeout="1.0"/>
+        </ForceSuccess>
+
+        <!-- Step 6: 抬起完成后向后退离开柜台 (vx 负向)
+            timeout 内退够距离即可, 这里用一个略大的位移阈值 -->
+        <ParallelAll max_failures="1">
+          <ForceSuccess>      
+            <DockToWall node="{node}"
+                        vy="0.25"
+                        vx="0.0"
+                        wz="0.0"
+                        stall_threshold="0.30"
+                        stall_duration="10.0"
+                        timeout="1.5"
+                        publish_rate_hz="50.0"
+                        cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                        odom_topic="/AT_R2/odometry"/>
+          </ForceSuccess>
+          <PublishHeadCmd node="{node}" command="5"
+                  topic="/AT_R2/head_gripper_cmd"
+                  wait_done="false"/>
+        </ParallelAll>       
+
+        <!-- Step 7: 导航到与持杆机器人对接的位置
+            TODO: 把对接点坐标 (x, y, yaw) 改成实际值 -->
+        <!-- <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
+                goal_angle_weight="6.0"
+                goal_angle_threshold="2.0"
+                vx_max="1.2"
+                vx_min="-1.2"
+                vy_max="1.2"
+                wz_max="4.0"
+                vx_std="0.35"
+                vy_std="0.35"
+                wz_std="0.35"
+                goal_x_tolerance="0.05"
+                goal_y_tolerance="0.05"
+                goal_yaw_tolerance="0.10"
+                wait_after_set="0.3"/> -->
+
+        <ParallelAll max_failures="1">
+          <!-- 1腿 -->
+          <PublishGoal node="{node}"
+                    x="0.47" y="5.1" yaw="0.0"
+                    frame_id="map"
+                    goal="{nav_goal}"/>
+
+          <!-- 2 -->
+          <Sequence>
+            <DelayMs delay_msec="500">
+              <AlwaysSuccess/>
+            </DelayMs>  
+            <PublishHeadCmd node="{node}" command="6"
+                            topic="/AT_R2/head_gripper_cmd"
+                            wait_done="false"/>
+          </Sequence>
+        </ParallelAll>       
+
+        <!-- <WaitDockingRelease node="{node}"
+                            status_topic="/AT_R2/docking_status"
+                            gripper_topic="/AT_R2/head_gripper_cmd"
+                            target_status="1"
+                            release_cmd="7"
+                            timeout="1000.0"/> -->
       </Sequence>
-      <PublishGoal node="{node}" x="3.8" y="-3.0" yaw="-1.57" frame_id="map" goal="{goal}"/> -->
+        <!-- 2区 -->
+      <Sequence>
+        <SetMppiParams node="{node}"
+              controller_node="/AT_R2/controller_server"
+              plugin_prefix="FollowPath"
+              goal_angle_weight="6.0"
+              wait_after_set="0.3"
+              goal_angle_threshold="2.0"
+              wz_std="0.4"
+              vx_std="0.4"
+              vy_std="0.4"/>
+        <SetCostmapInflation node="{node}"
+              local_radius="0.3"
+              global_radius="0.3"
+              local_cost_scaling_factor="1.0"
+              global_cost_scaling_factor="4.0"/>
 
-      <!-- Third goal -->
-       <!-- <PublishGoal node="{node}" x="3.0" y="2.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+        <Sequence>
+          <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
+          <GetPlan node="{node}"
+                  topic="/r2_planner/plan"
+                  plan="{plan}"
+                  num_steps="{num_steps}"/>
 
-      
-      <!-- Return to start -->
-       <!-- <PublishGoal node="{node}" x="2.0" y="5.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
+          <!-- PICK 计数器：用来区分第几个抓取动作（第1块放置到车上，第2块只举着） -->
+          <Script code="pick_count := 0"/>
+          <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
+          <Script code="need_finish := 0"/>
 
+          <WaitForEnter node="{node}"
+                        prompt="参数已设置完成，按 Enter 开始导航"
+                        require_tty="true"
+                        clear_buffer="true"
+                        timeout="0.0"/>
+
+          <Repeat num_cycles="{num_steps}">
+            <Sequence>
+              <PopNextStep plan="{plan}"
+                          step_type="{step_type}"
+                          target_id="{target_id}"
+                          from_id="{from_id}"
+                          prep_x="{prep_x}"
+                          prep_y="{prep_y}"
+                          prep_yaw="{prep_yaw}"
+                          grasp_yaw="{grasp_yaw}"
+                          abs_dh="{abs_dh}"
+                          stair_dir="{stair_dir}"
+                          cube_x="{cube_x}"
+                          cube_y="{cube_y}"
+                          block_height="{block_h}"/>
+
+              <!-- Pop 已经把当前步从 plan 队首移走，
+                  PeekNextStep 看到的就是真正的"下一步"。 -->
+              <PeekNextStep plan="{plan}"
+                            next_step_type="{next_step_type}"
+                            next_target_id="{next_target_id}"
+                            next_from_id="{next_from_id}"
+                            next_cube_x="{next_cube_x}"
+                            next_cube_y="{next_cube_y}"
+                            next_block_height="{next_block_height}"
+                            next_prep_x="{next_prep_x}"
+                            next_prep_y="{next_prep_y}"
+                            next_prep_yaw="{next_prep_yaw}"/>
+              <Switch3 variable="{step_type}"
+                      case_1="MOVE"
+                      case_2="PICK"
+                      case_3="PUSH">
+                <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
+                <SubTree ID="PickAtBlock" _autoremap="true"/>
+                <SubTree ID="PushAtBlock" _autoremap="true"/>
+                <AlwaysFailure/>
+              </Switch3>
+            </Sequence>
+          </Repeat>
+        </Sequence>
+        <Sequence>
+          <SetMppiParams node="{node}"
+                  controller_node="/AT_R2/controller_server"
+                  plugin_prefix="FollowPath"
+                  goal_angle_weight="6.0"
+                  wait_after_set="0.3"
+                  goal_angle_threshold="6.0"
+                  wz_std="0.4"
+                  vx_std="0.4"
+                  vy_std="0.4"/>
+          <PublishGoal node="{node}" x="8.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+          <PublishGoal node="{node}" x="11.5" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+          <SetCostmapInflation node="{node}"
+                  local_radius="0.45"
+                  global_radius="0.45"
+                  local_cost_scaling_factor="1.0"
+                  global_cost_scaling_factor="4.0"/>
+          <PublishGoal node="{node}" x="10.7" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+
+        </Sequence>
+      </Sequence>
     </Sequence>
   </BehaviorTree>
+
+
+
+    <!-- ================== MOVE 子树 ==================
+        1) 串行：先导航到 prep 点；
+        2) 并行：楼梯腿（爬/下楼或不动）和 机械臂腿（按下一步是否 PICK 决定）。
+        机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
+    <BehaviorTree ID="MoveBetweenBlocks">
+      <Sequence>
+        <!-- <PublishGoal node="{node}"
+                    x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/> -->
+        <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
+
+        <ParallelAll max_failures="1">
+          <Sequence>
+            <!-- 仅在"无收尾动作"时检查能否跳过导航：
+                need_finish==0 且当前已经在 prep 容差内 → 不发 goal；
+                否则正常 PublishGoal，等到达再继续。 -->
+            <Fallback>
+              <Sequence>
+                <ScriptCondition code="need_finish == 0"/>
+                <IsPrepSkippable node="{node}"
+                                target_x="{prep_x}"
+                                target_y="{prep_y}"
+                                target_yaw="{prep_yaw}"
+                                x_tolerance="0.10"
+                                y_tolerance="0.10"
+                                yaw_tolerance="0.08"/>
+              </Sequence>
+              <PublishGoal node="{node}"
+                  x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                  frame_id="map"
+                  goal="{nav_goal}"/>
+            </Fallback>
+            <!-- 收尾延时：给机械臂腿先跑收尾动作再开楼梯。
+                need_finish==0：无收尾，不延时；
+                need_finish==1 且 pick_count==1：第 1 次抓取(放置到车)，延时 5s；
+                need_finish==1 且 pick_count==2：第 2 次抓取(只举着)，延时 1s；
+                need_finish==2：PUSH 收尾，延时 1s。 -->
+            <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
+              <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+                <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
+                <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
+                <AlwaysSuccess/>
+              </Switch2>
+              <DelayMs delay_msec="2500"><AlwaysSuccess/></DelayMs>
+              <AlwaysSuccess/>
+              <AlwaysSuccess/>
+            </Switch3>
+            <!-- 楼梯腿 -->
+            <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+              <ClimbStair   node="{node}" height="{abs_dh}"/>
+              <DescendStair node="{node}" height="{abs_dh}"/>
+              <AlwaysSuccess/>
+            </Switch2>
+            <!-- 楼梯走完再发导航目标：下一步是 PICK 或 PUSH 才去其 prep 点 -->
+            <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
+              <PublishGoal node="{node}"
+                          x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                          frame_id="map"
+                          goal="{nav_goal}"/>
+              <PublishGoal node="{node}"
+                          x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                          frame_id="map"
+                          goal="{nav_goal}"/>
+              <AlwaysSuccess/>
+              <AlwaysSuccess/>
+            </Switch3>
+
+          </Sequence>
+          <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体）。
+              先做"上一个 PICK 的收尾"（与楼梯腿并行），再做"为下一个 PICK 的预备"。 -->
+          <ForceSuccess>
+            <Sequence>
+              <!-- (1) 收尾：need_finish==1 → PICK 收尾(按 pick_count 分流)；need_finish==2 → PUSH 收尾 -->
+              <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
+                <Sequence>
+                  <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+                    <!-- 第 1 块：抓后放到车上 -->
+                    <Sequence>
+                      <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
+                      <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <PublishPumpCmd node="{node}" command="0"/>
+                      <DelayMs delay_msec="3000">
+                        <AlwaysSuccess/>
+                      </DelayMs>
+                      <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.0"/>
+                    </Sequence>
+                    <!-- 第 2 块：抓后只举着 -->
+                    <Sequence>
+                      <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    </Sequence>
+                    <!-- default：计数异常兜底，只举着 -->
+                    <Sequence>
+                      <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                      <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                    </Sequence>
+                  </Switch2>
+                  <!-- 收尾完成，清零，避免后续连续 MOVE 重复收尾 -->
+                  <Script code="need_finish := 0"/>
+                </Sequence>
+                <!-- PUSH 收尾占位：等具体动作敲定再替换 pose_name -->
+                <Sequence>
+                  <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                  <ArmMoveNamed node="{node}" pose_name="push_finish" server_name="robotic_task" task_id="1" duration="1.5"/>
+                  <PublishPumpCmd node="{node}" command="0"/>
+                  <ArmMoveNamed node="{node}" pose_name="ready"       server_name="robotic_task" task_id="1" duration="3.0"/>
+                  <Script code="need_finish := 0"/>
+                </Sequence>
+                <AlwaysSuccess/>   <!-- need_finish==0：本次 MOVE 不做收尾 -->
+                <AlwaysSuccess/>   <!-- default -->
+              </Switch3>
+
+              <!-- (2) 预备：下一步是 PICK 才把手臂摆到下一次抓取的预备姿势 -->
+              <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+                <Sequence>
+                  <!-- 防翻车：升手臂会抬高重心，台阶途中升臂可能翻车。
+                      有收尾动作时(need_finish==1 或 2)，收尾已经占用了时间(楼梯也在并行走)，prep 时楼梯接近完成，不用延时；
+                      没台阶时，立即 prep 也无翻车风险，不用延时；
+                      仅"没收尾动作 + 上/下台阶"时延 500ms 等楼梯阶段进入再升臂。 -->
+                  <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
+                    <AlwaysSuccess/>
+                    <AlwaysSuccess/>
+                    <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+                      <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
+                      <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
+                      <AlwaysSuccess/>
+                    </Switch2>
+                    <AlwaysSuccess/>
+                  </Switch3>
+                  <SelectArmPrepName next_from_id="{next_from_id}"
+                                    next_target_id="{next_target_id}"
+                                    arm_prep_name="{arm_prep_name}"/>
+                  <ArmMoveNamed node="{node}"
+                                pose_name="{arm_prep_name}"
+                                server_name="robotic_task"
+                                task_id="1"
+                                duration="1.5"/>
+                </Sequence>
+                <AlwaysSuccess/>
+                <AlwaysSuccess/>
+              </Switch2>
+            </Sequence>
+          </ForceSuccess>
+        </ParallelAll>
+      </Sequence>
+    </BehaviorTree>
+
+    <!-- ================== PICK 子树（瘦身版）==================
+        PICK 只做到"抓取"为止：对齐 + 开泵 + 视觉抓取(ArmTask)。
+        抓取后的机械臂收尾（lift/stow/place/hold）全部搬到紧跟的 MOVE 子树，
+        让收尾与爬楼梯并行。
+          - pick_count 自增，用来在 MOVE 里区分第几块（第1块放置、第2块举着）。
+          - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
+    <BehaviorTree ID="PickAtBlock">
+      <Sequence>
+        <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
+        <Script code="pick_count += 1"/>
+
+        <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
+        <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PICK 条件下发 -->
+        <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/> -->
+        <!-- <ArmMoveNamed node="{node}"
+                      pose_name="pick_front_up200"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="1.5"/> -->
+        <PublishPumpCmd node="{node}" command="1"/>
+        <ArmTask node="{node}"
+                task_id="2"
+                server_name="robotic_task"
+                base_frame="base_link"
+                target_frame="target_object"
+                map_frame="map"
+                tf_timeout="1.0"
+                cube_x="{cube_x}"
+                cube_y="{cube_y}"
+                block_height="{block_h}"
+                grasp_height="{block_h}"
+                goal_data="{arm_goal_data}"
+                err_code="{arm_err_code}"
+                reason="{arm_reason}"/>
+
+        <!-- 抓取成功，标记下一个 MOVE 需要做收尾（放块/举着）。
+            若 ArmTask 失败，Sequence 在此之前已返回 FAILURE，不会置位。 -->
+        <Script code="need_finish := 1"/>
+      </Sequence>
+    </BehaviorTree>
+
+    <!-- ================== PUSH 子树 ================== -->
+    <BehaviorTree ID="PushAtBlock">
+      <Sequence>
+        <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PUSH 条件下发 -->
+        <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
+        <ArmTask node="{node}"
+                task_id="3"
+                server_name="robotic_task"
+                base_frame="base_footprint"
+                target_frame="target_object"
+                map_frame="map"
+                tf_timeout="5.0"
+                cube_x="{cube_x}"
+                cube_y="{cube_y}"
+                block_height="{block_h}"
+                grasp_height="0.0"
+                goal_data="{arm_goal_data}"
+                err_code="{arm_err_code}"
+                reason="{arm_reason}"/>
+
+        <!-- 推完成功，标记下一个 MOVE 跑 PUSH 收尾(=2，区别于 PICK 的 1) -->
+        <Script code="need_finish := 2"/>
+      </Sequence>
+    </BehaviorTree>
 </root>

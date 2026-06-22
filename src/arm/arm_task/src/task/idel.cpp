@@ -47,7 +47,7 @@ std::string IdelTask::process(const std::string last_task_name)
         }
 
         RCLCPP_INFO(robot->node_->get_logger(), "idel 首次运行，移动到准备位置");
-        if (!robot->execute_joint_space_trajectory(ready_joint_angles, 3.0)) { // 1.0n
+        if (!robot->execute_joint_space_trajectory(ready_joint_angles, 5.0)) { // 1.0n
             RCLCPP_INFO(robot->node_->get_logger(), "idel 首次运行，移动到准备位置失败");
         }
 

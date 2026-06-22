@@ -126,7 +126,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
-  std::string bt_file = "meilin_mission.xml";
+  std::string bt_file = "grasp_head.xml";
   if (argc > 1) {
     bt_file = argv[1];
   }
@@ -157,7 +157,7 @@ int main(int argc, char** argv)
     return node->get_parameter(param_name).as_double();
   };
 
-  const double grasp_prep_x = declare_and_get_double("grasp_prep_x", 0.90);
+  const double grasp_prep_x = declare_and_get_double("grasp_prep_x", 0.955);
   const double grasp_prep_y = declare_and_get_double("grasp_prep_y", 5.49);
   const double grasp_prep_yaw = declare_and_get_double("grasp_prep_yaw", -3.14);
   const double grasp_prep_y_tolerance = declare_and_get_double("grasp_prep_y_tolerance", 0.08);

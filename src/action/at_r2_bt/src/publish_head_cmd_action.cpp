@@ -118,6 +118,15 @@ BT::NodeStatus PublishHeadCmdAction::onRunning()
       RCLCPP_INFO(node_->get_logger(), "✓ head_gripper 对接完成 (grasp_status=2)");
       return BT::NodeStatus::SUCCESS;
     }
+    if (timeout_ > 0.0) {
+      const double elapsed = (node_->now() - start_time_).seconds();
+      if (elapsed >= timeout_) {
+        RCLCPP_ERROR(
+          node_->get_logger(),
+          "✗ 等待 grasp_status=2 超时 (%.1fs), command=%d", timeout_, command_);
+        return BT::NodeStatus::FAILURE;
+      }
+    }
     return BT::NodeStatus::RUNNING;
   }
 

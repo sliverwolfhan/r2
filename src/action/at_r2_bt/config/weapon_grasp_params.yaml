@@ -12,7 +12,7 @@ simple_bt_runner:
 
     # 每个武器头只配置原始语义值：准备位姿、准备位姿容忍度、激光目标距离。
     # GraspReadyByPoseDistance 节点内部会根据 target + tolerance 计算范围。
-    weapon_1.grasp_prep_x: 0.90
+    weapon_1.grasp_prep_x: 0.95
     weapon_1.grasp_prep_y: 5.49
     weapon_1.grasp_prep_yaw: -3.14
     weapon_1.grasp_prep_y_tolerance: 0.08
