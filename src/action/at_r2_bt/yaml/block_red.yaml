@@ -1,0 +1,35 @@
+# R2 梅林任务的方块表（map 系，单位米）
+#   - x, y: 方块中心
+#   - height: 方块顶面相对地面的高度
+#   - cube_x, cube_y: 方块上物块（KFS）在 map 下的位置（按现场实测调整）
+#     注：0 和 13 是入口/出口 strip，没有物块；省略 cube_x/cube_y 字段。
+# 节点 1..12 是赛场上的 12 个方块（4 行 × 3 列，每格 1.2 × 1.2 m）；
+# 0 = 入口虚拟节点（strip x∈[2.0, 3.2], y∈[-4.8, -1.2]）；
+# 13 = 出口虚拟节点（strip x∈[8.0, 9.2], y∈[-4.8, -1.2]，与 0 镜像）。
+
+blocks:
+  # 入口区（无 cube）
+  0:  {x: 2.6, y: 3.0, height: 0.00}
+
+  # 第 1 行（x=3.8，离 entry 最近）；1 号最靠 R1 启动区（y 最小）
+  1:  {x: 3.8, y: 1.8, height: 0.40, cube_x: 3.8, cube_y: 1.8}
+  2:  {x: 3.8, y: 3.0, height: 0.20, cube_x: 3.8, cube_y: 3.0}
+  3:  {x: 3.8, y: 4.2, height: 0.40, cube_x: 3.8, cube_y: 4.2}
+
+  # 第 2 行（x=5.0）
+  4:  {x: 5.0, y: 1.8, height: 0.20, cube_x: 5.0, cube_y: 1.8}
+  5:  {x: 5.0, y: 3.0, height: 0.40, cube_x: 5.0, cube_y: 3.0}
+  6:  {x: 5.0, y: 4.2, height: 0.60, cube_x: 5.0, cube_y: 4.2}
+
+  # 第 3 行（x=6.2）
+  7:  {x: 6.2, y: 1.8, height: 0.40, cube_x: 6.2, cube_y: 1.8}
+  8:  {x: 6.2, y: 3.0, height: 0.60, cube_x: 6.2, cube_y: 3.0}
+  9:  {x: 6.2, y: 4.2, height: 0.40, cube_x: 6.2, cube_y: 4.2}
+
+  # 第 4 行（x=7.4，离 exit 最近）
+  10: {x: 7.4, y: 1.8, height: 0.20, cube_x: 7.4, cube_y: 1.8}
+  11: {x: 7.4, y: 3.0, height: 0.40, cube_x: 7.4, cube_y: 3.0}
+  12: {x: 7.4, y: 4.2, height: 0.20, cube_x: 7.4, cube_y: 4.2}
+
+  # 出口区（无 cube）
+  13: {x: 8.6, y: 3.0, height: 0.00}

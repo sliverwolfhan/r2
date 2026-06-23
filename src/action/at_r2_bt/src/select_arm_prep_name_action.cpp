@@ -152,7 +152,7 @@ BT::NodeStatus SelectArmPrepNameAction::tick()
   if (block_yaml_path.empty()) {
     try {
       block_yaml_path = ament_index_cpp::get_package_share_directory("at_r2_bt") +
-        "/yaml/block_blue.yaml";
+        "/yaml/block_red.yaml";
     } catch (const std::exception & e) {
       RCLCPP_ERROR(rclcpp::get_logger("SelectArmPrepName"),
         "Cannot locate at_r2_bt share dir: %s", e.what());

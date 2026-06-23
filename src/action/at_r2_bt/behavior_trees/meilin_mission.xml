@@ -89,14 +89,14 @@
                 wz_std="0.4"
                 vx_std="0.4"
                 vy_std="0.4"/>
-        <PublishGoal node="{node}" x="8.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-        <PublishGoal node="{node}" x="11.5" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="8.6" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="11.5" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
         <SetCostmapInflation node="{node}"
                 local_radius="0.45"
                 global_radius="0.45"
                 local_cost_scaling_factor="1.0"
                 global_cost_scaling_factor="4.0"/>
-        <PublishGoal node="{node}" x="10.7" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="10.7" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
 
       </Sequence>
     </Sequence>

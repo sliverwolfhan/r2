@@ -126,7 +126,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
-  std::string bt_file = "grasp_head.xml";
+  std::string bt_file = "test.xml";
   if (argc > 1) {
     bt_file = argv[1];
   }
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
   const double grasp_prep_yaw = declare_and_get_double("grasp_prep_yaw", -3.14);
   const double grasp_prep_y_tolerance = declare_and_get_double("grasp_prep_y_tolerance", 0.08);
   const double grasp_prep_yaw_tolerance = declare_and_get_double("grasp_prep_yaw_tolerance", 0.20);
-  const double grasp_laser_target_distance = declare_and_get_double("laser_target_distance", 0.605);
+  const double grasp_laser_target_distance = declare_and_get_double("laser_target_distance", 0.615);
   const double grasp_laser_distance_tolerance = declare_and_get_double("laser_distance_tolerance", 0.005);
 
   blackboard->set("grasp_target_name", selected_weapon);

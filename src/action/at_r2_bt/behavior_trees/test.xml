@@ -16,13 +16,13 @@
                 plugin_prefix="FollowPath"
                 goal_angle_weight="6.0"
                 goal_angle_threshold="2.0"
-                vx_max="0.8"
-                vx_min="-0.8"
-                vy_max="0.8"
+                vx_max="1.2"
+                vx_min="-1.2"
+                vy_max="1.2"
                 wz_max="4.0"
-                vx_std="0.25"
-                vy_std="0.25"
-                wz_std="0.25"
+                vx_std="0.4"
+                vy_std="0.4"
+                wz_std="0.4"
                 goal_x_tolerance="0.03"
                 goal_y_tolerance="0.05"
                 goal_yaw_tolerance="0.05"
@@ -132,12 +132,12 @@
         <ParallelAll max_failures="1">
           <ForceSuccess>      
             <DockToWall node="{node}"
-                        vy="0.25"
+                        vy="0.35"
                         vx="0.0"
                         wz="0.0"
                         stall_threshold="0.30"
                         stall_duration="10.0"
-                        timeout="1.5"
+                        timeout="1.0"
                         publish_rate_hz="50.0"
                         cmd_vel_topic="/AT_R2/cmd_vel_bt"
                         odom_topic="/AT_R2/odometry"/>
@@ -169,7 +169,7 @@
         <ParallelAll max_failures="1">
           <!-- 1腿 -->
           <PublishGoal node="{node}"
-                    x="0.47" y="5.1" yaw="0.0"
+                    x="0.50" y="5.1" yaw="0.0"
                     frame_id="map"
                     goal="{nav_goal}"/>
 
@@ -184,15 +184,29 @@
           </Sequence>
         </ParallelAll>       
 
-        <!-- <WaitDockingRelease node="{node}"
-                            status_topic="/AT_R2/docking_status"
-                            gripper_topic="/AT_R2/head_gripper_cmd"
-                            target_status="1"
-                            release_cmd="7"
-                            timeout="1000.0"/> -->
+        <!-- <WaitForEnter node="{node}"
+                      prompt="对接完成，按 Enter 释放武器头"
+                      require_tty="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
+        <PublishHeadCmd node="{node}" command="7"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"/> -->
+        <WaitDockingRelease node="{node}"
+                    status_topic="/AT_R2/docking_status"
+                    gripper_topic="/AT_R2/head_gripper_cmd"
+                    target_status="1"
+                    release_cmd="7"
+                    timeout="1000.0"/>
       </Sequence>
         <!-- 2区 -->
+
       <Sequence>
+        <WaitForEnter node="{node}"
+                      prompt="按 Enter 进入 2 区"
+                      require_tty="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
         <SetMppiParams node="{node}"
               controller_node="/AT_R2/controller_server"
               plugin_prefix="FollowPath"
@@ -276,14 +290,14 @@
                   wz_std="0.4"
                   vx_std="0.4"
                   vy_std="0.4"/>
-          <PublishGoal node="{node}" x="8.6" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-          <PublishGoal node="{node}" x="11.5" y="-0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+          <PublishGoal node="{node}" x="8.6" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+          <PublishGoal node="{node}" x="11.5" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
           <SetCostmapInflation node="{node}"
                   local_radius="0.45"
                   global_radius="0.45"
                   local_cost_scaling_factor="1.0"
                   global_cost_scaling_factor="4.0"/>
-          <PublishGoal node="{node}" x="10.7" y="-3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+          <PublishGoal node="{node}" x="10.7" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
 
         </Sequence>
       </Sequence>
