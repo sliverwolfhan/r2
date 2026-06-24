@@ -63,8 +63,15 @@ SerialNode::SerialNode()
 
     // 创建机械臂目标状态订阅者
     joint_subscriber = this->create_subscription<robot_interfaces::msg::Arm>(
-        "myjoints_target", 10, 
+        "myjoints_target", 10,
         std::bind(&SerialNode::legsSubscribCb, this, std::placeholders::_1));
+
+    // 创建气泵指令订阅者 (latched, 1=吸气/0=放气)
+    // 与 PublishPumpCmd / 键盘控制 共用 /AT_R2/pump_cmd 话题，
+    // 收到后立即补发一帧，使关节静止时也能单独控制气泵。
+    pump_cmd_subscriber = this->create_subscription<std_msgs::msg::Int32>(
+        "/AT_R2/pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
+        std::bind(&SerialNode::pumpCmdCb, this, std::placeholders::_1));
 
     // 创建 CDC 传输对象并注册接收回调
     cdc_trans = std::make_unique<CDCTrans>();
@@ -147,6 +154,9 @@ void SerialNode::legsSubscribCb(const robot_interfaces::msg::Arm& msg) {
     arm_target.grasp_state = grasp_state_send_once_pending ? 1U : 0U;
     grasp_state_send_once_pending = false;
 
+    // 标记已收到真实目标，允许后续补发（如气泵单独控制）
+    has_target_ = true;
+
     // 通过 USB CDC 发送目标数据包到下位机
     bool ok = cdc_trans->send_struct(arm_target);
 
@@ -175,6 +185,41 @@ void SerialNode::handleGraspIt(const ArmState_t* arm_state) {
     }
 
     arm_task_param_client->set_parameters({rclcpp::Parameter("grasp_it", grasp_it)});
+}
+
+void SerialNode::pumpCmdCb(const std_msgs::msg::Int32& msg) {
+    const bool enable = (msg.data != 0);
+    if (msg.data != 0 && msg.data != 1) {
+        RCLCPP_WARN(this->get_logger(),
+                    "pump_cmd=%d 不在预期范围 [0,1] (1=吸气/0=放气)，按非零=吸气处理",
+                    msg.data);
+    }
+
+    enable_air_pump = enable;
+    // 同步参数，保持与 enable_air_pump 参数视图一致
+    this->set_parameter(rclcpp::Parameter("enable_air_pump", enable_air_pump));
+    RCLCPP_INFO(this->get_logger(), "气泵指令: %d (%s)",
+                enable_air_pump ? 1 : 0, enable_air_pump ? "吸气" : "放气");
+
+    // 关节静止时也立即把新气泵状态下发
+    resendCurrentTarget();
+}
+
+void SerialNode::resendCurrentTarget() {
+    if (!has_target_) {
+        RCLCPP_WARN(this->get_logger(),
+                    "尚未收到关节目标，暂不补发气泵帧（避免误发零位目标）");
+        return;
+    }
+
+    arm_target.air_pump = enable_air_pump ? 1 : 0;
+    // 补发不触发抓取完成单次脉冲
+    arm_target.grasp_state = 0U;
+
+    const bool ok = cdc_trans->send_struct(arm_target);
+    RCLCPP_INFO(this->get_logger(),
+                "补发目标到下位机[ok=%d pump=%d]（关节保持当前目标）",
+                ok, arm_target.air_pump);
 }
 
 

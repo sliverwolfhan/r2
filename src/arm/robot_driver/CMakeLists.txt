@@ -12,6 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(robot_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
@@ -66,6 +67,7 @@ ament_target_dependencies(robot_driver
   rclcpp
   robot_interfaces
   sensor_msgs
+  std_msgs
 )
 
 install(TARGETS

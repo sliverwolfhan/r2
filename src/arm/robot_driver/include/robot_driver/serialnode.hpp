@@ -15,6 +15,7 @@
 #include <cdc_trans.hpp>
 #include <robot_interfaces/msg/arm.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include <data_pack.h>
 
 // SerialNode 是一个 ROS2 节点，负责上位机与下位机之间的双向数据通信。
@@ -71,6 +72,19 @@ private:
     // 处理下位机上报的 grasp_it 参数。
     void handleGraspIt(const ArmState_t *arm_state);
 
+    // 气泵指令话题的订阅回调。
+    //
+    // 收到 /AT_R2/pump_cmd (std_msgs/Int32, 1=吸气/0=放气) 后，更新气泵使能
+    // 标志，并在已收到过真实关节目标的前提下，立即复用当前 arm_target 补发一帧，
+    // 从而在关节静止、myjoints_target 无新消息时也能单独控制气泵。
+    void pumpCmdCb(const std_msgs::msg::Int32 &msg);
+
+    // 复用当前缓存的 arm_target 立即向下位机补发一帧（不改变关节目标）。
+    //
+    // 仅在 has_target_ 为真时发送，避免在收到首帧真实目标前误发零位目标
+    // 导致机械臂冲向零位。
+    void resendCurrentTarget();
+
     // USB CDC 传输对象，负责与下位机的 USB 通信。
     std::unique_ptr<CDCTrans> cdc_trans;
 
@@ -82,6 +96,9 @@ private:
 
     // 机械臂目标状态的订阅者。
     rclcpp::Subscription<robot_interfaces::msg::Arm>::SharedPtr joint_subscriber;
+
+    // 气泵指令话题订阅者 (latched, std_msgs/Int32)。
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_cmd_subscriber;
 
     // arm_task 节点参数客户端，用于同步 grasp_it。
     rclcpp::AsyncParametersClient::SharedPtr arm_task_param_client;
@@ -112,6 +129,9 @@ private:
 
     // 气泵使能标志，由参数 "enable_air_pump" 控制。
     bool enable_air_pump{false};
+
+    // 是否已收到过至少一帧真实关节目标。为真前不允许补发，防止误发零位。
+    bool has_target_{false};
 
     // 当前抓取标志，0 表示不抓，1 表示抓。
     int grasp_it{0};
