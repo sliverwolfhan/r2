@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4">
+
+  <!-- ================== PICK 子树（瘦身版）==================
+       PICK 只做到"抓取"为止：对齐 + 开泵 + 视觉抓取(ArmTask)。
+       抓取后的机械臂收尾（lift/stow/place/hold）全部搬到紧跟的 MOVE 子树，
+       让收尾与爬楼梯并行。
+         - pick_count 自增，用来在 MOVE 里区分第几块（第1块放置、第2块举着）。
+         - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
+  <BehaviorTree ID="PickAtBlock">
+    <Sequence>
+      <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
+      <Script code="pick_count += 1"/>
+
+      <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
+      <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PICK 条件下发 -->
+      <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/> -->
+      <!-- <ArmMoveNamed node="{node}"
+                    pose_name="pick_front_up200"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="1.5"/> -->
+      <PublishPumpCmd node="{node}" command="1"/>
+      <ArmTask node="{node}"
+               task_id="2"
+               server_name="robotic_task"
+               base_frame="base_link"
+               target_frame="target_object"
+               map_frame="map"
+               tf_timeout="1.0"
+               cube_x="{cube_x}"
+               cube_y="{cube_y}"
+               block_height="{block_h}"
+               grasp_height="{block_h}"
+               goal_data="{arm_goal_data}"
+               err_code="{arm_err_code}"
+               reason="{arm_reason}"/>
+
+      <!-- 抓取成功，标记下一个 MOVE 需要做收尾（放块/举着）。
+           若 ArmTask 失败，Sequence 在此之前已返回 FAILURE，不会置位。 -->
+      <Script code="need_finish := 1"/>
+    </Sequence>
+  </BehaviorTree>
+
+</root>

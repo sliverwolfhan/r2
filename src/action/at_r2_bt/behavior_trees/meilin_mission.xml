@@ -1,10 +1,15 @@
 <?xml version="1.0"?>
-<root BTCPP_format="4" main_tree_to_execute="MainTree">
+<root BTCPP_format="4" main_tree_to_execute="MeilinMission">
+
+  <!-- 子树拆分：每棵树一个文件，include 路径相对当前文件 -->
+  <include path="meilin_mission/MoveBetweenBlocks.xml"/>
+  <include path="meilin_mission/PickAtBlock.xml"/>
+  <include path="meilin_mission/PushAtBlock.xml"/>
 
   <!-- ================== 主树 ==================
        每轮：先 Pop 出当前步，再 Peek 偷看下一步（写到 next_* 黑板键），
        然后路由到 MOVE/PICK/PUSH 子树。 -->
-  <BehaviorTree ID="MainTree">
+  <BehaviorTree ID="MeilinMission">
     <Sequence>
       <SetMppiParams node="{node}"
                 controller_node="/AT_R2/controller_server"
@@ -113,8 +118,8 @@
                 wz_std="0.45"
                 vx_std="0.45"
                 vy_std="0.4"/>
-        <PublishGoal node="{node}" x="8.6" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
-        <PublishGoal node="{node}" x="11.5" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="8.6" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
         <SetCostmapInflation node="{node}"
                 local_radius="0.45"
                 global_radius="0.45"
@@ -125,223 +130,6 @@
       </Sequence>
     </Sequence>
 
-  </BehaviorTree>
-
-  <!-- ================== MOVE 子树 ==================
-       1) 串行：先导航到 prep 点；
-       2) 并行：楼梯腿（爬/下楼或不动）和 机械臂腿（按下一步是否 PICK 决定）。
-       机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
-  <BehaviorTree ID="MoveBetweenBlocks">
-    <Sequence>
-      <!-- <PublishGoal node="{node}"
-                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                   frame_id="map"
-                   goal="{nav_goal}"/> -->
-      <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
-
-      <ParallelAll max_failures="1">
-        <Sequence>
-          <!-- 仅在"无收尾动作"时检查能否跳过导航：
-               need_finish==0 且当前已经在 prep 容差内 → 不发 goal；
-               否则正常 PublishGoal，等到达再继续。 -->
-          <Fallback>
-            <Sequence>
-              <ScriptCondition code="need_finish == 0"/>
-              <IsPrepSkippable node="{node}"
-                               target_x="{prep_x}"
-                               target_y="{prep_y}"
-                               target_yaw="{prep_yaw}"
-                               x_tolerance="0.10"
-                               y_tolerance="0.10"
-                               yaw_tolerance="0.08"/>
-            </Sequence>
-            <PublishGoal node="{node}"
-                x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                frame_id="map"
-                goal="{nav_goal}"/>
-          </Fallback>
-          <!-- 收尾延时：给机械臂腿先跑收尾动作再开楼梯。
-               need_finish==0：无收尾，不延时；
-               need_finish==1 且 pick_count==1：第 1 次抓取(放置到车)，延时 5s；
-               need_finish==1 且 pick_count==2：第 2 次抓取(只举着)，延时 1s；
-               need_finish==2：PUSH 收尾，延时 1s。 -->
-          <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
-            <Switch2 variable="{pick_count}" case_1="1" case_2="2">
-              <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-              <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
-              <AlwaysSuccess/>
-            </Switch2>
-            <DelayMs delay_msec="2500"><AlwaysSuccess/></DelayMs>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch3>
-          <!-- 楼梯腿 -->
-          <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-            <ClimbStair   node="{node}" height="{abs_dh}"/>
-            <DescendStair node="{node}" height="{abs_dh}"/>
-            <AlwaysSuccess/>
-          </Switch2>
-          <!-- 楼梯走完再发导航目标：下一步是 PICK 或 PUSH 才去其 prep 点 -->
-          <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map"
-                         goal="{nav_goal}"/>
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map"
-                         goal="{nav_goal}"/>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch3>
-
-        </Sequence>
-        <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体）。
-             先做"上一个 PICK 的收尾"（与楼梯腿并行），再做"为下一个 PICK 的预备"。 -->
-        <ForceSuccess>
-          <Sequence>
-            <!-- (1) 收尾：need_finish==1 → PICK 收尾(按 pick_count 分流)；need_finish==2 → PUSH 收尾 -->
-            <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
-              <Sequence>
-                <Switch2 variable="{pick_count}" case_1="1" case_2="2">
-                  <!-- 第 1 块：抓后放到车上 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
-                    <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <PublishPumpCmd node="{node}" command="0"/>
-                    <DelayMs delay_msec="3000">
-                      <AlwaysSuccess/>
-                    </DelayMs>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.0"/>
-                  </Sequence>
-                  <!-- 第 2 块：抓后只举着 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                  </Sequence>
-                  <!-- default：计数异常兜底，只举着 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                  </Sequence>
-                </Switch2>
-                <!-- 收尾完成，清零，避免后续连续 MOVE 重复收尾 -->
-                <Script code="need_finish := 0"/>
-              </Sequence>
-              <!-- PUSH 收尾占位：等具体动作敲定再替换 pose_name -->
-              <Sequence>
-                <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
-                <ArmMoveNamed node="{node}" pose_name="push_finish" server_name="robotic_task" task_id="1" duration="1.5"/>
-                <PublishPumpCmd node="{node}" command="0"/>
-                <ArmMoveNamed node="{node}" pose_name="ready"       server_name="robotic_task" task_id="1" duration="3.0"/>
-                <Script code="need_finish := 0"/>
-              </Sequence>
-              <AlwaysSuccess/>   <!-- need_finish==0：本次 MOVE 不做收尾 -->
-              <AlwaysSuccess/>   <!-- default -->
-            </Switch3>
-
-            <!-- (2) 预备：下一步是 PICK 才把手臂摆到下一次抓取的预备姿势 -->
-            <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
-              <Sequence>
-                <!-- 防翻车：升手臂会抬高重心，台阶途中升臂可能翻车。
-                     有收尾动作时(need_finish==1 或 2)，收尾已经占用了时间(楼梯也在并行走)，prep 时楼梯接近完成，不用延时；
-                     没台阶时，立即 prep 也无翻车风险，不用延时；
-                     仅"没收尾动作 + 上/下台阶"时延 500ms 等楼梯阶段进入再升臂。 -->
-                <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
-                  <AlwaysSuccess/>
-                  <AlwaysSuccess/>
-                  <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-                    <AlwaysSuccess/>
-                  </Switch2>
-                  <AlwaysSuccess/>
-                </Switch3>
-                <SelectArmPrepName next_from_id="{next_from_id}"
-                                   next_target_id="{next_target_id}"
-                                   arm_prep_name="{arm_prep_name}"/>
-                <ArmMoveNamed node="{node}"
-                              pose_name="{arm_prep_name}"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="1.5"/>
-              </Sequence>
-              <AlwaysSuccess/>
-              <AlwaysSuccess/>
-            </Switch2>
-          </Sequence>
-        </ForceSuccess>
-      </ParallelAll>
-    </Sequence>
-  </BehaviorTree>
-
-  <!-- ================== PICK 子树（瘦身版）==================
-       PICK 只做到"抓取"为止：对齐 + 开泵 + 视觉抓取(ArmTask)。
-       抓取后的机械臂收尾（lift/stow/place/hold）全部搬到紧跟的 MOVE 子树，
-       让收尾与爬楼梯并行。
-         - pick_count 自增，用来在 MOVE 里区分第几块（第1块放置、第2块举着）。
-         - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
-  <BehaviorTree ID="PickAtBlock">
-    <Sequence>
-      <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
-      <Script code="pick_count += 1"/>
-
-      <!-- ===== 对齐 + 开泵 + 视觉抓取 ===== -->
-      <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PICK 条件下发 -->
-      <!-- <PreSteerAlign node="{node}" vx="0.1" duration="0.01" publish_rate_hz="50"/> -->
-      <!-- <ArmMoveNamed node="{node}"
-                    pose_name="pick_front_up200"
-                    server_name="robotic_task"
-                    task_id="1"
-                    duration="1.5"/> -->
-      <PublishPumpCmd node="{node}" command="1"/>
-      <ArmTask node="{node}"
-               task_id="2"
-               server_name="robotic_task"
-               base_frame="base_link"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="1.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="{block_h}"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
-
-      <!-- 抓取成功，标记下一个 MOVE 需要做收尾（放块/举着）。
-           若 ArmTask 失败，Sequence 在此之前已返回 FAILURE，不会置位。 -->
-      <Script code="need_finish := 1"/>
-    </Sequence>
-  </BehaviorTree>
-
-  <!-- ================== PUSH 子树 ================== -->
-  <BehaviorTree ID="PushAtBlock">
-    <Sequence>
-      <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PUSH 条件下发 -->
-      <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <ArmTask node="{node}"
-               task_id="3"
-               server_name="robotic_task"
-               base_frame="base_footprint"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="5.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="0.0"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
-
-      <!-- 推完成功，标记下一个 MOVE 跑 PUSH 收尾(=2，区别于 PICK 的 1) -->
-      <Script code="need_finish := 2"/>
-    </Sequence>
   </BehaviorTree>
 
 </root>
