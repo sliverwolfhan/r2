@@ -1,152 +1,107 @@
 <?xml version="1.0"?>
 <root BTCPP_format="4">
 
-  <!-- ================== MOVE 子树 ==================
-       1) 串行：先导航到 prep 点；
-       2) 并行：楼梯腿（爬/下楼或不动）和 机械臂腿（按下一步是否 PICK 决定）。
-       机械臂腿包了 ForceSuccess，预备失败不会拖累 MOVE。 -->
+  <!-- ================== MOVE 子树（fork-join 版）==================
+       三段栅栏，每段 ParallelAll 等两腿都结束才进下一段，天然同步。
+         A: 导航到当前 prep  ||  收尾早期(必须先于楼梯)
+         B: 楼梯              ||  收尾晚期(可与楼梯并行)
+         C: 导航到下一 prep    ||  下一次 PICK 的臂 prep
+       早/晚期切分依据：
+         PICK1 早期=lift→stow→place→关泵(放稳前不能爬梯)，晚期=等真空泄气→stow→lift→ready
+         PICK2 早期=lift(臂离地后再爬梯)，晚期=hold_block
+         PUSH  早期=hold→push_finish→关泵，晚期=ready -->
   <BehaviorTree ID="MoveBetweenBlocks">
     <Sequence>
-      <!-- <PublishGoal node="{node}"
-                   x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                   frame_id="map"
-                   goal="{nav_goal}"/> -->
-      <!-- <PreSteerAlign node="{node}" vx="0.0" duration="4.0" publish_rate_hz="50"/> -->
-
+      <!-- ===== 段 A：到当前 prep || 收尾早期 ===== -->
       <ParallelAll max_failures="1">
-        <Sequence>
-          <!-- 仅在"无收尾动作"时检查能否跳过导航：
-               need_finish==0 且当前已经在 prep 容差内 → 不发 goal；
-               否则正常 PublishGoal，等到达再继续。 -->
-          <Fallback>
-            <Sequence>
-              <ScriptCondition code="need_finish == 0"/>
-              <IsPrepSkippable node="{node}"
-                               target_x="{prep_x}"
-                               target_y="{prep_y}"
-                               target_yaw="{prep_yaw}"
-                               x_tolerance="0.10"
-                               y_tolerance="0.10"
-                               yaw_tolerance="0.08"/>
-            </Sequence>
-            <PublishGoal node="{node}"
-                x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                frame_id="map"
-                goal="{nav_goal}"/>
-          </Fallback>
-          <!-- 收尾延时：给机械臂腿先跑收尾动作再开楼梯。
-               need_finish==0：无收尾，不延时；
-               need_finish==1 且 pick_count==1：第 1 次抓取(放置到车)，延时 5s；
-               need_finish==1 且 pick_count==2：第 2 次抓取(只举着)，延时 1s；
-               need_finish==2：PUSH 收尾，延时 1s。 -->
+        <Fallback>
+          <Sequence>
+            <ScriptCondition code="need_finish == 0"/>
+            <IsPrepSkippable node="{node}"
+                             target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
+                             x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+          </Sequence>
+          <PublishGoal node="{node}"
+                       x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+        </Fallback>
+        <ForceSuccess>
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
-              <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-              <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
-              <AlwaysSuccess/>
+              <Sequence>
+                <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
+                <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                <PublishPumpCmd node="{node}" command="0"/>
+              </Sequence>
+              <ArmMoveNamed node="{node}" pose_name="lift_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+              <ArmMoveNamed node="{node}" pose_name="lift_block" server_name="robotic_task" task_id="1" duration="1.5"/>
             </Switch2>
-            <DelayMs delay_msec="2500"><AlwaysSuccess/></DelayMs>
+            <Sequence>
+              <ArmMoveNamed node="{node}" pose_name="hold_block"   server_name="robotic_task" task_id="1" duration="1.5"/>
+              <ArmMoveNamed node="{node}" pose_name="push_finish"  server_name="robotic_task" task_id="1" duration="1.5"/>
+              <PublishPumpCmd node="{node}" command="0"/>
+            </Sequence>
             <AlwaysSuccess/>
             <AlwaysSuccess/>
           </Switch3>
-          <!-- 楼梯腿 -->
-          <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-            <ClimbStair   node="{node}" height="{abs_dh}"/>
-            <DescendStair node="{node}" height="{abs_dh}"/>
+        </ForceSuccess>
+      </ParallelAll>
+      <!-- ===== 段 B：楼梯 || 收尾晚期 ===== -->
+      <ParallelAll max_failures="1">
+        <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
+          <ClimbStair   node="{node}" height="{abs_dh}"/>
+          <DescendStair node="{node}" height="{abs_dh}"/>
+          <AlwaysSuccess/>
+        </Switch2>
+        <ForceSuccess>
+          <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
+            <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+              <Sequence>
+                <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
+                <ArmMoveNamed node="{node}" pose_name="stow_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="lift_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+                <ArmMoveNamed node="{node}" pose_name="ready"      server_name="robotic_task" task_id="1" duration="1.0"/>
+              </Sequence>
+              <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+              <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
+            </Switch2>
+            <ArmMoveNamed node="{node}" pose_name="ready" server_name="robotic_task" task_id="1" duration="3.0"/>
+            <AlwaysSuccess/>
+            <AlwaysSuccess/>
+          </Switch3>
+        </ForceSuccess>
+      </ParallelAll>
+      <!-- 收尾完成清零（B 段结束意味着两腿都齐了，可以安全清零） -->
+      <Script code="need_finish := 0"/>
+      <!-- ===== 段 C：到下一个 prep || 下一次 PICK 的臂 prep =====
+           B 段已结束 → 楼梯已过去，臂 prep 不再有翻车风险，无需延时。 -->
+      <ParallelAll max_failures="1">
+        <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
+          <PublishGoal node="{node}"
+                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+          <PublishGoal node="{node}"
+                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+          <AlwaysSuccess/>
+          <AlwaysSuccess/>
+        </Switch3>
+        <ForceSuccess>
+          <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+            <Sequence>
+              <SelectArmPrepName next_from_id="{next_from_id}"
+                                 next_target_id="{next_target_id}"
+                                 arm_prep_name="{arm_prep_name}"/>
+              <ArmMoveNamed node="{node}"
+                            pose_name="{arm_prep_name}"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="1.5"/>
+            </Sequence>
+            <AlwaysSuccess/>
             <AlwaysSuccess/>
           </Switch2>
-          <!-- 楼梯走完再发导航目标：下一步是 PICK 或 PUSH 才去其 prep 点 -->
-          <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map"
-                         goal="{nav_goal}"/>
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map"
-                         goal="{nav_goal}"/>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch3>
-
-        </Sequence>
-        <!-- 机械臂腿（兜底成功，不影响楼梯/MOVE 整体）。
-             先做"上一个 PICK 的收尾"（与楼梯腿并行），再做"为下一个 PICK 的预备"。 -->
-        <ForceSuccess>
-          <Sequence>
-            <!-- (1) 收尾：need_finish==1 → PICK 收尾(按 pick_count 分流)；need_finish==2 → PUSH 收尾 -->
-            <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
-              <Sequence>
-                <Switch2 variable="{pick_count}" case_1="1" case_2="2">
-                  <!-- 第 1 块：抓后放到车上 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="2.0"/>
-                    <ArmMoveNamed node="{node}" pose_name="place_block" server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <PublishPumpCmd node="{node}" command="0"/>
-                    <DelayMs delay_msec="3000">
-                      <AlwaysSuccess/>
-                    </DelayMs>
-                    <ArmMoveNamed node="{node}" pose_name="stow_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="ready"  server_name="robotic_task" task_id="1" duration="1.0"/>
-                  </Sequence>
-                  <!-- 第 2 块：抓后只举着 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                  </Sequence>
-                  <!-- default：计数异常兜底，只举着 -->
-                  <Sequence>
-                    <ArmMoveNamed node="{node}" pose_name="lift_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                    <ArmMoveNamed node="{node}" pose_name="hold_block"  server_name="robotic_task" task_id="1" duration="1.5"/>
-                  </Sequence>
-                </Switch2>
-                <!-- 收尾完成，清零，避免后续连续 MOVE 重复收尾 -->
-                <Script code="need_finish := 0"/>
-              </Sequence>
-              <!-- PUSH 收尾占位：等具体动作敲定再替换 pose_name -->
-              <Sequence>
-                <ArmMoveNamed node="{node}" pose_name="hold_block" server_name="robotic_task" task_id="1" duration="1.5"/>
-                <ArmMoveNamed node="{node}" pose_name="push_finish" server_name="robotic_task" task_id="1" duration="1.5"/>
-                <PublishPumpCmd node="{node}" command="0"/>
-                <ArmMoveNamed node="{node}" pose_name="ready"       server_name="robotic_task" task_id="1" duration="3.0"/>
-                <Script code="need_finish := 0"/>
-              </Sequence>
-              <AlwaysSuccess/>   <!-- need_finish==0：本次 MOVE 不做收尾 -->
-              <AlwaysSuccess/>   <!-- default -->
-            </Switch3>
-
-            <!-- (2) 预备：下一步是 PICK 才把手臂摆到下一次抓取的预备姿势 -->
-            <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
-              <Sequence>
-                <!-- 防翻车：升手臂会抬高重心，台阶途中升臂可能翻车。
-                     有收尾动作时(need_finish==1 或 2)，收尾已经占用了时间(楼梯也在并行走)，prep 时楼梯接近完成，不用延时；
-                     没台阶时，立即 prep 也无翻车风险，不用延时；
-                     仅"没收尾动作 + 上/下台阶"时延 500ms 等楼梯阶段进入再升臂。 -->
-                <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
-                  <AlwaysSuccess/>
-                  <AlwaysSuccess/>
-                  <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-                    <DelayMs delay_msec="4000"><AlwaysSuccess/></DelayMs>
-                    <AlwaysSuccess/>
-                  </Switch2>
-                  <AlwaysSuccess/>
-                </Switch3>
-                <SelectArmPrepName next_from_id="{next_from_id}"
-                                   next_target_id="{next_target_id}"
-                                   arm_prep_name="{arm_prep_name}"/>
-                <ArmMoveNamed node="{node}"
-                              pose_name="{arm_prep_name}"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="1.5"/>
-              </Sequence>
-              <AlwaysSuccess/>
-              <AlwaysSuccess/>
-            </Switch2>
-          </Sequence>
         </ForceSuccess>
       </ParallelAll>
     </Sequence>
