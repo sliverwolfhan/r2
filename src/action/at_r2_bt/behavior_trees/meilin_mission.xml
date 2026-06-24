@@ -9,17 +9,41 @@
       <SetMppiParams node="{node}"
                 controller_node="/AT_R2/controller_server"
                 plugin_prefix="FollowPath"
+                goal_angle_weight="5.0"
+                wait_after_set="0.3"
+                goal_angle_threshold="0.2"
+                wz_std="0.45"
+                vx_std="0.45"
+                vy_std="0.4"/>
+      <SetCostmapInflation node="{node}"
+                local_radius="0.1"
+                global_radius="0.15"
+                local_cost_scaling_factor="1.0"
+                global_cost_scaling_factor="4.0"/>
+
+      <WaitForEnter node="{node}"
+                      prompt="参数已设置完成，按 Enter 开始导航"
+                      require_tty="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
+
+      <PublishGoal node="{node}" x="2.3" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+
+      <SetMppiParams node="{node}"
+                controller_node="/AT_R2/controller_server"
+                plugin_prefix="FollowPath"
                 goal_angle_weight="6.0"
                 wait_after_set="0.3"
                 goal_angle_threshold="2.0"
-                wz_std="0.4"
-                vx_std="0.4"
-                vy_std="0.4"/>
+                wz_std="0.45"
+                vx_std="0.45"
+                vy_std="0.35"/>
       <SetCostmapInflation node="{node}"
                 local_radius="0.3"
                 global_radius="0.3"
                 local_cost_scaling_factor="1.0"
                 global_cost_scaling_factor="4.0"/>
+
 
       <Sequence>
         <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
@@ -33,11 +57,11 @@
         <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
         <Script code="need_finish := 0"/>
 
-        <WaitForEnter node="{node}"
+        <!-- <WaitForEnter node="{node}"
                       prompt="参数已设置完成，按 Enter 开始导航"
                       require_tty="true"
                       clear_buffer="true"
-                      timeout="0.0"/>
+                      timeout="0.0"/> -->
 
         <Repeat num_cycles="{num_steps}">
           <Sequence>
@@ -83,11 +107,11 @@
         <SetMppiParams node="{node}"
                 controller_node="/AT_R2/controller_server"
                 plugin_prefix="FollowPath"
-                goal_angle_weight="6.0"
+                goal_angle_weight="5.0"
                 wait_after_set="0.3"
-                goal_angle_threshold="6.0"
-                wz_std="0.4"
-                vx_std="0.4"
+                goal_angle_threshold="0.2"
+                wz_std="0.45"
+                vx_std="0.45"
                 vy_std="0.4"/>
         <PublishGoal node="{node}" x="8.6" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
         <PublishGoal node="{node}" x="11.5" y="0.6" yaw="0.0" frame_id="map" goal="{goal}"/>
@@ -96,7 +120,7 @@
                 global_radius="0.45"
                 local_cost_scaling_factor="1.0"
                 global_cost_scaling_factor="4.0"/>
-        <PublishGoal node="{node}" x="10.7" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/>
+        <PublishGoal node="{node}" x="10.7" y="4.0" yaw="0.0" frame_id="map" goal="{goal}"/>
 
       </Sequence>
     </Sequence>

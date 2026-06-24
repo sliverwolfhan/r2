@@ -36,14 +36,14 @@ steps:
   - type: MOVE
     from_id: 0
     target_id: 2
-    prep_pose: {x: 2.6, y: -3.0, theta: 0.0}
+    prep_pose: {x: 2.65, y: -3.0, theta: 0.0}
     abs_dh: 0.2
     stair_dir: UP
 
   - type: MOVE
     from_id: 2
     target_id: 5
-    prep_pose: {x: 3.8, y: -3.0, theta: 0.0}
+    prep_pose: {x: 3.85, y: -3.0, theta: 0.0}
     abs_dh: 0.2
     stair_dir: UP
 

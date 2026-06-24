@@ -54,6 +54,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
         }
         return "idel";
     };
+    robot->set_air_pump(true);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // 获取抓取高度 z：从 action 上下文获取覆盖值（如果有）

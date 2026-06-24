@@ -518,7 +518,7 @@ bool Robot::set_air_pump(const bool& enable) {
         arm_calc_param_client_->set_parameters({rclcpp::Parameter("enable_air_pump", enable)});
         return true;
     } else {
-        RCLCPP_WARN(node_->get_logger(), "%s 的参数服务不可用", arm_calc_node_name_.c_str());
+        RCLCPP_ERROR(node_->get_logger(), "%s 的参数服务不可用", arm_calc_node_name_.c_str());
         return false;
     }
 }
