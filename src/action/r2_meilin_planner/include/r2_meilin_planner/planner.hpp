@@ -62,6 +62,19 @@ struct ForestConfig {
     double move_prep_offset  = 0.1;  // MOVE 准备点
     double grasp_prep_offset = 0.1;  // PICK / PUSH 准备点
 
+    // PICK / PUSH 步骤发布的 block_height 偏移量（米）。
+    // block_height = (target.height - from.height) + block_height_offset。
+    // 仅影响发布给下游的字段，不参与 A* 代价计算。
+    double block_height_offset = 0.0;
+
+    // PICK / PUSH 步骤 prep_pose.theta 的偏移量（弧度），左右两档共用此偏移。
+    // step.prep_pose.theta = base_theta + grasp_prep_theta_offset；grasp_yaw 同步加。
+    double grasp_prep_theta_offset = 0.0;
+
+    // MOVE 步骤 prep_pose.theta 的偏移量（弧度）。
+    // 仅作用在导航 goal 朝向；turn_deg 用未偏移值计算，保证 MOVE 之间转角不被污染。
+    double move_prep_theta_offset = 0.0;
+
     // 代价配置（可由 yaml 覆盖）
     CostConfig cost;
 };

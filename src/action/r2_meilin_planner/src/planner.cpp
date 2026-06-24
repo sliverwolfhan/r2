@@ -298,6 +298,9 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             prev_heading = cur_heading;
             has_prev_heading = true;
 
+            // 应用 prep_pose.theta 偏移（仅影响导航 goal 朝向；turn_deg 已用未偏移值算完）
+            step.prep_pose.theta += config_.move_prep_theta_offset;
+
             const auto & f = blocks_.at(step.from_id);
             const auto & t = blocks_.at(step.target_id);
             const double dh = t.height - f.height;
@@ -325,17 +328,19 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             const double dx = t.x - f.x;
             const double dy = t.y - f.y;
             // 准备角度按目标在世界系下的方位离散取值（无后方情况）：
-            //   前(+x) 或 左(+y) → 0；右(-y) → -pi/2。
+            //   前(+x) 或 左(+y) → 0；右(-y) → -pi/2。再叠加可调偏移。
             double prep_theta = 0.0;
             if (std::abs(dy) > std::abs(dx) + AXIS_EPS && dy < 0.0) {
                 prep_theta = -M_PI_2;          // 目标在右方
             }
+            prep_theta += config_.grasp_prep_theta_offset;
             step.prep_pose.theta = prep_theta;
             step.grasp_yaw = prep_theta;       // 已弃用，留同值兼容下游 BT
 
             step.cube_x = t.cube_x;
             step.cube_y = t.cube_y;
-            step.block_height = t.height;
+            // 发布的是 target 相对 from 的高度差，再叠加可调偏移；与 A* 代价无关。
+            step.block_height = (t.height - f.height) + config_.block_height_offset;
         } else {
             continue;
         }

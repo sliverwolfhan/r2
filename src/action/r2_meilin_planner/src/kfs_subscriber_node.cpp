@@ -86,6 +86,16 @@ public:
     move_prep_offset_  = this->declare_parameter<double>("move_prep_offset", 0.6);
     grasp_prep_offset_ = this->declare_parameter<double>("grasp_prep_offset", 0.6);
 
+    // PICK/PUSH 发布的 block_height = (target.height - from.height) + 此偏移
+    // 仅影响发布字段，不进 A* 代价
+    block_height_offset_ = this->declare_parameter<double>("block_height_offset", 0.0);
+
+    // PICK/PUSH 发布的 prep_pose.theta 偏移（弧度），左右两档共用
+    grasp_prep_theta_offset_ = this->declare_parameter<double>("grasp_prep_theta_offset", 0.0);
+
+    // MOVE 发布的 prep_pose.theta 偏移（弧度），不影响 turn_deg
+    move_prep_theta_offset_ = this->declare_parameter<double>("move_prep_theta_offset", 0.0);
+
     // 高度开关：true 时把升/降代价清零并强制可上 400，使路径规划完全忽略高度
     const bool ignore_height = this->declare_parameter<bool>("ignore_height", false);
     if (ignore_height) {
@@ -131,6 +141,9 @@ private:
     config.cost = cost_;  // 应用可调代价
     config.move_prep_offset  = move_prep_offset_;
     config.grasp_prep_offset = grasp_prep_offset_;
+    config.block_height_offset = block_height_offset_;
+    config.grasp_prep_theta_offset = grasp_prep_theta_offset_;
+    config.move_prep_theta_offset = move_prep_theta_offset_;
 
     std::string line;
     for (int i = 0; i < 12; ++i) {
@@ -180,6 +193,9 @@ private:
   r2_planner::CostConfig cost_;
   double move_prep_offset_ = 0.6;
   double grasp_prep_offset_ = 0.6;
+  double block_height_offset_ = 0.0;
+  double grasp_prep_theta_offset_ = 0.0;
+  double move_prep_theta_offset_ = 0.0;
   std::string blocks_path_;
   std::atomic<bool> planned_{false};
 };

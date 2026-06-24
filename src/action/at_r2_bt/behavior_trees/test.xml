@@ -184,20 +184,26 @@
           </Sequence>
         </ParallelAll>       
 
-        <!-- <WaitForEnter node="{node}"
-                      prompt="对接完成，按 Enter 释放武器头"
-                      require_tty="true"
-                      clear_buffer="true"
-                      timeout="0.0"/>
-        <PublishHeadCmd node="{node}" command="7"
-                        topic="/AT_R2/head_gripper_cmd"
-                        wait_done="false"/> -->
-        <WaitDockingRelease node="{node}"
-                    status_topic="/AT_R2/docking_status"
-                    gripper_topic="/AT_R2/head_gripper_cmd"
-                    target_status="1"
-                    release_cmd="7"
-                    timeout="1000.0"/>
+        <!-- 释放武器头：手动按 Enter 与 docking_status==1 哪个先来都行，
+             另一支会被 Parallel 自动 halt，不会重复发 7。 -->
+        <Parallel success_count="1" failure_count="2">
+          <Sequence>
+            <WaitForEnter node="{node}"
+                          prompt="对接完成，按 Enter 释放武器头"
+                          require_tty="true"
+                          clear_buffer="true"
+                          timeout="0.0"/>
+            <PublishHeadCmd node="{node}" command="7"
+                            topic="/AT_R2/head_gripper_cmd"
+                            wait_done="false"/>
+          </Sequence>
+          <WaitDockingRelease node="{node}"
+                      status_topic="/AT_R2/docking_status"
+                      gripper_topic="/AT_R2/head_gripper_cmd"
+                      target_status="1"
+                      release_cmd="7"
+                      timeout="1000.0"/>
+        </Parallel>
       </Sequence>
         <!-- 2区 -->
 
