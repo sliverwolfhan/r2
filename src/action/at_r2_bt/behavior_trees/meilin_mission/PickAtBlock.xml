@@ -9,6 +9,9 @@
          - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
   <BehaviorTree ID="PickAtBlock">
     <Sequence>
+      <!-- 等上一段 MOVE 后台跑的 arm prep 收尾，确保臂到位再发 PICK 的 ArmTask -->
+      <WaitArmIdle timeout="20.0"/>
+
       <!-- 进入 PICK 即自增计数：第一次 -> 1，第二次 -> 2 -->
       <Script code="pick_count += 1"/>
 

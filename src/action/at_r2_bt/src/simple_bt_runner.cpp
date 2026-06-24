@@ -24,6 +24,9 @@
 #include "nav2_bt_publish_goal/peek_next_step_action.hpp"
 #include "nav2_bt_publish_goal/select_arm_prep_name_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_action.hpp"
+#include "nav2_bt_publish_goal/arm_job_runner.hpp"
+#include "nav2_bt_publish_goal/arm_move_named_async_action.hpp"
+#include "nav2_bt_publish_goal/wait_arm_idle_action.hpp"
 #include "nav2_bt_publish_goal/is_prep_skippable_condition.hpp"
 #include "nav2_bt_publish_goal/grasp_ready_by_pose_distance_condition.hpp"
 #include "nav2_bt_publish_goal/distance_servo_align_action.hpp"
@@ -90,6 +93,8 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::ArmTaskAction>("ArmTask");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveJointAction>("ArmMoveJoint");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveNamedAction>("ArmMoveNamed");
+  factory.registerNodeType<nav2_bt_publish_goal::ArmMoveNamedAsyncAction>("ArmMoveNamedAsync");
+  factory.registerNodeType<nav2_bt_publish_goal::WaitArmIdleAction>("WaitArmIdle");
   factory.registerNodeType<nav2_bt_publish_goal::GetPlanAction>("GetPlan");
   factory.registerNodeType<nav2_bt_publish_goal::PopNextStepAction>("PopNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::PeekNextStepAction>("PeekNextStep");
@@ -114,6 +119,8 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ ArmTask 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmMoveJoint 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmMoveNamed 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ ArmMoveNamedAsync 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ WaitArmIdle 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ GetPlan 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PopNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PeekNextStep 节点已注册");
@@ -126,6 +133,21 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ SetZoneMode 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitDockingRelease 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
+
+  // ===== 共享 ArmJobRunner：后台串行队列下发命名臂动作 =====
+  // 同一份 runner 给 ArmMoveNamedAsync / WaitArmIdle 复用，
+  // 自带独立 rclcpp::Node + executor + worker 线程，与主 BT tick 解耦。
+  std::string arm_yaml_default;
+  try {
+    arm_yaml_default = ament_index_cpp::get_package_share_directory("at_r2_bt") +
+      "/yaml/arm_ready_position.yaml";
+  } catch (const std::exception & e) {
+    RCLCPP_WARN(node->get_logger(),
+      "无法定位 at_r2_bt share dir 用于 arm yaml 默认路径: %s", e.what());
+  }
+  auto arm_runner = std::make_shared<nav2_bt_publish_goal::ArmJobRunner>(
+    "bt_arm_runner", "robotic_task", arm_yaml_default);
+  RCLCPP_INFO(node->get_logger(), "✓ ArmJobRunner 后台队列已就绪");
 
   // 获取行为树 XML 文件路径 - 支持命令行参数
   std::string bt_file = "meilin_mission.xml";
@@ -142,6 +164,7 @@ int main(int argc, char** argv)
   BT::Blackboard::Ptr blackboard = BT::Blackboard::create();
   blackboard->set("node", node);
   blackboard->set("tf_buffer", tf_buffer);
+  blackboard->set("arm_runner", arm_runner);
 
   std::vector<std::string> weapon_priority = {
     "weapon_1", "weapon_2", "weapon_3", "weapon_4", "weapon_5", "weapon_6"};

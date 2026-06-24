@@ -37,6 +37,9 @@ add_library(${PROJECT_NAME} SHARED
   src/arm_task_action.cpp
   src/arm_move_joint_action.cpp
   src/arm_move_named_action.cpp
+  src/arm_job_runner.cpp
+  src/arm_move_named_async_action.cpp
+  src/wait_arm_idle_action.cpp
   src/climb_stair_action.cpp
   src/descend_stair_action.cpp
   src/pre_steer_align_action.cpp
@@ -88,6 +91,9 @@ add_executable(simple_bt_runner
   src/arm_task_action.cpp
   src/arm_move_joint_action.cpp
   src/arm_move_named_action.cpp
+  src/arm_job_runner.cpp
+  src/arm_move_named_async_action.cpp
+  src/wait_arm_idle_action.cpp
   src/climb_stair_action.cpp
   src/descend_stair_action.cpp
   src/pre_steer_align_action.cpp

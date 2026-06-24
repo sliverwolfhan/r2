@@ -4,6 +4,9 @@
   <!-- ================== PUSH 子树 ================== -->
   <BehaviorTree ID="PushAtBlock">
     <Sequence>
+      <!-- 等上一段 MOVE 后台跑的臂动作落定，再开 PUSH 的 ArmTask -->
+      <WaitArmIdle timeout="20.0"/>
+
       <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PUSH 条件下发 -->
       <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
       <ArmTask node="{node}"
