@@ -28,6 +28,7 @@
 #include "nav2_bt_publish_goal/grasp_ready_by_pose_distance_condition.hpp"
 #include "nav2_bt_publish_goal/distance_servo_align_action.hpp"
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
+#include "nav2_bt_publish_goal/dock_to_tag_action.hpp"
 #include "nav2_bt_publish_goal/delay_decorator.hpp"
 #include "nav2_bt_publish_goal/publish_head_cmd_action.hpp"
 #include "nav2_bt_publish_goal/publish_pump_cmd_action.hpp"
@@ -97,6 +98,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DistanceServoAlignAction>("DistanceServoAlign");
   factory.registerNodeType<nav2_bt_publish_goal::DockToWallAction>("DockToWall");
+  factory.registerNodeType<nav2_bt_publish_goal::DockToTagAction>("DockToTag");
   factory.registerNodeType<nav2_bt_publish_goal::DelayDecorator>("DelayMs");
   factory.registerNodeType<nav2_bt_publish_goal::PublishHeadCmdAction>("PublishHeadCmd");
   factory.registerNodeType<nav2_bt_publish_goal::PublishPumpCmdAction>("PublishPumpCmd");

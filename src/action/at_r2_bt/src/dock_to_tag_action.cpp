@@ -264,4 +264,225 @@ void DockToTagAction::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
   }
 }
 
+BT::NodeStatus DockToTagAction::onRunning()
+{
+  const auto now = node_->now();
+
+  if ((now - start_time_).seconds() > timeout_) {
+    RCLCPP_WARN(node_->get_logger(), "DockToTag timeout after %.1fs", timeout_);
+    stopAll();
+    return BT::NodeStatus::FAILURE;
+  }
+
+  // 1) 取我方在 dock 系下的位姿，做新鲜度检查
+  double rx = 0.0, ry = 0.0, ryaw = 0.0;
+  rclcpp::Time tf_stamp;
+  bool tf_ok = lookupRobotInDock(rx, ry, ryaw, tf_stamp);
+  if (tf_ok && tag_max_age_ > 0.0) {
+    const double age = (now - tf_stamp).seconds();
+    if (age > tag_max_age_) {tf_ok = false;}
+  }
+
+  if (tf_ok) {
+    last_robot_x_in_dock_ = rx;
+    last_robot_y_in_dock_ = ry;
+    last_robot_yaw_in_dock_ = ryaw;
+    has_last_pose_ = true;
+    last_valid_tf_time_ = now;
+  } else {
+    const double lost_for = (now - last_valid_tf_time_).seconds();
+    if (!has_last_pose_ || lost_for > tag_lost_freeze_time_) {
+      RCLCPP_ERROR(node_->get_logger(),
+        "DockToTag: TF lost for %.2fs > %.2fs, abort", lost_for, tag_lost_freeze_time_);
+      stopAll();
+      return BT::NodeStatus::FAILURE;
+    }
+    rx = last_robot_x_in_dock_;
+    ry = last_robot_y_in_dock_;
+    ryaw = last_robot_yaw_in_dock_;
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
+      "DockToTag: TF stale, holding last pose for %.2fs", lost_for);
+  }
+
+  // 2) 在 dock 系下算误差
+  const double e_y = 0.0 - ry;
+  const double e_yaw = wrapAngle(target_yaw_in_dock_ - ryaw);
+  const double target_x = (phase_ == Phase::ALIGN) ? pre_dock_offset_x_ : 0.0;
+  const double e_x = target_x - rx;
+
+  // 3) 状态机切换（带滞回）
+  const bool aligned =
+    (std::fabs(e_y) < align_tol_lat_) && (std::fabs(e_yaw) < align_tol_yaw_);
+  const bool fallen_back =
+    (std::fabs(e_y) > align_hyst_lat_) || (std::fabs(e_yaw) > align_hyst_yaw_);
+
+  if (phase_ == Phase::ALIGN && aligned) {
+    phase_ = Phase::APPROACH;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      if (odom_received_) {
+        odom_ref_x_ = odom_cur_x_;
+        odom_ref_y_ = odom_cur_y_;
+        odom_ref_time_ = now;
+      }
+    }
+    stall_timer_active_ = false;
+    RCLCPP_INFO(node_->get_logger(), "DockToTag: ALIGN -> APPROACH");
+  } else if (phase_ == Phase::APPROACH && fallen_back) {
+    phase_ = Phase::ALIGN;
+    stall_timer_active_ = false;
+    RCLCPP_WARN(node_->get_logger(),
+      "DockToTag: APPROACH -> ALIGN (e_y=%.4f e_yaw=%.3f)", e_y, e_yaw);
+  }
+
+  // 4) APPROACH 阶段判到位（几何 OR stall）
+  if (phase_ == Phase::APPROACH) {
+    const bool geom_done = (std::fabs(e_x) < approach_tol_) && aligned;
+    bool stall_done = false;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      if (odom_received_) {
+        const double moved =
+          std::hypot(odom_cur_x_ - odom_ref_x_, odom_cur_y_ - odom_ref_y_);
+        if (moved < stall_threshold_) {
+          if (!stall_timer_active_) {
+            stall_start_time_ = now;
+            stall_timer_active_ = true;
+          } else if ((now - stall_start_time_).seconds() > stall_duration_) {
+            stall_done = true;
+          }
+        } else {
+          odom_ref_x_ = odom_cur_x_;
+          odom_ref_y_ = odom_cur_y_;
+          odom_ref_time_ = now;
+          stall_timer_active_ = false;
+        }
+      }
+    }
+    if (geom_done || stall_done) {
+      RCLCPP_INFO(node_->get_logger(),
+        "DockToTag SUCCESS via %s: e_x=%.4f e_y=%.4f e_yaw=%.3frad",
+        geom_done ? "geometry" : "stall", e_x, e_y, e_yaw);
+      stopAll();
+      return BT::NodeStatus::SUCCESS;
+    }
+  }
+
+  // 5) dock 系下的目标速度（纯 P）
+  double vx_dock = kp_x_ * e_x;
+  double vy_dock = kp_y_ * e_y;
+  double wz_cmd = kp_yaw_ * e_yaw;
+
+  if (phase_ == Phase::ALIGN) {
+    // 软门控：横向/yaw 偏得多就压住推进速度
+    const double gy =
+      (gate_sigma_lat_ > 0.0) ? (e_y / gate_sigma_lat_) : 0.0;
+    const double gyaw =
+      (gate_sigma_yaw_ > 0.0) ? (e_yaw / gate_sigma_yaw_) : 0.0;
+    const double gate = std::exp(-(gy * gy + gyaw * gyaw));
+    vx_dock *= gate;
+  } else {
+    // APPROACH：减速带 + 最低推进速度
+    const double abs_ex = std::fabs(e_x);
+    if (abs_ex > approach_tol_) {
+      double v_mag = std::fabs(vx_dock);
+      if (approach_decel_dist_ > 0.0 && abs_ex < approach_decel_dist_) {
+        v_mag = std::min(v_mag, max_vx_ * abs_ex / approach_decel_dist_);
+      }
+      v_mag = std::max(v_mag, approach_min_speed_);
+      vx_dock = std::copysign(v_mag, vx_dock);
+    } else {
+      vx_dock = 0.0;
+    }
+  }
+
+  // 6) dock 系 -> body 系：v_body = R(-ryaw) * v_dock
+  const double c = std::cos(ryaw);
+  const double s = std::sin(ryaw);
+  double vx_body = c * vx_dock + s * vy_dock;
+  double vy_body = -s * vx_dock + c * vy_dock;
+
+  // 7) 饱和
+  vx_body = saturate(vx_body, max_vx_);
+  vy_body = saturate(vy_body, max_vy_);
+  wz_cmd = saturate(wz_cmd, max_wz_);
+
+  // 8) 斜率限幅
+  const double dt = std::max(0.001, (now - prev_cmd_time_).seconds());
+  vx_body = slewLimit(prev_vx_body_, vx_body, accel_vx_, dt);
+  vy_body = slewLimit(prev_vy_body_, vy_body, accel_vy_, dt);
+  wz_cmd = slewLimit(prev_wz_, wz_cmd, accel_wz_, dt);
+  prev_vx_body_ = vx_body;
+  prev_vy_body_ = vy_body;
+  prev_wz_ = wz_cmd;
+  prev_cmd_time_ = now;
+
+  // 9) 写入定时器要发的指令
+  {
+    std::lock_guard<std::mutex> lock(cmd_mutex_);
+    cmd_.linear.x = vx_body;
+    cmd_.linear.y = vy_body;
+    cmd_.angular.z = wz_cmd;
+  }
+
+  RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
+    "DockToTag[%s] e=(%.4f,%.4f,%.3f) v_body=(%.3f,%.3f,%.3f)",
+    phase_ == Phase::ALIGN ? "ALIGN" : "APPROACH",
+    e_x, e_y, e_yaw, vx_body, vy_body, wz_cmd);
+
+  return BT::NodeStatus::RUNNING;
+}
+
+void DockToTagAction::publishCmdTimerCallback()
+{
+  geometry_msgs::msg::Twist out;
+  {
+    std::lock_guard<std::mutex> lock(publish_timer_mutex_);
+    if (!publish_timer_armed_ || !cmd_vel_pub_) {
+      return;
+    }
+    std::lock_guard<std::mutex> data_lock(cmd_mutex_);
+    out = cmd_;
+  }
+  cmd_vel_pub_->publish(out);
+}
+
+void DockToTagAction::publishZero()
+{
+  if (!cmd_vel_pub_) {return;}
+  geometry_msgs::msg::Twist zero;
+  cmd_vel_pub_->publish(zero);
+}
+
+void DockToTagAction::stopAll()
+{
+  {
+    std::lock_guard<std::mutex> lock(publish_timer_mutex_);
+    publish_timer_armed_ = false;
+    if (publish_timer_) {
+      publish_timer_->cancel();
+      publish_timer_.reset();
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(cmd_mutex_);
+    cmd_ = geometry_msgs::msg::Twist();
+  }
+  publishZero();
+  if (odom_sub_) {
+    odom_sub_.reset();
+  }
+}
+
+void DockToTagAction::onHalted()
+{
+  stopAll();
+  RCLCPP_INFO(node_->get_logger(), "DockToTag halted, sent zero velocity");
+}
+
 }  // namespace nav2_bt_publish_goal
+
+BT_REGISTER_NODES(factory)
+{
+  factory.registerNodeType<nav2_bt_publish_goal::DockToTagAction>("DockToTag");
+}

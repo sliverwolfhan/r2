@@ -50,6 +50,7 @@ add_library(${PROJECT_NAME} SHARED
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp
   src/dock_to_wall_action.cpp
+  src/dock_to_tag_action.cpp
   src/publish_head_cmd_action.cpp
   src/publish_pump_cmd_action.cpp
   src/set_zone_mode_action.cpp
@@ -100,6 +101,7 @@ add_executable(simple_bt_runner
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp
   src/dock_to_wall_action.cpp
+  src/dock_to_tag_action.cpp
   src/publish_head_cmd_action.cpp
   src/publish_pump_cmd_action.cpp
   src/set_zone_mode_action.cpp
