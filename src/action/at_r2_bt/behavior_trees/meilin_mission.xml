@@ -61,6 +61,9 @@
         <Script code="pick_count := 0"/>
         <!-- 抓取收尾标志：PICK 抓完置 1，紧跟的 MOVE 做完收尾后清 0 -->
         <Script code="need_finish := 0"/>
+        <!-- 臂 prep 排队标志：MOVE 段 C 为下一次 PICK 排队 prep 姿态后置 1，PICK 消费后清 0；
+             第一次 PICK 前没有 MOVE 时仍为 0，由 PICK 自行排队 -->
+        <Script code="arm_prep_queued := 0"/>
 
         <!-- <WaitForEnter node="{node}"
                       prompt="参数已设置完成，按 Enter 开始导航"

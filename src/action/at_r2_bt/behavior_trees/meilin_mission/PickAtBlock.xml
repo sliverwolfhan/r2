@@ -9,6 +9,34 @@
          - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
   <BehaviorTree ID="PickAtBlock">
     <Sequence>
+      <!-- 导航到 prep || 臂 prep 兜底排队，二者并行
+           - 导航：MOVE 段 C 已经走过则 IsPrepSkippable 通过，不再重复发 goal；
+                   首次 PICK 前面没有 MOVE 时由这里兜底导航
+           - 臂 prep：MOVE 段 C 已经为本次 PICK 排队（arm_prep_queued==1）则跳过；
+                     首次 PICK 前无 MOVE 时由这里排队 -->
+      <ParallelAll max_failures="1">
+        <Fallback>
+          <IsPrepSkippable node="{node}"
+                           target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
+                           x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+          <PublishGoal node="{node}"
+                       x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+        </Fallback>
+        <ForceSuccess>
+          <Fallback>
+            <ScriptCondition code="arm_prep_queued == 1"/>
+            <Sequence>
+              <SelectArmPrepName next_from_id="{from_id}"
+                                 next_target_id="{target_id}"
+                                 arm_prep_name="{arm_prep_name}"/>
+              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.5"/>
+            </Sequence>
+          </Fallback>
+        </ForceSuccess>
+      </ParallelAll>
+      <Script code="arm_prep_queued := 0"/>
+
       <!-- 等上一段 MOVE 后台跑的 arm prep 收尾，确保臂到位再发 PICK 的 ArmTask -->
       <WaitArmIdle timeout="20.0"/>
 

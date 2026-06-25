@@ -31,18 +31,16 @@
               <Sequence>
                 <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="1.5"/>
                 <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="2.0"/>
-                <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="1.5"/>
                 <WaitArmIdle timeout="20.0"/>
-                <PublishPumpCmd node="{node}" command="0"/>
+                <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="1.5"/>
               </Sequence>
-              <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
+              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
               <ArmMoveNamedAsync pose_name="hold_block"   task_id="1" duration="1.5"/>
-              <ArmMoveNamedAsync pose_name="push_finish"  task_id="1" duration="1.5"/>
               <WaitArmIdle timeout="20.0"/>
-              <PublishPumpCmd node="{node}" command="0"/>
+              <ArmMoveNamedAsync pose_name="push_finish"  task_id="1" duration="1.5"/>
             </Sequence>
             <AlwaysSuccess/>
             <AlwaysSuccess/>
@@ -63,7 +61,9 @@
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
-                <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
+                <WaitArmIdle timeout="20.0"/>
+                <PublishPumpCmd node="{node}" command="0"/>
+                <DelayMs delay_msec="1000"><AlwaysSuccess/></DelayMs>
                 <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.5"/>
                 <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
                 <ArmMoveNamedAsync pose_name="ready"      task_id="1" duration="1.0"/>
@@ -71,7 +71,11 @@
               <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
               <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
             </Switch2>
-            <ArmMoveNamedAsync pose_name="ready" task_id="1" duration="3.0"/>
+            <Sequence>
+              <WaitArmIdle timeout="20.0"/>
+              <PublishPumpCmd node="{node}" command="0"/>
+              <ArmMoveNamedAsync pose_name="ready" task_id="1" duration="3.0"/>
+            </Sequence>  
             <AlwaysSuccess/>
             <AlwaysSuccess/>
           </Switch3>
@@ -81,12 +85,22 @@
       <!-- ===== 段 C：到下一 prep（不再等臂）|| 把下一次 PICK 的臂 prep 塞进队列 ===== -->
       <ParallelAll max_failures="1">
         <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
-          <PublishGoal node="{node}"
-                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
-          <PublishGoal node="{node}"
-                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
+          <Fallback>
+            <IsPrepSkippable node="{node}"
+                             target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
+                             x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+            <PublishGoal node="{node}"
+                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                         frame_id="map" goal="{nav_goal}"/>
+          </Fallback>
+          <Fallback>
+            <IsPrepSkippable node="{node}"
+                             target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
+                             x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+            <PublishGoal node="{node}"
+                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                         frame_id="map" goal="{nav_goal}"/>
+          </Fallback>
           <AlwaysSuccess/>
           <AlwaysSuccess/>
         </Switch3>
@@ -97,6 +111,7 @@
                                  next_target_id="{next_target_id}"
                                  arm_prep_name="{arm_prep_name}"/>
               <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.5"/>
+              <Script code="arm_prep_queued := 1"/>
             </Sequence>
             <AlwaysSuccess/>
             <AlwaysSuccess/>
