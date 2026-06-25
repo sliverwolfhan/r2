@@ -65,8 +65,15 @@ public:
       (zone == "blue") ? "block_blue.yaml" : "block_red.yaml";
     blocks_path_ = share + "/config/" + block_file;
 
+    // 全局坐标偏移：补偿定位误差，加载时叠加到 yaml 原值上（不改 yaml 文件）
+    r2_planner::BlockOffsets block_offsets;
+    block_offsets.map_x  = this->declare_parameter<double>("map_x_offset", 0.0);
+    block_offsets.map_y  = this->declare_parameter<double>("map_y_offset", 0.0);
+    block_offsets.cube_x = this->declare_parameter<double>("cube_x_offset", 0.0);
+    block_offsets.cube_y = this->declare_parameter<double>("cube_y_offset", 0.0);
+
     std::string err;
-    if (!blocks_.loadFromYaml(blocks_path_, &err)) {
+    if (!blocks_.loadFromYaml(blocks_path_, &err, block_offsets)) {
       RCLCPP_FATAL(this->get_logger(), "加载 %s 失败: %s", blocks_path_.c_str(), err.c_str());
       throw std::runtime_error(err);
     }

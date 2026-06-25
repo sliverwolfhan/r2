@@ -41,3 +41,12 @@ kfs_subscriber_node:
     # MOVE 发布的 prep_pose.theta 偏移（弧度）：
     # 默认 0.0；正值整体逆时针偏，负值顺时针偏。turn_deg 用未偏移值计算，不被污染。
     move_prep_theta_offset: 0.0
+
+    # block_*.yaml 全局坐标偏移（米）——补偿系统性定位误差。
+    # 加载时一次性叠加到所有方块上，不修改 yaml 原文件。
+    #   map_x/y_offset  → 每块的中心坐标 x/y（影响 prep_pose）
+    #   cube_x/y_offset → 每块上 KFS 的抓取坐标 cube_x/cube_y（影响 PICK/PUSH 目标）
+    map_x_offset: 0.0
+    map_y_offset: 0.0
+    cube_x_offset: 0.0
+    cube_y_offset: 0.0

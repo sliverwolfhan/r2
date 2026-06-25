@@ -35,6 +35,7 @@
                 <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="1.5"/>
               </Sequence>
               <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
+
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
@@ -88,7 +89,7 @@
           <Fallback>
             <IsPrepSkippable node="{node}"
                              target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
-                             x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+                             x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.1"/>
             <PublishGoal node="{node}"
                          x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
                          frame_id="map" goal="{nav_goal}"/>

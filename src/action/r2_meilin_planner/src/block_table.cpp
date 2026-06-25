@@ -8,7 +8,10 @@
 
 namespace r2_planner {
 
-bool BlockTable::loadFromYaml(const std::string & path, std::string * err)
+bool BlockTable::loadFromYaml(
+  const std::string & path,
+  std::string * err,
+  const BlockOffsets & offsets)
 {
   try {
     YAML::Node root = YAML::LoadFile(path);
@@ -23,11 +26,11 @@ bool BlockTable::loadFromYaml(const std::string & path, std::string * err)
       const int id = it->first.as<int>();
       const YAML::Node & b = it->second;
       BlockEntry e;
-      e.x = b["x"].as<double>(0.0);
-      e.y = b["y"].as<double>(0.0);
+      e.x = b["x"].as<double>(0.0) + offsets.map_x;
+      e.y = b["y"].as<double>(0.0) + offsets.map_y;
       e.height = b["height"].as<double>(0.0);
-      e.cube_x = b["cube_x"].as<double>(e.x);
-      e.cube_y = b["cube_y"].as<double>(e.y);
+      e.cube_x = b["cube_x"].as<double>(b["x"].as<double>(0.0)) + offsets.cube_x;
+      e.cube_y = b["cube_y"].as<double>(b["y"].as<double>(0.0)) + offsets.cube_y;
       entries_[id] = e;
     }
     return true;
