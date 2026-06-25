@@ -49,6 +49,7 @@ add_library(${PROJECT_NAME} SHARED
   src/pop_next_step_action.cpp
   src/peek_next_step_action.cpp
   src/select_arm_prep_name_action.cpp
+  src/select_weapon_params_action.cpp
   src/is_prep_skippable_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp
@@ -103,6 +104,7 @@ add_executable(simple_bt_runner
   src/pop_next_step_action.cpp
   src/peek_next_step_action.cpp
   src/select_arm_prep_name_action.cpp
+  src/select_weapon_params_action.cpp
   src/is_prep_skippable_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp

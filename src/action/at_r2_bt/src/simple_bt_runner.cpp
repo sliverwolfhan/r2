@@ -23,6 +23,7 @@
 #include "nav2_bt_publish_goal/pop_next_step_action.hpp"
 #include "nav2_bt_publish_goal/peek_next_step_action.hpp"
 #include "nav2_bt_publish_goal/select_arm_prep_name_action.hpp"
+#include "nav2_bt_publish_goal/select_weapon_params_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_action.hpp"
 #include "nav2_bt_publish_goal/arm_job_runner.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_async_action.hpp"
@@ -99,6 +100,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PopNextStepAction>("PopNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::PeekNextStepAction>("PeekNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::SelectArmPrepNameAction>("SelectArmPrepName");
+  factory.registerNodeType<nav2_bt_publish_goal::SelectWeaponParamsAction>("SelectWeaponParams");
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
   factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DistanceServoAlignAction>("DistanceServoAlign");
@@ -175,36 +177,74 @@ int main(int argc, char** argv)
     weapon_priority.push_back("weapon_1");
   }
 
+  // 读取某个武器(weapon_x)的某个参数(suffix), 形如参数名 "weapon_1.grasp_prep_x"
+  const auto get_weapon_double =
+    [&](const std::string & weapon, const std::string & suffix, double default_value) {
+      const std::string param_name = weapon + "." + suffix;
+      node->declare_parameter<double>(param_name, default_value);
+      return node->get_parameter(param_name).as_double();
+    };
+
+  // 把一个武器的全部抓取参数, 以给定前缀(如 "w1_" / "w2_" / "w3_") 写进黑板。
+  // grasp_head_2.xml 通过这些带前缀的键分别引用三套位置。
+  const auto load_weapon_to_blackboard =
+    [&](const std::string & weapon, const std::string & prefix) {
+      const double prep_x = get_weapon_double(weapon, "grasp_prep_x", 0.0);
+      const double prep_y = get_weapon_double(weapon, "grasp_prep_y", 0.0);
+      const double prep_yaw = get_weapon_double(weapon, "grasp_prep_yaw", 0.0);
+      const double prep_y_tol = get_weapon_double(weapon, "grasp_prep_y_tolerance", 0.08);
+      const double prep_yaw_tol = get_weapon_double(weapon, "grasp_prep_yaw_tolerance", 0.20);
+      const double laser_dist = get_weapon_double(weapon, "laser_target_distance", 0.615);
+      const double laser_dist_tol = get_weapon_double(weapon, "laser_distance_tolerance", 0.005);
+
+      blackboard->set(prefix + "grasp_target_name", weapon);
+      blackboard->set(prefix + "grasp_prep_x", prep_x);
+      blackboard->set(prefix + "grasp_prep_y", prep_y);
+      blackboard->set(prefix + "grasp_prep_yaw", prep_yaw);
+      blackboard->set(prefix + "grasp_prep_y_tolerance", prep_y_tol);
+      blackboard->set(prefix + "grasp_prep_yaw_tolerance", prep_yaw_tol);
+      blackboard->set(prefix + "grasp_laser_target_distance", laser_dist);
+      blackboard->set(prefix + "grasp_laser_distance_tolerance", laser_dist_tol);
+
+      RCLCPP_INFO(node->get_logger(),
+        "✓ 抓取参数[%s%s -> %s]: prep=(%.3f, %.3f, %.3f) prep_tol=(y=%.3f, yaw=%.3f) "
+        "laser=%.3f±%.3f",
+        prefix.c_str(), "", weapon.c_str(), prep_x, prep_y, prep_yaw,
+        prep_y_tol, prep_yaw_tol, laser_dist, laser_dist_tol);
+    };
+
+  // ---- 单目标(grasp_head.xml)向后兼容: 把 weapon_priority 第一个加载成无前缀的扁平键 ----
   const std::string selected_weapon = weapon_priority.front();
-  const auto declare_and_get_double = [&](const std::string & suffix, double default_value) {
-    const std::string param_name = selected_weapon + "." + suffix;
-    node->declare_parameter<double>(param_name, default_value);
-    return node->get_parameter(param_name).as_double();
-  };
+  load_weapon_to_blackboard(selected_weapon, "");
 
-  const double grasp_prep_x = declare_and_get_double("grasp_prep_x", 0.955);
-  const double grasp_prep_y = declare_and_get_double("grasp_prep_y", 5.49);
-  const double grasp_prep_yaw = declare_and_get_double("grasp_prep_yaw", -3.14);
-  const double grasp_prep_y_tolerance = declare_and_get_double("grasp_prep_y_tolerance", 0.08);
-  const double grasp_prep_yaw_tolerance = declare_and_get_double("grasp_prep_yaw_tolerance", 0.20);
-  const double grasp_laser_target_distance = declare_and_get_double("laser_target_distance", 0.615);
-  const double grasp_laser_distance_tolerance = declare_and_get_double("laser_distance_tolerance", 0.005);
+  // ---- 多目标(grasp_head_2.xml): 把 weapon_priority 全部加载成 w1_/w2_/.../wN_ 前缀键 ----
+  // 位置仍来自 weapon_grasp_params.yaml; SelectWeaponParams 节点按序号选择并拷到工作键。
+  for (size_t i = 0; i < weapon_priority.size(); ++i) {
+    const std::string prefix = "w" + std::to_string(i + 1) + "_";  // 1-based
+    load_weapon_to_blackboard(weapon_priority[i], prefix);
+  }
 
-  blackboard->set("grasp_target_name", selected_weapon);
-  blackboard->set("grasp_prep_x", grasp_prep_x);
-  blackboard->set("grasp_prep_y", grasp_prep_y);
-  blackboard->set("grasp_prep_yaw", grasp_prep_yaw);
-  blackboard->set("grasp_prep_y_tolerance", grasp_prep_y_tolerance);
-  blackboard->set("grasp_prep_yaw_tolerance", grasp_prep_yaw_tolerance);
-  blackboard->set("grasp_laser_target_distance", grasp_laser_target_distance);
-  blackboard->set("grasp_laser_distance_tolerance", grasp_laser_distance_tolerance);
-
+  // ---- 连续抓取的循环控制参数 ----
+  // grasp_count: 抓几个(Repeat 循环次数); grasp_start: 从第几个武器开始(1-based)。
+  int grasp_count = 3;
+  int grasp_start = 1;
+  node->declare_parameter<int>("grasp_count", grasp_count);
+  node->declare_parameter<int>("grasp_start", grasp_start);
+  node->get_parameter("grasp_count", grasp_count);
+  node->get_parameter("grasp_start", grasp_start);
+  if (grasp_count < 1) {
+    RCLCPP_WARN(node->get_logger(), "grasp_count=%d 非法, 重置为 1", grasp_count);
+    grasp_count = 1;
+  }
+  if (grasp_start < 1) {
+    RCLCPP_WARN(node->get_logger(), "grasp_start=%d 非法, 重置为 1", grasp_start);
+    grasp_start = 1;
+  }
+  blackboard->set("grasp_count", grasp_count);
+  blackboard->set("grasp_start", grasp_start);
   RCLCPP_INFO(node->get_logger(),
-    "✓ ROS 节点 / TF buffer / 抓取参数已添加到黑板: target=%s prep=(%.3f, %.3f, %.3f) "
-    "prep_tol=(y=%.3f, yaw=%.3f) laser=%.3f±%.3f",
-    selected_weapon.c_str(), grasp_prep_x, grasp_prep_y, grasp_prep_yaw,
-    grasp_prep_y_tolerance, grasp_prep_yaw_tolerance,
-    grasp_laser_target_distance, grasp_laser_distance_tolerance);
+    "✓ 连续抓取参数: grasp_start=%d grasp_count=%d (将抓 w%d_ ~ w%d_)",
+    grasp_start, grasp_count, grasp_start, grasp_start + grasp_count - 1);
 
   // 创建树 - 传递黑板作为根黑板
   auto tree = factory.createTreeFromFile(bt_xml, blackboard);
