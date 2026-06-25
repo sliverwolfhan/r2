@@ -272,6 +272,11 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
 
         step.prep_pose.x = f.x + offset * ux;   // 锚在 from 格，朝目标推 offset
         step.prep_pose.y = f.y + offset * uy;
+        // 入场（from=0）特例：x 仍以 0 的 x + offset 为锚，但 y 必须对齐到目标块，
+        // 使 1/2/3 落在车的正前方。0 与 2 本身同 y，抓 2 时该改写无差别。
+        if (from_id == ENTRY_NODE_ID) {
+            step.prep_pose.y = t.y;
+        }
         step.prep_pose.theta = std::atan2(uy, ux);  // 默认朝向目标；PICK/PUSH 在外部覆盖
     };
 

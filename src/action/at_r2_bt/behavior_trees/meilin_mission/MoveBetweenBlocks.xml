@@ -30,12 +30,12 @@
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
                 <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="0.8"/>
-                <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="0.8"/>
+                <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="1.2"/>
                 <WaitArmIdle timeout="20.0"/>
+                <PublishPumpCmd node="{node}" command="0"/>
                 <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
               </Sequence>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
-
+              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.2"/>
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
@@ -62,9 +62,8 @@
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
-                <WaitArmIdle timeout="20.0"/>
-                <PublishPumpCmd node="{node}" command="0"/>
-                <DelayMs delay_msec="1000"><AlwaysSuccess/></DelayMs>
+                <!-- <WaitArmIdle timeout="20.0"/> -->
+                <DelayMs delay_msec="1900"><AlwaysSuccess/></DelayMs>
                 <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
                 <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
                 <ArmMoveNamedAsync pose_name="ready"      task_id="1" duration="0.8"/>

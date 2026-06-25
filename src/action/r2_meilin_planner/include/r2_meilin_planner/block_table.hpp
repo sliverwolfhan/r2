@@ -20,10 +20,10 @@ struct BlockEntry
 /// 避免改动 block_*.yaml 本身。x/y 影响 prep_pose；cube_x/y 影响抓取目标。
 struct BlockOffsets
 {
-  double map_x = 0.0;
-  double map_y = 0.0;
-  double cube_x = 0.0;
-  double cube_y = 0.0;
+  double map_x = 0.02;
+  double map_y = 0.09;
+  double cube_x = 0.02;
+  double cube_y = 0.09;
 };
 
 /**

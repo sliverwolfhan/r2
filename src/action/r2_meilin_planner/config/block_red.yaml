@@ -9,27 +9,27 @@
 
 blocks:
   # 入口区（无 cube）
-  0:  {x: 2.62, y: 3.09, height: 0.00}
+  0:  {x: 2.6, y: 3.0, height: 0.00}
 
   # 第 1 行（x=3.8，离 entry 最近）；1 号最靠 R1 启动区（y 最小）
-  1:  {x: 3.82, y: 1.89, height: 0.40, cube_x: 3.8, cube_y: 1.89}
-  2:  {x: 3.82, y: 3.09, height: 0.20, cube_x: 3.8, cube_y: 3.09}
-  3:  {x: 3.82, y: 4.29, height: 0.40, cube_x: 3.8, cube_y: 4.29}
+  1:  {x: 3.8, y: 1.8, height: 0.40, cube_x: 3.8, cube_y: 1.8}
+  2:  {x: 3.8, y: 3.0, height: 0.20, cube_x: 3.8, cube_y: 3.0}
+  3:  {x: 3.8, y: 4.2, height: 0.40, cube_x: 3.8, cube_y: 4.2}
 
   # 第 2 行（x=5.0）
-  4:  {x: 5.02, y: 1.89, height: 0.20, cube_x: 5.0, cube_y: 1.89}
-  5:  {x: 5.02, y: 3.09, height: 0.40, cube_x: 5.0, cube_y: 3.09}
-  6:  {x: 5.02, y: 4.29, height: 0.60, cube_x: 5.0, cube_y: 4.29}
+  4:  {x: 5.0, y: 1.8, height: 0.20, cube_x: 5.0, cube_y: 1.8}
+  5:  {x: 5.0, y: 3.0, height: 0.40, cube_x: 5.0, cube_y: 3.0}
+  6:  {x: 5.0, y: 4.2, height: 0.60, cube_x: 5.0, cube_y: 4.2}
 
   # 第 3 行（x=6.2）
-  7:  {x: 6.22, y: 1.89, height: 0.40, cube_x: 6.2, cube_y: 1.89}
-  8:  {x: 6.22, y: 3.09, height: 0.60, cube_x: 6.2, cube_y: 3.09}
-  9:  {x: 6.22, y: 4.29, height: 0.40, cube_x: 6.2, cube_y: 4.29}
+  7:  {x: 6.2, y: 1.8, height: 0.40, cube_x: 6.2, cube_y: 1.8}
+  8:  {x: 6.2, y: 3.0, height: 0.60, cube_x: 6.2, cube_y: 3.0}
+  9:  {x: 6.2, y: 4.2, height: 0.40, cube_x: 6.2, cube_y: 4.2}
 
   # 第 4 行（x=7.4，离 exit 最近）
-  10: {x: 7.42, y: 1.89, height: 0.20, cube_x: 7.4, cube_y: 1.89}
-  11: {x: 7.42, y: 3.09, height: 0.40, cube_x: 7.4, cube_y: 3.09}
-  12: {x: 7.42, y: 4.29, height: 0.20, cube_x: 7.4, cube_y: 4.29}
+  10: {x: 7.4, y: 1.8, height: 0.20, cube_x: 7.4, cube_y: 1.8}
+  11: {x: 7.4, y: 3.0, height: 0.40, cube_x: 7.4, cube_y: 3.0}
+  12: {x: 7.4, y: 4.2, height: 0.20, cube_x: 7.4, cube_y: 4.2}
 
   # 出口区（无 cube）
-  13: {x: 8.62, y: 3.0, height: 0.00}
+  13: {x: 8.6, y: 3.0, height: 0.00}

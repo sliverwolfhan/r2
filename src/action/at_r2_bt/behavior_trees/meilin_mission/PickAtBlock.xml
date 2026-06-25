@@ -23,17 +23,20 @@
                        x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                        frame_id="map" goal="{nav_goal}"/>
         </Fallback>
-        <ForceSuccess>
-          <Fallback>
-            <ScriptCondition code="arm_prep_queued == 1"/>
-            <Sequence>
-              <SelectArmPrepName next_from_id="{from_id}"
-                                 next_target_id="{target_id}"
-                                 arm_prep_name="{arm_prep_name}"/>
-              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
-            </Sequence>
-          </Fallback>
-        </ForceSuccess>
+        <Sequence>
+          <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
+          <ForceSuccess>
+            <Fallback>
+              <ScriptCondition code="arm_prep_queued == 1"/>
+              <Sequence>
+                <SelectArmPrepName next_from_id="{from_id}"
+                                  next_target_id="{target_id}"
+                                  arm_prep_name="{arm_prep_name}"/>
+                <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
+              </Sequence>
+            </Fallback>
+          </ForceSuccess>
+        </Sequence>
       </ParallelAll>
       <Script code="arm_prep_queued := 0"/>
 
