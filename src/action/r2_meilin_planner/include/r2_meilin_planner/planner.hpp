@@ -65,7 +65,7 @@ struct ForestConfig {
     // PICK / PUSH 步骤发布的 block_height 偏移量（米）。
     // block_height = (target.height - from.height) + block_height_offset。
     // 仅影响发布给下游的字段，不参与 A* 代价计算。
-    double block_height_offset = 0.0;
+    double block_height_offset = -0.08;
 
     // PICK / PUSH 步骤 prep_pose.theta 的偏移量（弧度），左右两档共用此偏移。
     // step.prep_pose.theta = base_theta + grasp_prep_theta_offset；grasp_yaw 同步加。

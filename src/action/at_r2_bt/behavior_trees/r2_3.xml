@@ -3,21 +3,26 @@
   <BehaviorTree ID="MainTree">
     <Sequence name="PlaceKFS">
 
-      <!-- 1. 机械臂摆放置姿态（夹着 KFS）。task_id=1 走 move_kfs 关节运动。 -->
-      <ArmMoveNamed node="{node}"
-                    pose_name="place_interim_pos_0"
-                    server_name="robotic_task"
-                    task_id="1"
-                    duration="2.0"/>
+      <!-- 1+2. 机械臂摆放置姿态 与 导航到预备点 并行。 -->
+      <ParallelAll max_failures="1">
 
-      <!-- 2. 导航到预备点：对齐格子。x/y 单位 m，yaw 单位 rad（map 系）。 -->
-      <PublishGoal node="{node}"
-                   x="0.0"
-                   y="0.0"
-                   yaw="0.0"
-                   frame_id="map"
-                   action_name="/AT_R2/navigate_to_pose"
-                   goal="{prep_goal}"/>
+        <!-- 腿1: 机械臂摆放置姿态（夹着 KFS）。task_id=1 走 move_kfs 关节运动。 -->
+        <ArmMoveNamed node="{node}"
+                      pose_name="place_interim_pos_0"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+
+        <!-- 腿2: 导航到预备点：对齐格子。x/y 单位 m，yaw 单位 rad（map 系）。 -->
+        <PublishGoal node="{node}"
+                     x="0.0"
+                     y="0.0"
+                     yaw="0.0"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{prep_goal}"/>
+
+      </ParallelAll>
 
       <!-- 3. 导航到放置点：往前进把 KFS 怼进格子。 -->
       <PublishGoal node="{node}"

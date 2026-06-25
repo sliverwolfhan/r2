@@ -23,7 +23,7 @@ int main(int argc, char ** argv)
   std::string blocks_yaml;
   try {
     blocks_yaml = ament_index_cpp::get_package_share_directory("r2_meilin_planner") +
-                  "/config/blocks.yaml";
+                  "/config/block_red.yaml";
   } catch (const std::exception & ex) {
     RCLCPP_WARN(node->get_logger(), "ament_index lookup failed: %s", ex.what());
   }

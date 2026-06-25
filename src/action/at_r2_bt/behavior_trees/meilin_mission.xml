@@ -19,7 +19,7 @@
                 goal_angle_threshold="0.2"
                 wz_std="0.45"
                 vx_std="0.45"
-                vy_std="0.4"/>
+                vy_std="0.35"/>
       <SetCostmapInflation node="{node}"
                 local_radius="0.1"
                 global_radius="0.15"
@@ -111,7 +111,7 @@
           </Sequence>
         </Repeat>
       </Sequence>
-      <Sequence>
+      <!-- <Sequence>
         <SetMppiParams node="{node}"
                 controller_node="/AT_R2/controller_server"
                 plugin_prefix="FollowPath"
@@ -130,7 +130,7 @@
                 global_cost_scaling_factor="4.0"/>
         <PublishGoal node="{node}" x="10.7" y="4.0" yaw="0.0" frame_id="map" goal="{goal}"/>
 
-      </Sequence>
+      </Sequence> -->
     </Sequence>
 
   </BehaviorTree>

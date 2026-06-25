@@ -18,7 +18,7 @@
         <Fallback>
           <IsPrepSkippable node="{node}"
                            target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
-                           x_tolerance="0.10" y_tolerance="0.10" yaw_tolerance="0.08"/>
+                           x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
           <PublishGoal node="{node}"
                        x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                        frame_id="map" goal="{nav_goal}"/>
@@ -30,7 +30,7 @@
               <SelectArmPrepName next_from_id="{from_id}"
                                  next_target_id="{target_id}"
                                  arm_prep_name="{arm_prep_name}"/>
-              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.5"/>
+              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
             </Sequence>
           </Fallback>
         </ForceSuccess>
