@@ -178,10 +178,13 @@ int main(int argc, char** argv)
   }
 
   // 读取某个武器(weapon_x)的某个参数(suffix), 形如参数名 "weapon_1.grasp_prep_x"
+  // 同一武器可能被加载多次(无前缀 + w1_ 前缀), 故先判断是否已声明再 declare.
   const auto get_weapon_double =
     [&](const std::string & weapon, const std::string & suffix, double default_value) {
       const std::string param_name = weapon + "." + suffix;
-      node->declare_parameter<double>(param_name, default_value);
+      if (!node->has_parameter(param_name)) {
+        node->declare_parameter<double>(param_name, default_value);
+      }
       return node->get_parameter(param_name).as_double();
     };
 

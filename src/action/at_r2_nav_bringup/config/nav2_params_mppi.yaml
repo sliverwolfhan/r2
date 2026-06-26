@@ -185,7 +185,7 @@ small_gicp_relocalization:
     sliding_window_filter_reset_translation_threshold: 0.3
     sliding_window_filter_reset_rotation_threshold: 0.3
     relocalization_enabled: true
-    auto_disable_relocalization: false
+    auto_disable_relocalization: true
     stable_required_count: 10
     stable_translation_threshold: 0.015
     stable_rotation_threshold: 0.015
@@ -408,7 +408,7 @@ controller_server:
       az_max: 5.5
       iteration_count: 2
       temperature: 0.3
-      gamma: 0.03
+      gamma: 0.04
       motion_model: "Omni"          # 改为全向运动模型 DiffDrive Omni
       visualize: false
       critic_index_to_visualize: 0

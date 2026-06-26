@@ -52,11 +52,15 @@
                wait_after_set="0.2"/>
 
       <!-- 一键启动门控: 参数已设置完成, 按 Enter 开始 -->
+      <!-- require_tty="false": ros2 launch 下无 TTY 时自动跳过, ros2 run 直接从终端启动时仍会等待 Enter。 -->
       <WaitForEnter node="{node}"
                     prompt="参数已设置完成，按 Enter 开始连续抓取武器头"
                     require_tty="true"
                     clear_buffer="true"
                     timeout="0.0"/>
+
+      <!-- 首轮标志: 子树内首轮才执行 SetMppiParams, 之后保留上一轮末尾的参数 -->
+      <Script code="first_grasp := 1"/>
 
       <!-- ===== 循环抓取 grasp_count 个武器, 从 grasp_start 开始 ===== -->
       <Repeat num_cycles="{grasp_count}">
@@ -82,6 +86,52 @@
   <BehaviorTree ID="GraspOneWeapon">
     <Sequence>
 
+      <!-- 首轮 MPPI 参数(宽 yaw 阈值, 远距离接近) -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 0"/>
+        <SetMppiParams node="{node}"
+                 controller_node="/AT_R2/controller_server"
+                 plugin_prefix="FollowPath"
+                 goal_angle_weight="6.0"
+                 goal_angle_threshold="2.0"
+                 vx_max="1.2"
+                 vx_min="-1.2"
+                 vy_max="1.2"
+                 wz_max="4.0"
+                 vx_std="0.35"
+                 vy_std="0.35"
+                 wz_std="0.35"
+                 goal_x_tolerance="0.03"
+                 goal_y_tolerance="0.05"
+                 goal_yaw_tolerance="0.05"
+                 goal_stable_duration="0.3"
+                 wait_after_set="0.2"/>
+      </Fallback>
+
+      <!-- 后续轮 MPPI 参数(占位, 待调整数值) -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 1"/>
+        <SetMppiParams node="{node}"
+                 controller_node="/AT_R2/controller_server"
+                 plugin_prefix="FollowPath"
+                 goal_angle_weight="6.0"
+                 goal_angle_threshold="2.0"
+                 vx_max="1.2"
+                 vx_min="-1.2"
+                 vy_max="1.2"
+                 wz_max="4.0"
+                 vx_std="0.2"
+                 vy_std="0.2"
+                 wz_std="0.4"
+                 goal_x_tolerance="0.03"
+                 goal_y_tolerance="0.05"
+                 goal_yaw_tolerance="0.05"
+                 goal_stable_duration="0.3"
+                 wait_after_set="0.2"/>
+      </Fallback>
+
+      <!-- 翻转首轮标志(两个 Fallback 都判断完再改, 避免首轮同时触发后续轮分支) -->
+      <Script code="first_grasp := 0"/>
       <!-- A. 导航到该武器 prep 点, 同时通知爪子"准备抓取/张开"。
            cmd=1 用 wait_done="false"(与 grasp_head.xml 一致): 下位机不对准备抓取
            单独回执(反馈只在 /AT_R2/grasp_status 上, 且仅抓取/对接才有), 所以这里
@@ -191,11 +241,28 @@
                 wait_done="false"/>
       </ParallelAll>
 
+      <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="6.0"
+               goal_angle_threshold="0.3"
+               vx_max="1.2"
+               vx_min="-1.2"
+               vy_max="1.2"
+               wz_max="4.0"
+               vx_std="0.35"
+               vy_std="0.35"
+               wz_std="0.4"
+               goal_x_tolerance="0.03"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.05"
+               goal_stable_duration="0.3"
+               wait_after_set="0.2"/>
       <!-- 命令6 -->
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
         <PublishGoal node="{node}"
-                  x="0.47" y="5.1" yaw="0.0"
+                  x="0.5" y="5.1" yaw="0.0"
                   frame_id="map"
                   goal="{nav_goal}"/>
 
@@ -212,18 +279,21 @@
 
       <!-- 导航到与持杆机器人对接的位置, 到点后等对接完成再松爪 -->
       <PublishGoal node="{node}"
-                x="0.47" y="5.1" yaw="0.0"
+                x="0.5" y="5.1" yaw="0.0"
                 frame_id="map"
                 goal="{nav_goal}"/>
-      <!-- 等下位机对接完成信号 /AT_R2/docking_status==1
-           (由 at_r2_serial_bridge_node 解析对接包后发布), 收到即松爪 cmd=7。
-           超时 30s 后失败, 避免卡死。 -->
-      <WaitDockingRelease node="{node}"
-                          status_topic="/AT_R2/docking_status"
-                          gripper_topic="/AT_R2/head_gripper_cmd"
-                          target_status="1"
-                          release_cmd="7"
-                          timeout="30.0"/>
+      <!-- 等操作员按 Enter 后松爪 cmd=7 -->
+      <WaitForEnter node="{node}"
+                    prompt="对接完成后按 Enter 松爪 (cmd=7)"
+                    require_tty="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+      <PublishHeadCmd node="{node}" command="7"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="200">
+        <AlwaysSuccess/>
+      </DelayMs>
 
     </Sequence>
   </BehaviorTree>

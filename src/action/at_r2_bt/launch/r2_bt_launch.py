@@ -26,7 +26,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'bt_xml',
-            default_value='grasp_head.xml',
+            default_value='grasp_head_2.xml',
             description='行为树 xml 文件名 (位于 at_r2_bt/behavior_trees/)',
         ),
         Node(
@@ -41,5 +41,9 @@ def generate_launch_description():
                     'use_sim_time': False,
                 },
             ],
+            # 在独立的 gnome-terminal 窗口里运行, 让 simple_bt_runner 拥有自己的 stdin TTY,
+            # 这样 WaitForEnter 节点可以在该窗口内等待操作员按 Enter。
+            # --wait 让 gnome-terminal 进程在子命令结束前不退出, 便于 launch 跟踪生命周期。
+            prefix='gnome-terminal --wait --title="AT_R2 BT" --',
         ),
     ])

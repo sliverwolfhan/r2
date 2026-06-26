@@ -18,7 +18,7 @@
 
       <WaitForEnter node="{node}"
                     prompt="参数已设置完成，按 Enter 开始导航"
-                    require_tty="true"
+                    require_tty="false"
                     clear_buffer="true"
                     timeout="0.0"/>
 

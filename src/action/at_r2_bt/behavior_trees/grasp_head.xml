@@ -45,9 +45,10 @@
                wait_after_set="0.2"/>
 
       <!-- 一键启动门控: 参数已提前设置完成后停在这里，比赛开始时按 Enter 立即开始导航。 -->
+      <!-- require_tty="false": ros2 launch 下无 TTY 时自动跳过, ros2 run 直接从终端启动时仍会等待 Enter。 -->
       <WaitForEnter node="{node}"
                     prompt="参数已设置完成，按 Enter 开始导航"
-                    require_tty="true"
+                    require_tty="false"
                     clear_buffer="true"
                     timeout="0.0"/>
 
@@ -129,7 +130,7 @@
                             kp="0.5"
                             max_speed="0.1"
                             min_speed="0.015"
-                            stable_count="2"
+                            stable_count="5"
                             max_data_age="0.5"
                             timeout="8.0"
                             publish_rate_hz="50.0"

@@ -32,7 +32,7 @@
         <!-- 一键启动门控: 参数已提前设置完成后停在这里，比赛开始时按 Enter 立即开始导航。 -->
         <WaitForEnter node="{node}"
                       prompt="参数已设置完成，按 Enter 开始导航"
-                      require_tty="true"
+                      require_tty="false"
                       clear_buffer="true"
                       timeout="0.0"/>
 
@@ -190,7 +190,7 @@
           <Sequence>
             <WaitForEnter node="{node}"
                           prompt="对接完成，按 Enter 释放武器头"
-                          require_tty="true"
+                          require_tty="false"
                           clear_buffer="true"
                           timeout="0.0"/>
             <PublishHeadCmd node="{node}" command="7"
@@ -210,7 +210,7 @@
       <Sequence>
         <WaitForEnter node="{node}"
                       prompt="按 Enter 进入 2 区"
-                      require_tty="true"
+                      require_tty="false"
                       clear_buffer="true"
                       timeout="0.0"/>
         <SetMppiParams node="{node}"
@@ -242,7 +242,7 @@
 
           <WaitForEnter node="{node}"
                         prompt="参数已设置完成，按 Enter 开始导航"
-                        require_tty="true"
+                        require_tty="false"
                         clear_buffer="true"
                         timeout="0.0"/>
 

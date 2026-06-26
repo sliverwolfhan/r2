@@ -56,10 +56,15 @@ BT::NodeStatus WaitForEnterAction::onStart()
   getInput("require_tty", require_tty_);
   getInput("clear_buffer", clear_buffer_);
 
-  if (require_tty_ && !isatty(STDIN_FILENO)) {
-    RCLCPP_ERROR(node_->get_logger(),
-      "WaitForEnter requires an interactive terminal, but stdin is not a TTY");
-    return BT::NodeStatus::FAILURE;
+  if (!isatty(STDIN_FILENO)) {
+    if (require_tty_) {
+      RCLCPP_ERROR(node_->get_logger(),
+        "WaitForEnter requires an interactive terminal, but stdin is not a TTY");
+      return BT::NodeStatus::FAILURE;
+    }
+    RCLCPP_WARN(node_->get_logger(),
+      "WaitForEnter: stdin is not a TTY (require_tty=false), 跳过 Enter 门控");
+    return BT::NodeStatus::SUCCESS;
   }
 
   if (clear_buffer_) {

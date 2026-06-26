@@ -37,6 +37,8 @@ public:
 
 private:
   void statusCallback(const std_msgs::msg::Int32::SharedPtr msg);
+  bool stdinReady() const;
+  bool pollEnter();
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr status_sub_;
@@ -51,6 +53,9 @@ private:
   std::string gripper_topic_;
   int32_t release_cmd_{5};
   int32_t target_status_{1};
+
+  bool allow_enter_{true};
+  bool enter_enabled_{false};
 };
 
 }  // namespace nav2_bt_publish_goal
