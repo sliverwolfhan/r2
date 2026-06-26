@@ -123,9 +123,9 @@ public:
             "/AT_R2/head_gripper_cmd", 10,
             std::bind(&VirtualSerialPortNode::grasp_callback, this, std::placeholders::_1));
 
-        // 订阅气泵使能话题 (latched, pump 连续发送当前值: 1=吸气, 0=放气)
+        // 订阅底盘气泵使能话题 (latched, pump 连续发送当前值: 1=吸气, 0=放气)
         pump_sub_ = this->create_subscription<std_msgs::msg::Int32>(
-            "/AT_R2/pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
+            "/AT_R2/chassis_pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
             std::bind(&VirtualSerialPortNode::pump_callback, this, std::placeholders::_1));
 
         // 创建爬楼梯状态发布器
@@ -173,7 +173,7 @@ public:
             cmd_vel_topic.c_str(), bt_cmd_vel_topic.c_str(), send_interval_ms_);
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
-        RCLCPP_INFO(this->get_logger(), "已订阅气泵使能话题: /AT_R2/pump_cmd (连续发送, 1=吸气 0=放气)");
+        RCLCPP_INFO(this->get_logger(), "已订阅底盘气泵使能话题: /AT_R2/chassis_pump_cmd (连续发送, 1=吸气 0=放气)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance");
     }
 
