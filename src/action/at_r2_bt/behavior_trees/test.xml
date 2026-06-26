@@ -101,6 +101,9 @@
                               positive_error_direction="-1.0"
                               side_speed_scale="0.7"
                               side_speed_direction="-1.0"
+                              filter_enable="true"
+                              median_window="3"
+                              ema_tau="0.1"
                               cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
         </Fallback>
         <!-- Step 4: 通知爪子抓取, 并留出抓取执行时间

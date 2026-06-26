@@ -4,6 +4,7 @@
 #ifndef NAV2_BT_PUBLISH_GOAL__DISTANCE_SERVO_ALIGN_ACTION_HPP_
 #define NAV2_BT_PUBLISH_GOAL__DISTANCE_SERVO_ALIGN_ACTION_HPP_
 
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -41,6 +42,8 @@ private:
   void setZeroCommand();
   double computeSpeed(double error) const;
   void applySidePressCommand(geometry_msgs::msg::Twist & cmd, double main_speed) const;
+  // 中值(去尖刺) + 时间常数 EMA(去抖动) 串联滤波，返回滤波后距离。
+  double filterDistance(double raw, const rclcpp::Time & stamp);
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
@@ -76,6 +79,15 @@ private:
   double side_speed_scale_{0.0};
   double side_speed_direction_{1.0};
   int stable_count_required_{3};
+
+  // 距离滤波参数与状态
+  bool filter_enable_{true};
+  int median_window_{3};
+  double ema_tau_{0.1};
+  std::deque<double> median_buf_;
+  double ema_value_{0.0};
+  bool ema_initialized_{false};
+  rclcpp::Time last_filter_time_;
 };
 
 }  // namespace nav2_bt_publish_goal

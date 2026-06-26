@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <vector>
 
 #include "behaviortree_cpp/bt_factory.h"
 
@@ -51,6 +52,12 @@ BT::PortsList DistanceServoAlignAction::providedPorts()
       "Extra y-axis press speed scale relative to absolute main closed-loop speed; 0 disables"),
     BT::InputPort<double>("side_speed_direction", 1.0,
       "Extra y-axis press direction; use -1 to invert"),
+    BT::InputPort<bool>("filter_enable", true,
+      "Enable median+EMA distance filtering before control"),
+    BT::InputPort<int>("median_window", 3,
+      "Median filter window size in samples (>=1); rejects laser spikes"),
+    BT::InputPort<double>("ema_tau", 0.1,
+      "EMA time constant (s); larger=smoother but more lag, <=0 disables EMA"),
   };
 }
 
@@ -79,6 +86,9 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
   positive_error_direction_ = 1.0;
   side_speed_scale_ = 0.0;
   side_speed_direction_ = 1.0;
+  filter_enable_ = true;
+  median_window_ = 3;
+  ema_tau_ = 0.1;
 
   (void)getInput("distance_topic", distance_topic_);
   (void)getInput("cmd_vel_topic", cmd_vel_topic_);
@@ -100,6 +110,9 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
   (void)getInput("positive_error_direction", positive_error_direction_);
   (void)getInput("side_speed_scale", side_speed_scale_);
   (void)getInput("side_speed_direction", side_speed_direction_);
+  (void)getInput("filter_enable", filter_enable_);
+  (void)getInput("median_window", median_window_);
+  (void)getInput("ema_tau", ema_tau_);
 
   if (!std::isfinite(distance_scale_) || distance_scale_ == 0.0) {
     RCLCPP_ERROR(node_->get_logger(),
@@ -166,6 +179,10 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
       "DistanceServoAlign side_speed_scale requires cmd_axis=x because side press uses linear.y");
     return BT::NodeStatus::FAILURE;
   }
+  median_window_ = std::max(1, median_window_);
+  if (!std::isfinite(ema_tau_) || ema_tau_ < 0.0) {
+    ema_tau_ = 0.0;
+  }
 
   stopAll();
 
@@ -176,6 +193,10 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
     has_distance_ = false;
     stable_count_current_ = 0;
     cmd_ = geometry_msgs::msg::Twist();
+    median_buf_.clear();
+    ema_initialized_ = false;
+    ema_value_ = 0.0;
+    last_filter_time_ = node_->now();
   }
 
   cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic_, 10);
@@ -199,10 +220,12 @@ BT::NodeStatus DistanceServoAlignAction::onStart()
   RCLCPP_INFO(node_->get_logger(),
     "DistanceServoAlign started: target=%.3fm tol=%.3fm kp=%.3f speed=[%.3f, %.3f] "
     "axis=%s direction=%.0f side_y_scale=%.3f side_y_direction=%.0f "
-    "distance_topic=%s cmd_vel_topic=%s timeout=%.1fs",
+    "distance_topic=%s cmd_vel_topic=%s timeout=%.1fs "
+    "filter=%d median_window=%d ema_tau=%.3fs",
     target_distance_, tolerance_, kp_, min_speed_, max_speed_, cmd_axis_.c_str(),
     positive_error_direction_, side_speed_scale_, side_speed_direction_,
-    distance_topic_.c_str(), cmd_vel_topic_.c_str(), timeout_);
+    distance_topic_.c_str(), cmd_vel_topic_.c_str(), timeout_,
+    filter_enable_ ? 1 : 0, median_window_, ema_tau_);
 
   return BT::NodeStatus::RUNNING;
 }
@@ -314,9 +337,58 @@ void DistanceServoAlignAction::distanceCallback(
   const std_msgs::msg::Float64::SharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(mutex_);
-  latest_distance_ = msg->data;
-  latest_distance_time_ = node_->now();
+  const rclcpp::Time stamp = node_->now();
+  if (filter_enable_) {
+    latest_distance_ = filterDistance(msg->data, stamp);
+  } else {
+    latest_distance_ = msg->data;
+  }
+  latest_distance_time_ = stamp;
   has_distance_ = true;
+}
+
+double DistanceServoAlignAction::filterDistance(
+  double raw, const rclcpp::Time & stamp)
+{
+  // 非有限值直接透传，交给 onRunning 的 isfinite 兜底处理，不污染滤波状态。
+  if (!std::isfinite(raw)) {
+    return raw;
+  }
+
+  // 1) 中值：去尖刺/丢点。窗口内排序取中位数。
+  median_buf_.push_back(raw);
+  while (static_cast<int>(median_buf_.size()) > median_window_) {
+    median_buf_.pop_front();
+  }
+  std::vector<double> sorted(median_buf_.begin(), median_buf_.end());
+  std::sort(sorted.begin(), sorted.end());
+  const size_t n = sorted.size();
+  const double median = (n % 2 == 1)
+    ? sorted[n / 2]
+    : 0.5 * (sorted[n / 2 - 1] + sorted[n / 2]);
+
+  // 2) 时间常数 EMA：去高斯抖动，平滑程度与话题频率解耦。
+  if (ema_tau_ <= 0.0) {
+    ema_value_ = median;
+    ema_initialized_ = true;
+    last_filter_time_ = stamp;
+    return median;
+  }
+  if (!ema_initialized_) {
+    ema_value_ = median;
+    ema_initialized_ = true;
+    last_filter_time_ = stamp;
+    return median;
+  }
+  double dt = (stamp - last_filter_time_).seconds();
+  last_filter_time_ = stamp;
+  if (!(dt > 0.0)) {
+    // 时间戳异常(0 或回退)，本帧跳过 EMA 更新，仅返回当前估计。
+    return ema_value_;
+  }
+  const double alpha = 1.0 - std::exp(-dt / ema_tau_);
+  ema_value_ += alpha * (median - ema_value_);
+  return ema_value_;
 }
 
 void DistanceServoAlignAction::publishCmdTimerCallback()
