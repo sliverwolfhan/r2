@@ -2,6 +2,7 @@
 #include "task/base_task.hpp"
 #include "task/catch_kfs.hpp"
 #include "task/idel.hpp"
+#include "task/move_cartesian.hpp"
 #include "task/move_kfs.hpp"
 #include "task/place_kfs.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -96,6 +97,7 @@ Robot::Robot(rclcpp::Node::SharedPtr node) {
     register_task(std::make_shared<CatchKFS>(this, "catch_kfs"));
     register_task(std::make_shared<PlaceKFS>(this, "place_kfs"));
     register_task(std::make_shared<MoveKFS>(this, "move_kfs"));
+    register_task(std::make_shared<MoveCartesian>(this, "move_cartesian"));
     init_task_manager("idel");
 
     task_thread_ = std::make_shared<std::thread>([this]() { porcess_task(); });

@@ -32,6 +32,7 @@ add_executable(arm_task
   src/task/catch_kfs.cpp
   src/task/move_kfs.cpp
   src/task/place_kfs.cpp
+  src/task/move_cartesian.cpp
 )
 
 add_executable(catch_kfs_test

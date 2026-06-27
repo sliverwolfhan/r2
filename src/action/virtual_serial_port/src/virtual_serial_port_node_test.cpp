@@ -38,7 +38,8 @@ struct VelocityPacket {
 struct StatusPacket {
     uint8_t header;          // 包头 0xAB
     uint8_t climber_status;  // 爬楼梯状态 (1=开始执行, 2=执行完成)
-    uint16_t distance;       // 距离
+    uint16_t distance_head;  // 距离
+    uint16_t distance_tail;  // 距离
     uint8_t tail;            // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -136,9 +137,11 @@ public:
         grasp_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/grasp_status", 10);
 
-        // 创建距离发布器
-        distance_pub_ = this->create_publisher<std_msgs::msg::Float64>(
-            "/AT_R2/distance", 10);
+        // 创建距离发布器（车头、车尾两个激光）
+        distance_head_pub_ = this->create_publisher<std_msgs::msg::Float64>(
+            "/AT_R2/distance_head", 10);
+        distance_tail_pub_ = this->create_publisher<std_msgs::msg::Float64>(
+            "/AT_R2/distance_tail", 10);
 
         // 定时持续发布最新状态（10Hz）
         status_timer_ = this->create_wall_timer(
@@ -174,7 +177,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
         RCLCPP_INFO(this->get_logger(), "已订阅底盘气泵使能话题: /AT_R2/chassis_pump_cmd (连续发送, 1=吸气 0=放气)");
-        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance");
+        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail");
     }
 
     ~VirtualSerialPortNode()
@@ -387,12 +390,19 @@ private:
                 return;
             }
 
-            // 发布距离
-            auto dist_msg = std_msgs::msg::Float64();
-            dist_msg.data = static_cast<double>(status.distance);
-            distance_pub_->publish(dist_msg);
+            // 发布车头、车尾激光距离
+            auto dist_head_msg = std_msgs::msg::Float64();
+            dist_head_msg.data = static_cast<double>(status.distance_head);
+            distance_head_pub_->publish(dist_head_msg);
+
+            auto dist_tail_msg = std_msgs::msg::Float64();
+            dist_tail_msg.data = static_cast<double>(status.distance_tail);
+            distance_tail_pub_->publish(dist_tail_msg);
+
             RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                "收到距离: %d (0x%04X)", status.distance, status.distance);
+                "收到距离 (车头): %.3f m, (车尾): %.3f m",
+                status.distance_head / 1000.0,
+                status.distance_tail / 1000.0);
 
             uint8_t new_status = status.climber_status;
 
@@ -458,7 +468,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
-    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_pub_;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_head_pub_;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_tail_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread send_thread_;

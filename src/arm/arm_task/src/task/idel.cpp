@@ -8,6 +8,7 @@ namespace {
 constexpr int32_t kTaskCatchTarget = 2;
 constexpr int32_t kTaskPlaceTarget = 3;
 constexpr int32_t kTaskMoveTarget = 1;
+constexpr int32_t kTaskMoveCartesianTarget = 4;
 }
 
 IdelTask::IdelTask(Robot* context,const std::string name) : BaseTask(context,name)
@@ -80,6 +81,9 @@ std::string IdelTask::process(const std::string last_task_name)
         case kTaskPlaceTarget:
             RCLCPP_WARN(robot->node_->get_logger(), "idel 收到放置任务，切换到 place_kfs");
             return "place_kfs";
+        case kTaskMoveCartesianTarget:
+            RCLCPP_INFO(robot->node_->get_logger(), "idel 收到笛卡尔移动任务，切换到 move_cartesian");
+            return "move_cartesian";
         default:
             RCLCPP_WARN(robot->node_->get_logger(), "未知 task_id=%d，无法分发任务", request.task_id);
             robot->finish_current_task(request.goal_handle, false, "未知 task_id，无法分发任务");

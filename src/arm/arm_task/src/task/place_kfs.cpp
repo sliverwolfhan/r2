@@ -29,32 +29,28 @@ std::string PlaceKFS::process(const std::string last_task_name) {
 
     const auto goal_handle = context.goal_handle;
 
-    // 从任务数据中获取目标货架位姿
-    if (context.data.size() == (3 + 4)) {
+    // 从任务数据中获取目标货架位置 (x, y, z)
+    if (context.data.size() == 3) {
         robot->target_shelf_.position.x = context.data[0];
         robot->target_shelf_.position.y = context.data[1];
         robot->target_shelf_.position.z = context.data[2];
-        robot->target_shelf_.orientation.x = context.data[3];
-        robot->target_shelf_.orientation.y = context.data[4];
-        robot->target_shelf_.orientation.z = context.data[5];
-        robot->target_shelf_.orientation.w = context.data[6];
         RCLCPP_INFO(
             robot->node_->get_logger(),
-            "从任务数据中获取目标货架位姿: [%.3f, %.3f, %.3f]",
+            "从任务数据中获取目标货架位置: [%.3f, %.3f, %.3f]",
             robot->target_shelf_.position.x,
             robot->target_shelf_.position.y,
             robot->target_shelf_.position.z);
     } else if (context.data.size() != 0) {
         RCLCPP_ERROR(
             robot->node_->get_logger(),
-            "接收到的目标货架位姿数据维度不正确，预期为3+4或0，实际为%zu",
+            "接收到的目标货架位置数据维度不正确，预期为3或0，实际为%zu",
             context.data.size());
-        robot->finish_current_task(goal_handle, false, "接收到的目标货架位姿数据维度不正确");
+        robot->finish_current_task(goal_handle, false, "接收到的目标货架位置数据维度不正确");
         return "idel";
     } else {
         RCLCPP_WARN(
             robot->node_->get_logger(),
-            "未收到目标货架位姿数据，使用默认的 target_shelf_");
+            "未收到目标货架位置数据，使用默认的 target_shelf_");
     }
 
 
@@ -106,9 +102,9 @@ std::string PlaceKFS::process(const std::string last_task_name) {
     approach_pose.header.stamp = robot->node_->now();
     approach_pose.pose = robot->target_shelf_;
     approach_pose.pose.position.x -= 0.40;
-    // 强制规定姿态
+    // 强制末端姿态朝向 z 轴负方向
     tf2::Quaternion quat;
-    quat.setRPY(0, (M_PI/2.5), 0);
+    quat.setRPY(0, M_PI, 0);
     quat.normalize();
     approach_pose.pose.orientation.w = quat.getW();
     approach_pose.pose.orientation.x = quat.getX();
@@ -135,9 +131,9 @@ std::string PlaceKFS::process(const std::string last_task_name) {
     target_pose.header.frame_id = "base_link";
     target_pose.header.stamp = robot->node_->now();
     target_pose.pose = robot->target_shelf_;
-        // 强制规定姿态
+    // 强制末端姿态朝向 z 轴负方向
     tf2::Quaternion quat_;
-    quat_.setRPY(0, (M_PI / 2), 0);
+    quat_.setRPY(0, M_PI, 0);
     quat_.normalize();
     target_pose.pose.orientation.w = quat_.getW();
     target_pose.pose.orientation.x = quat_.getX();
