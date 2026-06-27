@@ -32,7 +32,7 @@ BT::PortsList IsPrepSkippableCondition::providedPorts()
     BT::InputPort<double>("x_tolerance", 0.20, "Tolerance for x (m)"),
     BT::InputPort<double>("y_tolerance", 0.20, "Tolerance for y (m)"),
     BT::InputPort<double>("yaw_tolerance", 0.15, "Tolerance for yaw (rad)"),
-    BT::InputPort<std::string>("base_frame", "base_link", "Robot base TF frame"),
+    BT::InputPort<std::string>("base_frame", "base_footprint", "Robot base TF frame"),
     BT::InputPort<std::string>("map_frame", "map", "Map TF frame"),
     BT::InputPort<std::string>("tf_namespace", "AT_R2",
       "Namespace prefix for /tf and /tf_static (only used in fallback path)"),
@@ -134,7 +134,7 @@ BT::NodeStatus IsPrepSkippableCondition::tick()
   (void)getInput("y_tolerance", y_tol);
   (void)getInput("yaw_tolerance", yaw_tol);
 
-  std::string base_frame = "base_link";
+  std::string base_frame = "base_footprint";
   std::string map_frame = "map";
   (void)getInput("base_frame", base_frame);
   (void)getInput("map_frame", map_frame);

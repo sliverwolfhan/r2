@@ -19,7 +19,7 @@
             <ScriptCondition code="need_finish == 0"/>
             <IsPrepSkippable node="{node}"
                              target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
-                             x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
+                             x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
           </Sequence>
           <PublishGoal node="{node}"
                        x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
@@ -35,7 +35,7 @@
                 <PublishPumpCmd node="{node}" command="0"/>
                 <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
               </Sequence>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.2"/>
+              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
@@ -82,42 +82,71 @@
         </ForceSuccess>
       </ParallelAll>
 
-      <!-- ===== 段 C：到下一 prep（不再等臂）|| 把下一次 PICK 的臂 prep 塞进队列 ===== -->
-      <ParallelAll max_failures="1">
-        <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
+      <!-- ===== 段 C：到下一 prep || 把下一次 PICK 的臂 prep 塞进队列 =====
+           PICK 时先调一次 SelectArmPrepName 取出名字和 arm_prep_is_low:
+             - is_low=1 (down200/down400 低姿态): 必须先走完再下臂, 否则臂会蹭地
+             - is_low=0 (up200/up400/平位): 与导航并行下臂
+           PUSH 时只导航不动臂。 -->
+      <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
+        <!-- ===== PICK: 选名 → 按 is_low 串/并行 ===== -->
+        <Sequence>
+          <ForceSuccess>
+            <SelectArmPrepName next_from_id="{next_from_id}"
+                               next_target_id="{next_target_id}"
+                               arm_prep_name="{arm_prep_name}"
+                               arm_prep_is_low="{arm_prep_is_low}"/>
+          </ForceSuccess>
           <Fallback>
-            <IsPrepSkippable node="{node}"
-                             target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
-                             x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map" goal="{nav_goal}"/>
-          </Fallback>
-          <Fallback>
-            <IsPrepSkippable node="{node}"
-                             target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
-                             x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
-            <PublishGoal node="{node}"
-                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                         frame_id="map" goal="{nav_goal}"/>
-          </Fallback>
-          <AlwaysSuccess/>
-          <AlwaysSuccess/>
-        </Switch3>
-        <ForceSuccess>
-          <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+            <!-- 低姿态 prep: 串行 — 先到 prep 再下臂 -->
             <Sequence>
-              <SelectArmPrepName next_from_id="{next_from_id}"
-                                 next_target_id="{next_target_id}"
-                                 arm_prep_name="{arm_prep_name}"/>
-              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
-              <Script code="arm_prep_queued := 1"/>
+              <ScriptCondition code="arm_prep_is_low == 1"/>
+              <Fallback>
+                <IsPrepSkippable node="{node}"
+                                 target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
+                                 x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+                <PublishGoal node="{node}"
+                             x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Fallback>
+              <ForceSuccess>
+                <Sequence>
+                  <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.5"/>
+                  <Script code="arm_prep_queued := 1"/>
+                </Sequence>
+              </ForceSuccess>
             </Sequence>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch2>
-        </ForceSuccess>
-      </ParallelAll>
+            <!-- 高/平位 prep: 与导航并行 -->
+            <ParallelAll max_failures="1">
+              <Fallback>
+                <IsPrepSkippable node="{node}"
+                                 target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
+                                 x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+                <PublishGoal node="{node}"
+                             x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Fallback>
+              <ForceSuccess>
+                <Sequence>
+                  <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
+                  <Script code="arm_prep_queued := 1"/>
+                </Sequence>
+              </ForceSuccess>
+            </ParallelAll>
+          </Fallback>
+        </Sequence>
+        <!-- ===== PUSH: 只导航 ===== -->
+        <Fallback>
+          <IsPrepSkippable node="{node}"
+                           target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
+                           x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+          <PublishGoal node="{node}"
+                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+        </Fallback>
+        <!-- ===== never / default: 不做事 ===== -->
+        <AlwaysSuccess/>
+        <AlwaysSuccess/>
+      </Switch3>
 
       <Script code="need_finish := 0"/>
     </Sequence>

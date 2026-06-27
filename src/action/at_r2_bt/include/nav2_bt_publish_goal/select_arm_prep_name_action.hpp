@@ -24,10 +24,14 @@ namespace nav2_bt_publish_goal
  *                    The set of pose names defined here decides whether a "left"
  *                    grab is available for a given height bucket.
  *
- * Output port:
- *   - arm_prep_name  (string)   one of the names defined in arm_yaml,
+ * Output ports:
+ *   - arm_prep_name    (string) one of the names defined in arm_yaml,
  *       e.g. pick_left_up200 / pick_left_down200 /
  *            pick_front_up400 / pick_front_up200 / pick_front_down200
+ *   - arm_prep_is_low  (int)    1 if the chosen pose is `down200`/`down400`
+ *       (arm hangs low, may scrape ground while chassis moves),
+ *       0 otherwise. Always 0 on FAILURE. BT 可用此标志决定臂动作
+ *       是否要等导航完成再下发。
  *
  * Selection rule:
  *   The arm can only physically reach to the left of the body, so:

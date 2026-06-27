@@ -29,7 +29,11 @@ BT::PortsList SelectArmPrepNameAction::providedPorts()
       "Absolute path to arm_ready_position.yaml. "
       "Empty = default at_r2_bt/yaml/arm_ready_position.yaml. "
       "Determines whether `pick_left_*` is available for a given height bucket."),
-    BT::OutputPort<std::string>("arm_prep_name", "Selected named arm preparation pose")
+    BT::OutputPort<std::string>("arm_prep_name", "Selected named arm preparation pose"),
+    BT::OutputPort<int>(
+      "arm_prep_is_low",
+      "1 if selected pose is down200/down400 (arm may scrape ground while chassis moves); "
+      "0 otherwise. Always 0 on FAILURE.")
   };
 }
 
@@ -138,6 +142,9 @@ bool SelectArmPrepNameAction::ensureArmPosesLoaded(const std::string & yaml_path
 
 BT::NodeStatus SelectArmPrepNameAction::tick()
 {
+  // 失败时统一兜底: arm_prep_is_low 始终先置 0, 任何 FAILURE 分支无需再单独写。
+  setOutput<int>("arm_prep_is_low", 0);
+
   int32_t from_id = 0;
   int32_t target_id = 0;
   if (!getInput("next_from_id", from_id) || !getInput("next_target_id", target_id)) {
@@ -248,6 +255,9 @@ BT::NodeStatus SelectArmPrepNameAction::tick()
     "Selected arm prep name=[%s] dir=%s from=%d target=%d dy=%.3f dh=%.3f bucket=%d",
     name.c_str(), chosen_dir.c_str(), from_id, target_id, dy, dh, bucket);
   setOutput<std::string>("arm_prep_name", name);
+  // bucket < 0 (down200/down400) 意味着臂会下伸到底盘高度以下, 与导航并行会蹭地;
+  // BT 侧据此把臂动作改成"先走完再下臂"。bucket > 0 / 平位则保持并行。
+  setOutput<int>("arm_prep_is_low", bucket < 0 ? 1 : 0);
   return BT::NodeStatus::SUCCESS;
 }
 

@@ -51,6 +51,7 @@
 
 
       <Sequence>
+        <PublishPumpCmd node="{node}" topic="/AT_R2/chassis_pump_cmd" command="1"/>
         <SetZoneMode node="{node}" mode="2" topic="/AT_R2/zone_mode"/>
         <GetPlan node="{node}"
                 topic="/r2_planner/plan"

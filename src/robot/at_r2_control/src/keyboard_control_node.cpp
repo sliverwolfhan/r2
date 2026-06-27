@@ -36,7 +36,7 @@ public:
         std::string head_gripper_topic = "/" + robot_name_ + "/head_gripper_cmd";
         std::string zone_mode_topic = "/" + robot_name_ + "/zone_mode";
         std::string pump_topic = "/" + robot_name_ + "/pump_cmd";
-        std::string chassis_pump_topic = "/" + robot_name_ + "/chassia_pump_cmd";
+        std::string chassis_pump_topic = "/" + robot_name_ + "/chassis_pump_cmd";
 
         // 创建发布者
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic, 10);

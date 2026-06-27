@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<root BTCPP_format="4" main_tree_to_execute="MainTree">
-  <BehaviorTree ID="MainTree">
+<root BTCPP_format="4" main_tree_to_execute="PlaceMission">
+  <BehaviorTree ID="PlaceMission">
     <Sequence name="PlaceKFS">
 
       <ArmMoveNamed node="{node}"
@@ -8,7 +8,7 @@
                 server_name="robotic_task"
                 task_id="1"
                 duration="2.0"/>
-
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
 
       <!-- 1+2. 机械臂摆放置姿态 与 导航到预备点 并行。 -->
       <ParallelAll max_failures="1">

@@ -98,9 +98,9 @@
                  vx_min="-1.2"
                  vy_max="1.2"
                  wz_max="4.0"
-                 vx_std="0.35"
-                 vy_std="0.35"
-                 wz_std="0.35"
+                 vx_std="0.4"
+                 vy_std="0.4"
+                 wz_std="0.4"
                  goal_x_tolerance="0.03"
                  goal_y_tolerance="0.05"
                  goal_yaw_tolerance="0.05"
@@ -186,8 +186,8 @@
                             distance_scale="0.001"
                             target_distance="{grasp_laser_target_distance}"
                             tolerance="0.01"
-                            kp="0.5"
-                            max_speed="0.1"
+                            kp="0.7"
+                            max_speed="0.2"
                             min_speed="0.015"
                             stable_count="2"
                             max_data_age="0.5"
@@ -195,7 +195,7 @@
                             publish_rate_hz="50.0"
                             cmd_axis="x"
                             positive_error_direction="-1.0"
-                            side_speed_scale="0.6"
+                            side_speed_scale="0.5"
                             side_speed_direction="-1.0"
                             filter_enable="true"
                             median_window="3"
@@ -247,15 +247,15 @@
       <SetMppiParams node="{node}"
                controller_node="/AT_R2/controller_server"
                plugin_prefix="FollowPath"
-               goal_angle_weight="6.0"
-               goal_angle_threshold="0.3"
+               goal_angle_weight="5.0"
+               goal_angle_threshold="2.0"
                vx_max="1.2"
                vx_min="-1.2"
                vy_max="1.2"
                wz_max="4.0"
-               vx_std="0.35"
-               vy_std="0.35"
-               wz_std="0.4"
+               vx_std="0.4"
+               vy_std="0.4"
+               wz_std="0.45"
                goal_x_tolerance="0.03"
                goal_y_tolerance="0.05"
                goal_yaw_tolerance="0.05"
@@ -265,7 +265,7 @@
       <ParallelAll max_failures="1">
         <!-- 1腿 -->
         <PublishGoal node="{node}"
-                  x="0.5" y="5.1" yaw="0.0"
+                  x="0.65" y="5.1" yaw="0.0"
                   frame_id="map"
                   goal="{nav_goal}"/>
 
@@ -282,7 +282,7 @@
 
       <!-- 导航到与持杆机器人对接的位置, 到点后等对接完成再松爪 -->
       <PublishGoal node="{node}"
-                x="0.5" y="5.1" yaw="0.0"
+                x="0.46" y="5.1" yaw="0.0"
                 frame_id="map"
                 goal="{nav_goal}"/>
       <!-- 等操作员按 Enter 后松爪 cmd=7 -->
@@ -294,7 +294,7 @@
       <PublishHeadCmd node="{node}" command="7"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="200">
+      <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
 

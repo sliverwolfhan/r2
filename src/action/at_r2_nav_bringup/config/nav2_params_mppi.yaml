@@ -408,7 +408,7 @@ controller_server:
       az_max: 5.5
       iteration_count: 2
       temperature: 0.3
-      gamma: 0.04
+      gamma: 0.035
       motion_model: "Omni"          # 改为全向运动模型 DiffDrive Omni
       visualize: false
       critic_index_to_visualize: 0
