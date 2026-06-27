@@ -13,8 +13,11 @@ namespace nav2_bt_publish_goal
  * 把它的机器人预备点位姿 (slot_<n>_x / _y / _yaw) 拷到无前缀工作键
  * (slot_x / slot_y / slot_yaw), 供后续 B 段 (导航 + 机械臂关节摆位) 子树读取。
  *
- * 节点内部维护一个计数器 iter_(从 0 开始), 第 k 次被 tick 选定的 slot 序号为
+ * 计数器存在黑板键 "place_slot_iter" 里(在所有 SelectPlaceSlot 实例间共享),
+ * 第 k 次被 tick 选定的 slot 序号为
  *   index = start + k        (k = 0, 1, 2, ...)
+ * 这样即使 XML 里写了多个 <SelectPlaceSlot> (例如 A 段 + C 段循环内), 它们
+ * 共用同一个递增序号, 顺序对应 yaml 的 place_slot_priority。
  *
  * 这些 slot_<n>_ 键由 simple_bt_runner.cpp 从 place_kfs_params.yaml 预加载。
  *
@@ -38,8 +41,6 @@ public:
 
 private:
   bool copyDouble(const std::string & prefix, const std::string & suffix);
-
-  int iter_{0};
 };
 
 }  // namespace nav2_bt_publish_goal

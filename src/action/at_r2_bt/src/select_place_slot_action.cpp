@@ -44,7 +44,14 @@ BT::NodeStatus SelectPlaceSlotAction::tick()
   int start = 1;
   getInput("start", start);
 
-  const int index = start + iter_;
+  // 计数器跨实例共享: 黑板键 "place_slot_iter" (XML 里多处 <SelectPlaceSlot>
+  // 必须按出现顺序递增, 否则不同实例各自从 0 数会撞同一个 slot)。
+  int iter = 0;
+  if (config().blackboard->getEntry("place_slot_iter")) {
+    (void)config().blackboard->get<int>("place_slot_iter", iter);
+  }
+
+  const int index = start + iter;
   // simple_bt_runner.cpp 里写的键名是 "slot_<i>_x" 这种。
   const std::string prefix = "slot_" + std::to_string(index) + "_";
 
@@ -62,9 +69,9 @@ BT::NodeStatus SelectPlaceSlotAction::tick()
 
   RCLCPP_INFO(
     rclcpp::get_logger("SelectPlaceSlot"),
-    "✓ 第 %d 次放置: 选定 slot 序号 %d (前缀 %s)", iter_ + 1, index, prefix.c_str());
+    "✓ 第 %d 次放置: 选定 slot 序号 %d (前缀 %s)", iter + 1, index, prefix.c_str());
 
-  ++iter_;
+  config().blackboard->set<int>("place_slot_iter", iter + 1);
   return BT::NodeStatus::SUCCESS;
 }
 

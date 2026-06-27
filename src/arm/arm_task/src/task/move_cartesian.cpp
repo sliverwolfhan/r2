@@ -10,7 +10,7 @@ MoveCartesian::MoveCartesian(Robot* context, const std::string name)
     : BaseTask(context, name) {
 }
 
-MoveCartesian::~MoveCartesian() {}0
+MoveCartesian::~MoveCartesian() {}
 
 std::string MoveCartesian::process(const std::string last_task_name) {
     (void)last_task_name;

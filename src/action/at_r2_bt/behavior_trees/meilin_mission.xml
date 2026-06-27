@@ -32,6 +32,8 @@
                       clear_buffer="true"
                       timeout="0.0"/>
 
+
+
       <!-- <PublishGoal node="{node}" x="2.3" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
 
       <SetMppiParams node="{node}"
