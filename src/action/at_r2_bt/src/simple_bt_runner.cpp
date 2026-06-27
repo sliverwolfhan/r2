@@ -18,12 +18,15 @@
 #include "nav2_bt_publish_goal/set_costmap_inflation_action.hpp"
 #include "nav2_bt_publish_goal/set_mppi_params_action.hpp"
 #include "nav2_bt_publish_goal/arm_task_action.hpp"
+#include "nav2_bt_publish_goal/arm_cartesian_task_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_joint_action.hpp"
 #include "nav2_bt_publish_goal/get_plan_action.hpp"
 #include "nav2_bt_publish_goal/pop_next_step_action.hpp"
 #include "nav2_bt_publish_goal/peek_next_step_action.hpp"
 #include "nav2_bt_publish_goal/select_arm_prep_name_action.hpp"
 #include "nav2_bt_publish_goal/select_weapon_params_action.hpp"
+#include "nav2_bt_publish_goal/select_kfs_params_action.hpp"
+#include "nav2_bt_publish_goal/select_place_slot_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_action.hpp"
 #include "nav2_bt_publish_goal/arm_job_runner.hpp"
 #include "nav2_bt_publish_goal/arm_move_named_async_action.hpp"
@@ -92,6 +95,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::SetCostmapInflationAction>("SetCostmapInflation");
   factory.registerNodeType<nav2_bt_publish_goal::SetMppiParamsAction>("SetMppiParams");
   factory.registerNodeType<nav2_bt_publish_goal::ArmTaskAction>("ArmTask");
+  factory.registerNodeType<nav2_bt_publish_goal::ArmCartesianTaskAction>("ArmCartesianTask");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveJointAction>("ArmMoveJoint");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveNamedAction>("ArmMoveNamed");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveNamedAsyncAction>("ArmMoveNamedAsync");
@@ -101,6 +105,8 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PeekNextStepAction>("PeekNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::SelectArmPrepNameAction>("SelectArmPrepName");
   factory.registerNodeType<nav2_bt_publish_goal::SelectWeaponParamsAction>("SelectWeaponParams");
+  factory.registerNodeType<nav2_bt_publish_goal::SelectKfsParamsAction>("SelectKfsParams");
+  factory.registerNodeType<nav2_bt_publish_goal::SelectPlaceSlotAction>("SelectPlaceSlot");
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
   factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DistanceServoAlignAction>("DistanceServoAlign");
@@ -119,6 +125,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ SetCostmapInflation 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SetMppiParams 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmTask 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ ArmCartesianTask 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmMoveJoint 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmMoveNamed 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ArmMoveNamedAsync 节点已注册");
@@ -127,6 +134,8 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ PopNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PeekNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectArmPrepName 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ SelectKfsParams 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ SelectPlaceSlot 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ IsPrepSkippable 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ GraspReadyByPoseDistance 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DistanceServoAlign 节点已注册");
@@ -248,6 +257,113 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(),
     "✓ 连续抓取参数: grasp_start=%d grasp_count=%d (将抓 w%d_ ~ w%d_)",
     grasp_start, grasp_count, grasp_start, grasp_start + grasp_count - 1);
+
+  // ===== KFS 放置参数 (place_kfs_params.yaml) =====
+  // 每个 KFS 一组扁平键写入黑板：<kfs_name>_prep_x / _prep_y / _prep_yaw / _place_x / _place_y
+  // 例如 yaml 里 kfs_1.prep_x -> 黑板键 kfs_1_prep_x，XML 用 {kfs_1_prep_x} 引用。
+  std::vector<std::string> kfs_priority = {"kfs_1", "kfs_2"};
+  node->declare_parameter<std::vector<std::string>>("kfs_priority", kfs_priority);
+  node->get_parameter("kfs_priority", kfs_priority);
+  if (kfs_priority.empty()) {
+    RCLCPP_WARN(node->get_logger(), "kfs_priority 为空，默认使用 kfs_1");
+    kfs_priority.push_back("kfs_1");
+  }
+
+  // 同名 lambda 思路同 weapon: declare-on-first-touch + get.
+  const auto get_kfs_double =
+    [&](const std::string & kfs, const std::string & suffix, double default_value) {
+      const std::string param_name = kfs + "." + suffix;
+      if (!node->has_parameter(param_name)) {
+        node->declare_parameter<double>(param_name, default_value);
+      }
+      return node->get_parameter(param_name).as_double();
+    };
+
+  for (const auto & kfs : kfs_priority) {
+    const double prep_x = get_kfs_double(kfs, "prep_x", 0.0);
+    const double prep_y = get_kfs_double(kfs, "prep_y", 0.0);
+    const double prep_yaw = get_kfs_double(kfs, "prep_yaw", 0.0);
+    const double place_x = get_kfs_double(kfs, "place_x", 0.0);
+    const double place_y = get_kfs_double(kfs, "place_y", 0.0);
+
+    blackboard->set(kfs + "_prep_x", prep_x);
+    blackboard->set(kfs + "_prep_y", prep_y);
+    blackboard->set(kfs + "_prep_yaw", prep_yaw);
+    blackboard->set(kfs + "_place_x", place_x);
+    blackboard->set(kfs + "_place_y", place_y);
+
+    RCLCPP_INFO(node->get_logger(),
+      "✓ KFS 参数[%s]: prep=(%.3f, %.3f, %.3f) place=(%.3f, %.3f)",
+      kfs.c_str(), prep_x, prep_y, prep_yaw, place_x, place_y);
+  }
+
+  // ===== 放置目标 slot 参数 (place_slot_priority) =====
+  // 每个 slot: <slot>_x / _y / _yaw (机器人导航预备点位姿, map 系)。
+  // 数量 = 地上 KFS 数 + 1 (预装那个 KFS 也要一个 slot)。
+  std::vector<std::string> place_slot_priority = {"slot_1", "slot_2", "slot_3"};
+  node->declare_parameter<std::vector<std::string>>(
+    "place_slot_priority", place_slot_priority);
+  node->get_parameter("place_slot_priority", place_slot_priority);
+  if (place_slot_priority.empty()) {
+    RCLCPP_WARN(node->get_logger(), "place_slot_priority 为空，默认使用 slot_1");
+    place_slot_priority.push_back("slot_1");
+  }
+
+  const auto get_slot_double =
+    [&](const std::string & slot, const std::string & suffix, double default_value) {
+      const std::string param_name = slot + "." + suffix;
+      if (!node->has_parameter(param_name)) {
+        node->declare_parameter<double>(param_name, default_value);
+      }
+      return node->get_parameter(param_name).as_double();
+    };
+
+  for (size_t i = 0; i < place_slot_priority.size(); ++i) {
+    const std::string & slot = place_slot_priority[i];
+    const double sx = get_slot_double(slot, "x", 0.0);
+    const double sy = get_slot_double(slot, "y", 0.0);
+    const double syaw = get_slot_double(slot, "yaw", 0.0);
+
+    // 黑板键: slot_<index>_x, slot_<index>_y, slot_<index>_yaw
+    // (index 是 1-based, 对应 place_slot_priority 第几个; SelectPlaceSlot 用这个前缀)
+    const std::string prefix = "slot_" + std::to_string(i + 1) + "_";
+    blackboard->set(prefix + "x", sx);
+    blackboard->set(prefix + "y", sy);
+    blackboard->set(prefix + "yaw", syaw);
+
+    RCLCPP_INFO(node->get_logger(),
+      "✓ 放置 slot[%s -> %sN]: (x=%.3f, y=%.3f, yaw=%.3f)",
+      slot.c_str(), prefix.c_str(), sx, sy, syaw);
+  }
+
+  // ---- 连续放置的循环控制参数 ----
+  // place_count: 放几个; place_start: 从第几个 KFS 开始(1-based)。
+  int place_count = static_cast<int>(kfs_priority.size());
+  int place_start = 1;
+  node->declare_parameter<int>("place_count", place_count);
+  node->declare_parameter<int>("place_start", place_start);
+  node->get_parameter("place_count", place_count);
+  node->get_parameter("place_start", place_start);
+  if (place_count < 1) {
+    RCLCPP_WARN(node->get_logger(), "place_count=%d 非法, 重置为 1", place_count);
+    place_count = 1;
+  }
+  if (place_start < 1) {
+    RCLCPP_WARN(node->get_logger(), "place_start=%d 非法, 重置为 1", place_start);
+    place_start = 1;
+  }
+  blackboard->set("place_count", place_count);
+  blackboard->set("place_start", place_start);
+  RCLCPP_INFO(node->get_logger(),
+    "✓ 连续放置参数: place_start=%d place_count=%d (将放 kfs_%d ~ kfs_%d)",
+    place_start, place_count, place_start, place_start + place_count - 1);
+
+  // 笛卡尔抓取(C 段)发送 data 里的 z 固定值, 不做 TF 变换。
+  double kfs_grab_z = 0.0;
+  node->declare_parameter<double>("kfs_grab_z", kfs_grab_z);
+  node->get_parameter("kfs_grab_z", kfs_grab_z);
+  blackboard->set("kfs_grab_z", kfs_grab_z);
+  RCLCPP_INFO(node->get_logger(), "✓ 笛卡尔抓取固定 z: kfs_grab_z=%.3f", kfs_grab_z);
 
   // 创建树 - 传递黑板作为根黑板
   auto tree = factory.createTreeFromFile(bt_xml, blackboard);

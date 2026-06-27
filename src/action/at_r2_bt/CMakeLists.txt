@@ -35,6 +35,7 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED
   src/publish_goal_action.cpp
   src/arm_task_action.cpp
+  src/arm_cartesian_task_action.cpp
   src/arm_move_joint_action.cpp
   src/arm_move_named_action.cpp
   src/arm_job_runner.cpp
@@ -50,6 +51,8 @@ add_library(${PROJECT_NAME} SHARED
   src/peek_next_step_action.cpp
   src/select_arm_prep_name_action.cpp
   src/select_weapon_params_action.cpp
+  src/select_kfs_params_action.cpp
+  src/select_place_slot_action.cpp
   src/is_prep_skippable_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp
@@ -90,6 +93,7 @@ add_executable(simple_bt_runner
   src/simple_bt_runner.cpp
   src/publish_goal_action.cpp
   src/arm_task_action.cpp
+  src/arm_cartesian_task_action.cpp
   src/arm_move_joint_action.cpp
   src/arm_move_named_action.cpp
   src/arm_job_runner.cpp
@@ -105,6 +109,8 @@ add_executable(simple_bt_runner
   src/peek_next_step_action.cpp
   src/select_arm_prep_name_action.cpp
   src/select_weapon_params_action.cpp
+  src/select_kfs_params_action.cpp
+  src/select_place_slot_action.cpp
   src/is_prep_skippable_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/distance_servo_align_action.cpp

@@ -174,7 +174,7 @@
                                   y_tolerance="{grasp_prep_y_tolerance}"
                                   target_yaw="{grasp_prep_yaw}"
                                   yaw_tolerance="{grasp_prep_yaw_tolerance}"
-                                  distance_topic="/AT_R2/distance"
+                                  distance_topic="/AT_R2/distance_head"
                                   distance_scale="0.001"
                                   target_distance="{grasp_laser_target_distance}"
                                   distance_tolerance="0.01"
@@ -182,7 +182,7 @@
                                   max_data_age="0.5"/>
 
         <DistanceServoAlign node="{node}"
-                            distance_topic="/AT_R2/distance"
+                            distance_topic="/AT_R2/distance_head"
                             distance_scale="0.001"
                             target_distance="{grasp_laser_target_distance}"
                             tolerance="0.01"

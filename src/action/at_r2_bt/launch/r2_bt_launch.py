@@ -20,6 +20,7 @@ def generate_launch_description():
 
     pkg_dir = get_package_share_directory('at_r2_bt')
     weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params.yaml')
+    place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params.yaml')
 
     bt_xml = LaunchConfiguration('bt_xml')
 
@@ -37,6 +38,7 @@ def generate_launch_description():
             arguments=[bt_xml],
             parameters=[
                 weapon_params_file,
+                place_kfs_params_file,
                 {
                     'use_sim_time': False,
                 },

@@ -1,85 +1,140 @@
 <?xml version="1.0"?>
 <root BTCPP_format="4" main_tree_to_execute="PlaceMission">
+  <!--
+    PlaceMission 流程: A -> B -> (C -> B) x place_count
+      A 段(一次): 锁住开机时预装在机械臂上的 KFS。
+      B 段(每次): 摆 place_grid + 导航 slot 预备点 + 松气泵 + 回过渡姿态。
+      C 段(每次): 导航取块预备点 + 笛卡尔精准抓地上 KFS + 开气泵 + 回过渡姿态。
+
+    place_count = 地上待取块数 (= yaml kfs_priority 长度)。
+    放置次数 = place_count + 1 (含预装), 对应 place_slot_priority 长度。
+
+    SelectKfsParams / SelectPlaceSlot 各自内部维护 iter_, 每被 tick 一次自增,
+    把 kfs_<i>_* / slot_<i>_* 拷到无前缀工作键 kfs_* / slot_*。
+  -->
   <BehaviorTree ID="PlaceMission">
     <Sequence name="PlaceKFS">
 
+      <!-- ===== A 段: 预装 ===== -->
       <ArmMoveNamed node="{node}"
-                pose_name="hold_block"
-                server_name="robotic_task"
-                task_id="1"
-                duration="2.0"/>
+                    pose_name="hold_block"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
       <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
 
-      <!-- 1+2. 机械臂摆放置姿态 与 导航到预备点 并行。 -->
-      <ParallelAll max_failures="1">
+      <!-- ===== B 段 (第 1 次): 放预装那个 KFS 到 slot_1 ===== -->
+      <SelectPlaceSlot start="{place_start}"/>
 
-        <!-- 腿1: 机械臂摆放置姿态（夹着 KFS）。task_id=1 走 move_kfs 关节运动。 -->
+      <!-- 1+2. 机械臂摆放置姿态 与 导航到预备点 并行 -->
+      <ParallelAll max_failures="1">
         <ArmMoveNamed node="{node}"
                       pose_name="place_grid"
                       server_name="robotic_task"
                       task_id="1"
                       duration="2.0"/>
-
-        <!-- 腿2: 导航到预备点：对齐格子。x/y 单位 m，yaw 单位 rad（map 系）。 -->
         <PublishGoal node="{node}"
-                     x="0.0"
-                     y="0.0"
-                     yaw="0.0"
+                     x="{slot_x}"
+                     y="{slot_y}"
+                     yaw="{slot_yaw}"
                      frame_id="map"
                      action_name="/AT_R2/navigate_to_pose"
-                     goal="{prep_goal}"/>
-
+                     goal="{place_goal}"/>
       </ParallelAll>
 
-      <!-- 3. 导航到放置点：往前进把 KFS 怼进格子。 -->
-      <PublishGoal node="{node}"
-                   x="0.0"
-                   y="0.0"
-                   yaw="0.0"
-                   frame_id="map"
-                   action_name="/AT_R2/navigate_to_pose"
-                   goal="{place_goal}"/>
-
-      <!-- 4. 松气泵，放下 KFS。 -->
+      <!-- 3. 松气泵 放下 KFS -->
       <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-
-      <!-- 松气泵后等 1s，等 KFS 完全脱开再动。 -->
       <DelayMs delay_msec="1000">
         <AlwaysSuccess/>
       </DelayMs>
 
-      <!-- ===== 退回预备点，同时机械臂从车上取第二个块 ===== -->
-      <ParallelAll max_failures="1">
+      <!-- 4. 回过渡姿态 (脱离格子) -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="place_interim_pos_0"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
 
-        <!-- 腿1：底盘退回原先的预备点（与第一个块的预备点相同坐标）。 -->
-        <PublishGoal node="{node}"
-                     x="0.0"
-                     y="0.0"
-                     yaw="0.0"
-                     frame_id="map"
-                     action_name="/AT_R2/navigate_to_pose"
-                     goal="{prep_goal_2}"/>
-
-        <!-- 腿2：机械臂从车上取第二个块：去 touch 位 → 开气泵吸住 → 回放置姿态。 -->
+      <!-- ===== 主循环: 取地上 KFS + 放它, 重复 place_count 次 ===== -->
+      <Repeat num_cycles="{place_count}">
         <Sequence>
-          <ArmMoveNamed node="{node}"
-                        pose_name="kfs1_touch_pos"
-                        server_name="robotic_task"
-                        task_id="1"
-                        duration="2.0"/>
+
+          <!-- 选当前 KFS 的取块参数 -> 工作键 kfs_prep_x/y/yaw/kfs_place_x/y -->
+          <SelectKfsParams start="{place_start}"/>
+
+          <!-- ===== C 段: 取地上 KFS ===== -->
+          <!-- C1. 导航到取块预备点 -->
+          <PublishGoal node="{node}"
+                       x="{kfs_prep_x}"
+                       y="{kfs_prep_y}"
+                       yaw="{kfs_prep_yaw}"
+                       frame_id="map"
+                       action_name="/AT_R2/navigate_to_pose"
+                       goal="{grab_prep_goal}"/>
+
+          <!-- C2. 笛卡尔精准抓: 块 (map) -> lookupTransform(base_link, map) -> 末端目标 -->
+          <!-- 发送 data = [x, y, z, qx, qy, qz, qw] 7 维, task_id=4。
+               y 用 cube_y 固定值不变换, x/z 用 TF 变换后的 base_link 系值。
+               四元数被机械臂端忽略, 仅凑 7 维。 -->
+          <ArmCartesianTask node="{node}"
+                            task_id="4"
+                            server_name="robotic_task"
+                            base_frame="base_link"
+                            map_frame="map"
+                            tf_namespace="AT_R2"
+                            cube_x="{kfs_place_x}"
+                            cube_y="{kfs_place_y}"
+                            cube_z="{kfs_grab_z}"
+                            tf_timeout="1.0"/>
+
+          <!-- C3. 开气泵吸住 + 等 1s -->
           <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
           <DelayMs delay_msec="1000">
             <AlwaysSuccess/>
           </DelayMs>
+
+          <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
           <ArmMoveNamed node="{node}"
                         pose_name="place_interim_pos_0"
                         server_name="robotic_task"
                         task_id="1"
                         duration="2.0"/>
+
+          <!-- ===== B 段: 放刚抓到的 KFS ===== -->
+          <!-- 选下一个放置 slot -->
+          <SelectPlaceSlot start="{place_start}"/>
+
+          <!-- B1+B2. 摆 place_grid + 导航 slot 预备点 (并行) -->
+          <ParallelAll max_failures="1">
+            <ArmMoveNamed node="{node}"
+                          pose_name="place_grid"
+                          server_name="robotic_task"
+                          task_id="1"
+                          duration="2.0"/>
+            <PublishGoal node="{node}"
+                         x="{slot_x}"
+                         y="{slot_y}"
+                         yaw="{slot_yaw}"
+                         frame_id="map"
+                         action_name="/AT_R2/navigate_to_pose"
+                         goal="{place_goal}"/>
+          </ParallelAll>
+
+          <!-- B3. 松气泵 放下 KFS -->
+          <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>
+
+          <!-- B4. 回过渡姿态 -->
+          <ArmMoveNamed node="{node}"
+                        pose_name="place_interim_pos_0"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+
         </Sequence>
-
-      </ParallelAll>
-
+      </Repeat>
 
     </Sequence>
   </BehaviorTree>
