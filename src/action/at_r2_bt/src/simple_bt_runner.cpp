@@ -12,6 +12,8 @@
 #include <thread>
 #include <vector>
 #include "nav2_bt_publish_goal/publish_goal_action.hpp"
+#include "nav2_bt_publish_goal/publish_goals_action.hpp"
+#include "nav2_bt_publish_goal/follow_spin_path_action.hpp"
 #include "nav2_bt_publish_goal/climb_stair_action.hpp"
 #include "nav2_bt_publish_goal/descend_stair_action.hpp"
 #include "nav2_bt_publish_goal/pre_steer_align_action.hpp"
@@ -89,6 +91,8 @@ int main(int argc, char** argv)
 
   // 直接注册我们的节点（不通过插件）
   factory.registerNodeType<nav2_bt_publish_goal::PublishGoalAction>("PublishGoal");
+  factory.registerNodeType<nav2_bt_publish_goal::PublishGoalsAction>("PublishGoals");
+  factory.registerNodeType<nav2_bt_publish_goal::FollowSpinPathAction>("FollowSpinPath");
   factory.registerNodeType<nav2_bt_publish_goal::ClimbStairAction>("ClimbStair");
   factory.registerNodeType<nav2_bt_publish_goal::DescendStairAction>("DescendStair");
   factory.registerNodeType<nav2_bt_publish_goal::PreSteerAlignAction>("PreSteerAlign");

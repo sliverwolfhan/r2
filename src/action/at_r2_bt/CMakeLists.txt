@@ -34,6 +34,8 @@ include_directories(include)
 # Create library
 add_library(${PROJECT_NAME} SHARED
   src/publish_goal_action.cpp
+  src/publish_goals_action.cpp
+  src/follow_spin_path_action.cpp
   src/arm_task_action.cpp
   src/arm_cartesian_task_action.cpp
   src/arm_move_joint_action.cpp
@@ -92,6 +94,8 @@ install(TARGETS ${PROJECT_NAME}
 add_executable(simple_bt_runner 
   src/simple_bt_runner.cpp
   src/publish_goal_action.cpp
+  src/publish_goals_action.cpp
+  src/follow_spin_path_action.cpp
   src/arm_task_action.cpp
   src/arm_cartesian_task_action.cpp
   src/arm_move_joint_action.cpp

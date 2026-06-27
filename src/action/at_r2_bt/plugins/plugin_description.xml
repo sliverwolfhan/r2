@@ -5,6 +5,28 @@
       Reads x, y, yaw from XML parameters and creates a PoseStamped message.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::FollowSpinPathAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Generates a dense straight-line path from the current TF pose to a goal
+      (goal_x, goal_y, goal_yaw), with yaw interpolated only in the middle
+      segment: keeps start_yaw until rotation_start_distance from start, then
+      linearly rotates toward goal_yaw until rotation_end_distance from goal,
+      then keeps goal_yaw. rotation_direction selects 'cw' or 'ccw'. Sends the
+      path to controller_server's FollowPath action, bypassing the global
+      planner. For the robot to actually rotate during motion, the MPPI
+      controller must have PathAlignCritic.use_path_orientations = true.
+    </description>
+  </class>
+  <class type="nav2_bt_publish_goal::PublishGoalsAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Sends multiple goal poses to the nav2 NavigateThroughPoses action server,
+      so the global planner stitches them into a single continuous path
+      (ComputePathThroughPoses) and the controller follows it without stopping
+      at intermediate waypoints. Port "poses" is a string like
+      "x1,y1,yaw1; x2,y2,yaw2; ..." (meters, radians). Only the FINAL pose's
+      yaw is enforced by goal_checker; intermediate yaws are not strict.
+    </description>
+  </class>
   <class type="nav2_bt_publish_goal::PreSteerAlignAction" base_class_type="BT::ActionNodeBase">
     <description>
       Publishes a small Twist on the navigation velocity topic at a fixed
