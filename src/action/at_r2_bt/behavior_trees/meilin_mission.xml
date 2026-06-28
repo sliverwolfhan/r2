@@ -36,20 +36,6 @@
 
       <!-- <PublishGoal node="{node}" x="2.3" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
 
-      <SetMppiParams node="{node}"
-                controller_node="/AT_R2/controller_server"
-                plugin_prefix="FollowPath"
-                goal_angle_weight="6.0"
-                wait_after_set="0.3"
-                goal_angle_threshold="2.0"
-                wz_std="0.45"
-                vx_std="0.45"
-                vy_std="0.35"/>
-      <SetCostmapInflation node="{node}"
-                local_radius="0.3"
-                global_radius="0.3"
-                local_cost_scaling_factor="1.0"
-                global_cost_scaling_factor="4.0"/>
 
 
       <Sequence>
@@ -67,6 +53,8 @@
         <!-- 臂 prep 排队标志：MOVE 段 C 为下一次 PICK 排队 prep 姿态后置 1，PICK 消费后清 0；
              第一次 PICK 前没有 MOVE 时仍为 0，由 PICK 自行排队 -->
         <Script code="arm_prep_queued := 0"/>
+        <!-- 循环迭代计数：仅在第一次迭代完成后设置一次导航参数 -->
+        <Script code="loop_idx := 0"/>
 
         <!-- <WaitForEnter node="{node}"
                       prompt="参数已设置完成，按 Enter 开始导航"
@@ -111,6 +99,27 @@
               <SubTree ID="PushAtBlock" _autoremap="true"/>
               <AlwaysFailure/>
             </Switch3>
+
+            <!-- 本次迭代计数 +1，仅在第一次迭代完成后设置一次导航参数 -->
+            <Script code="loop_idx += 1"/>
+            <Precondition if="loop_idx == 1" else="SUCCESS">
+              <Sequence>
+                <SetMppiParams node="{node}"
+                          controller_node="/AT_R2/controller_server"
+                          plugin_prefix="FollowPath"
+                          goal_angle_weight="6.0"
+                          wait_after_set="0.3"
+                          goal_angle_threshold="2.0"
+                          wz_std="0.45"
+                          vx_std="0.45"
+                          vy_std="0.35"/>
+                <SetCostmapInflation node="{node}"
+                          local_radius="0.3"
+                          global_radius="0.3"
+                          local_cost_scaling_factor="1.0"
+                          global_cost_scaling_factor="4.0"/>
+              </Sequence>
+            </Precondition>
           </Sequence>
         </Repeat>
       </Sequence>
