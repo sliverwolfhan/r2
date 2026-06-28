@@ -1,0 +1,174 @@
+<?xml version="1.0"?>
+<!--
+  FollowSpinPath 测试 BT
+  ==========================================================
+  目的: 单独验证 FollowSpinPathAction 的行为, 不与其他业务流程耦合。
+
+  使用方法:
+    ros2 launch at_r2_bt r2_bt_launch.py bt_xml:=test_follow_spin_path.xml
+
+  注意:
+    - 起点是 TF 自动读取的 (map -> base_footprint), 所以每段开始前
+      请把机器人放到大致期望的"起点"位置, 然后按 Enter 触发。
+    - 目标 (goal_x/y/yaw) 是 map 系下的绝对坐标, 必要时改成本地图实际坐标。
+    - 旋转窗口 [rotation_start_distance, rotation_end_distance] 表示
+      yaw 旋转发生的距离区间, 单位米。窗口外 yaw 保持起点/终点 yaw 不变。
+    - 每段之间停一下, 方便观察 + 把机器人摆回起点再继续。
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <BehaviorTree ID="MainTree">
+    <Sequence name="FollowSpinPathTest">
+
+      <!-- 给 controller 一个温和、可观察的参数集 -->
+      <SetMppiParams node="{node}"
+                     controller_node="/AT_R2/controller_server"
+                     plugin_prefix="FollowPath"
+                     goal_angle_weight="6.0"
+                     goal_angle_threshold="2.0"
+                     vx_max="1.2"
+                     vx_min="-1.2"
+                     vy_max="1.2"
+                     wz_max="4.0"
+                     vx_std="0.2"
+                     vy_std="0.2"
+                     wz_std="0.5"
+                     goal_x_tolerance="0.05"
+                     goal_y_tolerance="0.05"
+                     goal_yaw_tolerance="0.08"
+                     goal_stable_duration="0.3"
+                     pathalign_use_path_orientations="true"
+                     wait_after_set="0.2"/>
+
+      <SetCostmapInflation node="{node}"
+                           local_radius="0.3"
+                           global_radius="0.3"
+                           local_cost_scaling_factor="1.0"
+                           global_cost_scaling_factor="4.0"/>
+
+      <WaitForEnter node="{node}"
+                    prompt="[T0] 参数已设置, 按 Enter 开始 FollowSpinPath 测试"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <!-- ============================================================
+           Case 1: 基础 ccw 旋转
+             沿 +x 方向走 2 米, 同时 yaw 从当前值逆时针旋到 +pi/2 (90°)。
+             旋转窗口 [0.5m, 0.5m]: 前 0.5m 走直线, 中间 1m 旋转, 末 0.5m 保持终点 yaw。
+      ============================================================ -->
+      <FollowSpinPath node="{node}"
+                      goal_x="0.785"
+                      goal_y="5.42"
+                      goal_yaw="3.1416"
+                      rotation_start_distance="0.45"
+                      rotation_end_distance="0.45"
+                      rotation_direction="cw"
+                      num_points="100"
+                      frame_id="map"
+                      map_frame="map"
+                      base_frame="base_footprint"
+                      tf_timeout="0.5"
+                      tf_namespace="AT_R2"
+                      action_name="/AT_R2/follow_path"
+                      controller_id="FollowPath"
+                      goal_checker_id="general_goal_checker"
+                      goal="{spin_goal}"/>
+
+      <WaitForEnter node="{node}"
+                    prompt="[T1] Case1 完成. 把机器人摆回起点, 按 Enter 进入 Case2 (cw 反向)"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <!-- ============================================================
+           Case 2: cw 顺时针旋转
+             同样沿 +x 走 2 米, 但 yaw 从当前值顺时针旋到 -pi/2 (-90°)。
+             旋转窗口与 Case1 一样, 验证方向参数是否真的反过来走。
+      ============================================================ -->
+      <FollowSpinPath node="{node}"
+                      goal_x="0.45"
+                      goal_y="5.1"
+                      goal_yaw="0.0"
+                      rotation_start_distance="0.45"
+                      rotation_end_distance="0.45"
+                      rotation_direction="ccw"
+                      num_points="100"
+                      frame_id="map"
+                      map_frame="map"
+                      base_frame="base_footprint"
+                      tf_timeout="0.5"
+                      tf_namespace="AT_R2"
+                      action_name="/AT_R2/follow_path"
+                      controller_id="FollowPath"
+                      goal_checker_id="general_goal_checker"
+                      goal="{spin_goal}"/>
+
+      <WaitForEnter node="{node}"
+                    prompt="[T2] Case2 完成. 摆回起点, 按 Enter 进入 Case3 (窄旋转窗口)"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <!-- ============================================================
+           Case 3: 窄旋转窗口
+             沿 +x 走 2 米, ccw 旋到 +pi (180°)。
+             窗口 [0.8m, 0.8m] 留中间 0.4m 完成 180° 旋转,
+             观察 controller 是否能跟上这种"快变 yaw"段。
+      ============================================================ -->
+      <!-- <FollowSpinPath node="{node}"
+                      goal_x="2.0"
+                      goal_y="0.0"
+                      goal_yaw="3.1416"
+                      rotation_start_distance="0.8"
+                      rotation_end_distance="0.8"
+                      rotation_direction="ccw"
+                      num_points="200"
+                      frame_id="map"
+                      map_frame="map"
+                      base_frame="base_footprint"
+                      tf_timeout="0.5"
+                      tf_namespace="AT_R2"
+                      action_name="/AT_R2/follow_path"
+                      controller_id="FollowPath"
+                      goal_checker_id="general_goal_checker"
+                      goal="{spin_goal}"/> -->
+
+      <!-- <WaitForEnter node="{node}"
+                    prompt="[T3] Case3 完成. 摆回起点, 按 Enter 进入 Case4 (窗口溢出退化)"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/> -->
+
+      <!-- ============================================================
+           Case 4: 旋转窗口溢出退化
+             沿 +x 只走 1 米, 但 rotation_start+end = 0.7+0.7 = 1.4 >= 1.0,
+             代码会 WARN 并退化为"全程线性插值 yaw"。可在日志里看到这条 WARN。
+      ============================================================ -->
+      <!-- <FollowSpinPath node="{node}"
+                      goal_x="1.0"
+                      goal_y="0.0"
+                      goal_yaw="1.5708"
+                      rotation_start_distance="0.7"
+                      rotation_end_distance="0.7"
+                      rotation_direction="ccw"
+                      num_points="80"
+                      frame_id="map"
+                      map_frame="map"
+                      base_frame="base_footprint"
+                      tf_timeout="0.5"
+                      tf_namespace="AT_R2"
+                      action_name="/AT_R2/follow_path"
+                      controller_id="FollowPath"
+                      goal_checker_id="general_goal_checker"
+                      goal="{spin_goal}"/> -->
+<!-- 
+      <WaitForEnter node="{node}"
+                    prompt="[T4] 全部测试完成, 按 Enter 退出"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/> -->
+
+    </Sequence>
+  </BehaviorTree>
+</root>

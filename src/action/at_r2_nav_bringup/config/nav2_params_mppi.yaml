@@ -385,10 +385,10 @@ controller_server:
       movement_time_allowance: 15.0
     general_goal_checker:
       plugin: "pb_nav2_plugins/PreciseGoalChecker"
-      x_goal_tolerance: 0.05
-      y_goal_tolerance: 0.05
+      x_goal_tolerance: 0.07
+      y_goal_tolerance: 0.07
       yaw_goal_tolerance: 0.05
-      stable_duration: 0.2
+      stable_duration: 0.1
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
       time_steps: 30
@@ -408,7 +408,7 @@ controller_server:
       az_max: 5.5
       iteration_count: 2
       temperature: 0.3
-      gamma: 0.035
+      gamma: 0.03
       motion_model: "Omni"          # 改为全向运动模型 DiffDrive Omni
       visualize: false
       critic_index_to_visualize: 0
@@ -469,10 +469,10 @@ controller_server:
         cost_power: 1
         cost_weight: 10.0
         max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 3
-        threshold_to_consider: 3.0      # 设为预测时域
-        offset_from_furthest: 10        # 调整为合理值
-        use_path_orientations: false
+        trajectory_point_step: 1  
+        threshold_to_consider: 0.3      # 设为预测时域
+        offset_from_furthest: 15        # 调整为合理值
+        use_path_orientations: true
       PathFollowCritic:
         enabled: true
         cost_power: 1
