@@ -1,0 +1,302 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="PlaceMission">
+  <!--
+    PlaceMission 流程 (2 块, 缓存式取放):
+      A 段: 预装 KFS + 放预装 KFS 到 priority[0]
+      抓取阶段:
+        - 取地上 kfs_1 → 放车上 (放车上动作 与 导航到 kfs_2 预备点 并行)
+        - 取地上 kfs_2 → 拿在手上
+      放置阶段:
+        - 放手上 kfs_2 到 priority[1]
+        - 从车上取 kfs_1 (取车动作 与 导航到 priority[2] 并行)
+        - 放 kfs_1 到 priority[2]
+
+    放车上动作:  lift_block → stow_block → WaitArmIdle → pump=0 → place_block → stow_block → lift_block
+    从车上取动作: 同放车上, 仅 pump 改为 1。
+
+    SelectKfsParams / SelectPlaceSlot 每被 tick 一次自增 iter_,
+    把 kfs_<i>_* / slot_<i>_* 拷到无前缀工作键 kfs_* / slot_*。
+  -->
+  <BehaviorTree ID="PlaceMission">
+    <Sequence name="PlaceKFS">
+    <WaitForEnter node="{node}"
+        prompt="按回车启动程序，设置参数"
+        require_tty="true"
+        clear_buffer="true"
+        timeout="0.0"/>
+    <SetCostmapInflation node="{node}"
+        local_radius="0.4"
+        global_radius="0.4"
+        local_cost_scaling_factor="1.0"
+        global_cost_scaling_factor="4.0"/>
+        
+    <SetMppiParams node="{node}"
+                  controller_node="/AT_R2/controller_server"
+                  plugin_prefix="FollowPath"
+                  goal_angle_weight="5.0"
+                  goal_angle_threshold="0.5"
+                  vx_max="1.2"
+                  vx_min="-1.2"
+                  vy_max="1.2"
+                  wz_max="4.0"
+                  vx_std="0.4"
+                  vy_std="0.4"
+                  wz_std="0.25"
+                  goal_x_tolerance="0.03"
+                  goal_y_tolerance="0.05"
+                  goal_yaw_tolerance="0.05"
+                  goal_stable_duration="0.3"
+                  wait_after_set="0.2"/>
+      <!-- ===== A 段: 预装 ===== -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="hold_block"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+
+      <WaitForEnter node="{node}"
+              prompt="预装KFS完成, 按回车启动"
+              require_tty="true"
+              clear_buffer="true"
+              timeout="0.0"/>
+      
+      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <!-- ===== B 段 (第 1 次): 放预装那个 KFS 到 slot_1 ===== -->
+      <SelectPlaceSlot start="{place_start}"/>
+
+      <!-- 1+2. 机械臂摆放置姿态 与 导航到预备点 并行 -->
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="100">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <ArmMoveNamed node="{node}"
+                        pose_name="place_grid_2"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="5.0"/>
+        </Sequence>
+        <PublishGoal node="{node}"
+                     x="{slot_x}"
+                     y="{slot_y}"
+                     yaw="{slot_yaw}"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+      </ParallelAll>
+      <ForceSuccess>
+        <DockToWall node="{node}"
+              vy="0.1"
+              vx="0.0"
+              wz="0.0"
+              stall_threshold="0.02"
+              stall_duration="10.0"
+              timeout="3.5"
+              publish_rate_hz="50.0"
+              cmd_vel_topic="/AT_R2/cmd_vel_bt"
+              odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+
+      <!-- 3. 松气泵 放下 KFS -->
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- ===== 抓取阶段: 取 kfs_1 放车上, 取 kfs_2 拿手上 ===== -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+              vy="-0.1"
+              vx="0.0"
+              wz="0.0"
+              stall_threshold="0.02"
+              stall_duration="10.0"
+              timeout="3.5"
+              publish_rate_hz="50.0"
+              cmd_vel_topic="/AT_R2/cmd_vel_bt"
+              odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <ArmMoveNamed node="{node}"
+              pose_name="place_grid_finish"
+              server_name="robotic_task"
+              task_id="1"
+              duration="1.0"/>
+
+      <!-- ===== C 段 #1: 取地上 kfs_1 ===== -->
+      <SelectKfsParams start="{place_start}"/>
+
+      <ParallelAll max_failures="1">
+        <PublishGoal node="{node}"
+                    x="{kfs_prep_x}"
+                    y="{kfs_prep_y}"
+                    yaw="{kfs_prep_yaw}"
+                    frame_id="map"
+                    action_name="/AT_R2/navigate_to_pose"
+                    goal="{grab_prep_goal}"/>
+        <ArmMoveNamed node="{node}"
+                      pose_name="place_interim_pos"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
+
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+
+      <ArmCartesianTask node="{node}"
+                        task_id="4"
+                        server_name="robotic_task"
+                        base_frame="base_link"
+                        map_frame="map"
+                        tf_namespace="AT_R2"
+                        cube_x="{kfs_place_x}"
+                        cube_y="{kfs_place_y}"
+                        cube_z="{kfs_grab_z}"
+                        tf_timeout="1.0"/>
+
+      <!-- ===== 并行: 放 kfs_1 到车上 + 选 kfs_2 并导航到 kfs_2 预备点 ===== -->
+      <SelectKfsParams start="{place_start}"/>
+
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.2"/>
+          <WaitArmIdle timeout="20.0"/>
+          <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+          <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="place_interim_pos" task_id="1" duration="1.5"/>
+          <WaitArmIdle timeout="20.0"/>
+        </Sequence>
+        <PublishGoal node="{node}"
+                    x="{kfs_prep_x}"
+                    y="{kfs_prep_y}"
+                    yaw="{kfs_prep_yaw}"
+                    frame_id="map"
+                    action_name="/AT_R2/navigate_to_pose"
+                    goal="{grab_prep_goal}"/>
+      </ParallelAll>
+      <!-- ===== C 段 #2: 取地上 kfs_2 (拿在手上) ===== -->
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+
+      <ArmCartesianTask node="{node}"
+                        task_id="4"
+                        server_name="robotic_task"
+                        base_frame="base_link"
+                        map_frame="map"
+                        tf_namespace="AT_R2"
+                        cube_x="{kfs_place_x}"
+                        cube_y="{kfs_place_y}"
+                        cube_z="{kfs_grab_z}"
+                        tf_timeout="1.0"/>
+
+      <ArmMoveNamed node="{node}"
+                    pose_name="place_interim_pos"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="1.0"/>
+      <!-- ===== B 段 #2: 放手上 kfs_2 到 priority[1] ===== -->
+      <SelectPlaceSlot start="{place_start}"/>
+
+      <ParallelAll max_failures="1">
+        <ArmMoveNamed node="{node}"
+                      pose_name="place_grid_2"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+        <PublishGoal node="{node}"
+                     x="{slot_x}"
+                     y="{slot_y}"
+                     yaw="{slot_yaw}"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+      </ParallelAll>
+
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="0.1"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="10.0"
+                    timeout="3.5"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+      <!-- 退出 slot, 准备放车上的 kfs_1 -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+              vy="-0.1"
+              vx="0.0"
+              wz="0.0"
+              stall_threshold="0.02"
+              stall_duration="10.0"
+              timeout="3.5"
+              publish_rate_hz="50.0"
+              cmd_vel_topic="/AT_R2/cmd_vel_bt"
+              odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <ArmMoveNamed node="{node}"
+              pose_name="place_grid_finish"
+              server_name="robotic_task"
+              task_id="1"
+              duration="1.0"/>
+
+      <!-- ===== 并行: 从车上取 kfs_1 (动作同放车上, pump=1) + 选 priority[2] 并导航 ===== -->
+      <SelectPlaceSlot start="{place_start}"/>
+
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.2"/>
+          <WaitArmIdle timeout="20.0"/>
+          <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+          <ArmMoveNamedAsync pose_name="place_grid_1" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="place_grid_2" task_id="1" duration="2.0"/>
+          <WaitArmIdle timeout="20.0"/>
+        </Sequence>
+        <PublishGoal node="{node}"
+                    x="{slot_x}"
+                    y="{slot_y}"
+                    yaw="{slot_yaw}"
+                    frame_id="map"
+                    action_name="/AT_R2/navigate_to_pose"
+                    goal="{place_goal}"/>
+      </ParallelAll>
+
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="0.1"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="10.0"
+                    timeout="3.5"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

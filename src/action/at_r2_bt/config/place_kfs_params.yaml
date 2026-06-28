@@ -21,16 +21,16 @@ simple_bt_runner:
     #   place_x / place_y             -> KFS 放置点的格子位置 (map 系, m)
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
     kfs_1.prep_x: 11.09
-    kfs_1.prep_y: 3.12
+    kfs_1.prep_y: 2.52
     kfs_1.prep_yaw: 0.0
     kfs_1.place_x: 11.825
-    kfs_1.place_y: 3.34
+    kfs_1.place_y: 3.74
 
     kfs_2.prep_x: 11.09
-    kfs_2.prep_y: 2.31
+    kfs_2.prep_y: 3.22
     kfs_2.prep_yaw: 0.0
     kfs_2.place_x: 11.825
-    kfs_2.place_y: 2.53
+    kfs_2.place_y: 3.44
 
     # ===== 放置目标点 (B 段用) =====
     # 数量 = place_count + 1 (地上块数 + 1 个预装 KFS)
@@ -45,14 +45,14 @@ simple_bt_runner:
       - slot_1
       - slot_3
 
-    slot_1.x: 11.34
+    slot_1.x: 11.58
     slot_1.y: 4.95
-    slot_1.yaw: 0.0
+    slot_1.yaw: 1.57
 
-    slot_2.x: 10.82
+    slot_2.x: 11.043
     slot_2.y: 4.95
-    slot_2.yaw: 0.0
+    slot_2.yaw: 1.57
 
-    slot_3.x: 10.30
+    slot_3.x: 10.500
     slot_3.y: 4.95
-    slot_3.yaw: 0.0
+    slot_3.yaw: 1.57

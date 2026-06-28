@@ -185,7 +185,7 @@ small_gicp_relocalization:
     sliding_window_filter_reset_translation_threshold: 0.3
     sliding_window_filter_reset_rotation_threshold: 0.3
     relocalization_enabled: true
-    auto_disable_relocalization: true
+    auto_disable_relocalization: false
     stable_required_count: 10
     stable_translation_threshold: 0.015
     stable_rotation_threshold: 0.015

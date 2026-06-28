@@ -18,11 +18,16 @@
         <Fallback>
           <IsPrepSkippable node="{node}"
                            target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
+<<<<<<< Updated upstream
                            x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+=======
+                           x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
+>>>>>>> Stashed changes
           <PublishGoal node="{node}"
                        x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
                        frame_id="map" goal="{nav_goal}"/>
         </Fallback>
+<<<<<<< Updated upstream
         <Sequence>
           <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
           <ForceSuccess>
@@ -37,6 +42,19 @@
             </Fallback>
           </ForceSuccess>
         </Sequence>
+=======
+        <ForceSuccess>
+          <Fallback>
+            <ScriptCondition code="arm_prep_queued == 1"/>
+            <Sequence>
+              <SelectArmPrepName next_from_id="{from_id}"
+                                 next_target_id="{target_id}"
+                                 arm_prep_name="{arm_prep_name}"/>
+              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
+            </Sequence>
+          </Fallback>
+        </ForceSuccess>
+>>>>>>> Stashed changes
       </ParallelAll>
       <Script code="arm_prep_queued := 0"/>
 
