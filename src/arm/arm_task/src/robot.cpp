@@ -399,6 +399,11 @@ void Robot::stop_arm_motion() {
 bool Robot::execute_joint_space_trajectory(const std::vector<double>& joint_angles, double duration) {
     RCLCPP_INFO(node_->get_logger(), "Executing joint space trajectory");
 
+    if (duration <= 0) {
+        duration = calculate_duration(joint_angles);
+        RCLCPP_INFO(node_->get_logger(), "Using calculated duration: %.2f s", duration);
+    }
+
     // Publish joint target
     std_msgs::msg::Float64MultiArray msg;
     msg.data = joint_angles;
