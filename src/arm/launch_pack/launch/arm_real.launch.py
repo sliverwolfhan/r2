@@ -31,6 +31,16 @@ def generate_launch_description():
         package="arm_task",
         executable="arm_task",
         output="screen",
+        parameters=[{
+            # 估算"最快移动时间"用的上限（duration<=0 时生效）。
+            # 关节空间: 最快时间 = 最大关节角度差 / max_joint_velocity，再 clamp 到 [min, max]。
+            "max_joint_velocity": 1.5,        # rad/s，调大→动作更快，别超过下位机实际能跟的速度
+            "min_trajectory_duration": 0.1,   # s，时间下限
+            "max_trajectory_duration": 10.0,  # s，时间上限
+            # 笛卡尔估算速度（当前未接入，预留）
+            "max_linear_velocity": 0.1,       # m/s
+            "max_angular_velocity": 0.5,      # rad/s
+        }],
     )
 
     arm_driver = Node(

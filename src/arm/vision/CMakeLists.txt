@@ -17,9 +17,9 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
-# 强制使用本地编译的 OpenCV 4.14.0（系统默认 4.5.4 无法解析 YOLOv8/11 ONNX）
-set(OpenCV_DIR "/home/zk/opencv-4.14.0/build" CACHE PATH "" FORCE)
-find_package(OpenCV 4.14 REQUIRED)
+# 强制使用本地编译的 OpenCV 4.10.0（系统默认 4.5.4 无法解析 YOLOv8/11 ONNX）
+set(OpenCV_DIR "/home/zk/opencv-4.10.0/build" CACHE PATH "" FORCE)
+find_package(OpenCV 4.10 REQUIRED)
 message(STATUS "vision_node using OpenCV ${OpenCV_VERSION} from ${OpenCV_DIR}")
 
 add_executable(vision_node vision.cpp)
