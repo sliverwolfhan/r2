@@ -11,6 +11,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <robot_interfaces/action/arm_task.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -116,6 +117,11 @@ public:
     rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr joint_space_target_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
 
+    // 当前关节角度（来自 /joint_states）
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
+    std::array<double, 6> current_joints_{};
+    bool has_joint_state_{false};
+    void on_joint_state(const sensor_msgs::msg::JointState& msg);
 
     //上层接口
     rclcpp_action::Server<ArmTask>::SharedPtr task_handle_server;

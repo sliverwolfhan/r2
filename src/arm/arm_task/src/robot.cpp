@@ -76,6 +76,11 @@ Robot::Robot(rclcpp::Node::SharedPtr node) {
     joint_space_target_pub_ = node_->create_publisher<std_msgs::msg::Float64MultiArray>("joint_space_target", 10);
     marker_pub_             = node_->create_publisher<visualization_msgs::msg::MarkerArray>("visualization_marker_array", 10);
 
+    // Subscribe to current joint states
+    joint_state_sub_ = node_->create_subscription<sensor_msgs::msg::JointState>(
+        "/joint_states", 10,
+        std::bind(&Robot::on_joint_state, this, std::placeholders::_1));
+
     task_handle_server = rclcpp_action::create_server<robot_interfaces::action::ArmTask>(
         node_, "robotic_task", std::bind(&Robot::on_handle_goal, this, std::placeholders::_1, std::placeholders::_2),
         std::bind(&Robot::on_cancel_goal, this, std::placeholders::_1), std::bind(&Robot::on_handle_accepted, this, std::placeholders::_1));
@@ -178,6 +183,13 @@ bool Robot::take_pending_task(PendingTaskRequest& request) {
     goal_pending_ = false;
     task_executing_ = true;
     return true;
+}
+
+void Robot::on_joint_state(const sensor_msgs::msg::JointState& msg) {
+    for (std::size_t i = 0; i < 6 && i < msg.position.size(); ++i) {
+        current_joints_[i] = msg.position[i];
+    }
+    has_joint_state_ = true;
 }
 
 bool Robot::get_active_task_context(ActiveTaskContext& context) const {
@@ -665,59 +677,27 @@ double Robot::calculate_duration(const std::vector<double>& target_joints) {
         return trajectory_duration_;
     }
 
-    // 获取当前末端位姿
-    geometry_msgs::msg::PoseStamped current_pose;
-    if (!get_current_end_pose(current_pose)) {
-        RCLCPP_WARN(node_->get_logger(), "无法获取当前位姿，使用默认时间 %.2f s", trajectory_duration_);
-        return trajectory_duration_;
-    }
+    double estimated_time = trajectory_duration_;
 
-    // 通过正运动学计算目标关节对应的笛卡尔位姿
-    // 注意：这里需要调用 arm_calc 服务的正运动学功能
-    // 由于当前架构限制，我们使用简化的方法：计算关节角度差
-    
-    // 获取当前关节角度（从TF或其他方式）
-    // 这里暂时使用简化的距离计算方法
-    // 实际应用中应该调用正运动学服务
-    
-    // 方法1：基于关节角度差估算（简化方法）
-    // 假设从参数或其他途径获取当前关节角度
-    // 这里我们先使用笛卡尔距离的近似方法
-    
-    // 由于没有直接获取当前关节角度的方法，我们退回到使用默认轨迹时间
-    // 但可以基于目标关节角度的变化幅度做简单估算
-    
-    // 计算关节角度变化，找出最大变化量
-    const double joint_change_threshold = 0.1;  // 0.1 rad ≈ 5.7度
-    double max_joint_change = 0.0;
-    int significant_change_count = 0;
-    
-    for (const auto& angle : target_joints) {
-        double change = std::abs(angle);
-        if (change > joint_change_threshold) {
-            significant_change_count++;
-            if (change > max_joint_change) {
-                max_joint_change = change;
+    if (has_joint_state_) {
+        // 基于实际关节角度差计算：最慢关节决定时间
+        const std::size_t joint_count = std::min(target_joints.size(), current_joints_.size());
+        double max_joint_delta = 0.0;
+        for (std::size_t i = 0; i < joint_count; ++i) {
+            double delta = std::abs(target_joints[i] - current_joints_[i]);
+            if (delta > max_joint_delta) {
+                max_joint_delta = delta;
             }
         }
+        estimated_time = (max_joint_delta > 0.0) ? (max_joint_delta / max_joint_velocity_) : min_trajectory_duration_;
+        estimated_time = std::clamp(estimated_time, min_trajectory_duration_, max_trajectory_duration_);
+        RCLCPP_INFO(node_->get_logger(),
+            "计算轨迹时间（关节空间）: 最大关节差=%.3f rad, 时间=%.2f s", max_joint_delta, estimated_time);
+    } else {
+        // 未收到 joint_state，退回启发式
+        RCLCPP_WARN(node_->get_logger(), "未收到关节状态，使用默认时间 %.2f s", trajectory_duration_);
     }
-    
-    // 如果没有显著变化的关节，使用最小轨迹时间
-    if (significant_change_count == 0) {
-        RCLCPP_INFO(node_->get_logger(), "所有关节变化都很小，使用最小轨迹时间 %.2f s", min_trajectory_duration_);
-        return min_trajectory_duration_;
-    }
-    
-    // 根据最大关节变化估算时间（运动时间取决于最慢的关节）
-    double estimated_time = max_joint_change / max_joint_velocity_;
-    RCLCPP_INFO(node_->get_logger(), "max_joint_velocity = %lf", max_joint_velocity_);
-    estimated_time = std::clamp(estimated_time, min_trajectory_duration_, max_trajectory_duration_);
-    
-    RCLCPP_INFO(
-        node_->get_logger(),
-        "计算轨迹时间（关节空间）: 显著变化关节数=%d, 最大关节变化=%.3f rad, 时间=%.2f s",
-        significant_change_count, max_joint_change, estimated_time);
-    
+
     return estimated_time;
 }
 
