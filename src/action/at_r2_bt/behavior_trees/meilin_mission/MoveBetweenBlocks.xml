@@ -29,35 +29,19 @@
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
-<<<<<<< Updated upstream
                 <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="0.8"/>
                 <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="1.2"/>
-=======
-                <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="3.0"/>
-                <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="3.0"/>
-                <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="3.0"/>
->>>>>>> Stashed changes
                 <WaitArmIdle timeout="20.0"/>
                 <PublishPumpCmd node="{node}" command="0"/>
                 <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
               </Sequence>
-<<<<<<< Updated upstream
               <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.2"/>
-=======
-              <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
->>>>>>> Stashed changes
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
               <ArmMoveNamedAsync pose_name="hold_block"   task_id="1" duration="1.5"/>
-<<<<<<< Updated upstream
               <WaitArmIdle timeout="20.0"/>
               <ArmMoveNamedAsync pose_name="push_finish"  task_id="1" duration="1.5"/>
-=======
-              <ArmMoveNamedAsync pose_name="push_finish"  task_id="1" duration="1.5"/>
-              <WaitArmIdle timeout="20.0"/>
-              <PublishPumpCmd node="{node}" command="0"/>
->>>>>>> Stashed changes
             </Sequence>
             <AlwaysSuccess/>
             <AlwaysSuccess/>
@@ -78,7 +62,6 @@
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
-<<<<<<< Updated upstream
                 <!-- <WaitArmIdle timeout="20.0"/> -->
                 <DelayMs delay_msec="1900"><AlwaysSuccess/></DelayMs>
                 <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
@@ -93,24 +76,12 @@
               <PublishPumpCmd node="{node}" command="0"/>
               <ArmMoveNamedAsync pose_name="ready" task_id="1" duration="3.0"/>
             </Sequence>  
-=======
-                <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
-                <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.5"/>
-                <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
-                <ArmMoveNamedAsync pose_name="ready"      task_id="1" duration="1.0"/>
-              </Sequence>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
-            </Switch2>
-            <ArmMoveNamedAsync pose_name="ready" task_id="1" duration="3.0"/>
->>>>>>> Stashed changes
             <AlwaysSuccess/>
             <AlwaysSuccess/>
           </Switch3>
         </ForceSuccess>
       </ParallelAll>
 
-<<<<<<< Updated upstream
       <!-- ===== 段 C：到下一 prep || 把下一次 PICK 的臂 prep 塞进队列 =====
            PICK 时先调一次 SelectArmPrepName 取出名字和 arm_prep_is_low:
              - is_low=1 (down200/down400 低姿态): 必须先走完再下臂, 否则臂会蹭地
@@ -176,33 +147,6 @@
         <AlwaysSuccess/>
         <AlwaysSuccess/>
       </Switch3>
-=======
-      <!-- ===== 段 C：到下一 prep（不再等臂）|| 把下一次 PICK 的臂 prep 塞进队列 ===== -->
-      <ParallelAll max_failures="1">
-        <Switch3 variable="{next_step_type}" case_1="PICK" case_2="PUSH" case_3="__never__">
-          <PublishGoal node="{node}"
-                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
-          <PublishGoal node="{node}"
-                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
-          <AlwaysSuccess/>
-          <AlwaysSuccess/>
-        </Switch3>
-        <ForceSuccess>
-          <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
-            <Sequence>
-              <SelectArmPrepName next_from_id="{next_from_id}"
-                                 next_target_id="{next_target_id}"
-                                 arm_prep_name="{arm_prep_name}"/>
-              <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.5"/>
-            </Sequence>
-            <AlwaysSuccess/>
-            <AlwaysSuccess/>
-          </Switch2>
-        </ForceSuccess>
-      </ParallelAll>
->>>>>>> Stashed changes
 
       <Script code="need_finish := 0"/>
     </Sequence>
