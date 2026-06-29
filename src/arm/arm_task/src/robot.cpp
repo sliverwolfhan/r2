@@ -694,6 +694,7 @@ double Robot::calculate_duration(const std::vector<double>& target_joints) {
                 max_joint_delta = delta;
             }
         }
+        max_joint_velocity_ = node_->get_parameter("max_joint_velocity").as_double();
         estimated_time = (max_joint_delta > 0.0) ? (max_joint_delta / max_joint_velocity_) : min_trajectory_duration_;
         estimated_time = std::clamp(estimated_time, min_trajectory_duration_, max_trajectory_duration_);
         RCLCPP_INFO(node_->get_logger(),
