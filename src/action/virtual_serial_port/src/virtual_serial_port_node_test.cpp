@@ -26,7 +26,7 @@ struct VelocityPacket {
     float vy;              // y方向线速度 m/s
     float omega;           // 角速度 rad/s
     uint8_t mode;          // 区模式 zone_mode (连续发送当前值)
-    uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下)
+    uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下), mode=3时为三区动作(1=抬升,2=降到架机,3=抬腿,4=伸腿,5=降下去)
     uint8_t climb_height;  // 爬楼梯高度 (mode=2时配合action, 0=无 1=200mm 2=400mm)
     uint8_t pump;          // 气泵使能 (连续发送当前值): 1=吸气, 0=放气
     uint8_t tail;          // 包尾 0xBA
@@ -80,6 +80,8 @@ public:
         current_grasp_cmd_ = 0;
         grasp_send_once_ = false;
         current_pump_ = 0;
+        current_zone3_cmd_ = 0;
+        zone3_send_once_ = false;
 
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -129,6 +131,11 @@ public:
             "/AT_R2/chassis_pump_cmd", rclcpp::QoS(1).transient_local().reliable(),
             std::bind(&VirtualSerialPortNode::pump_callback, this, std::placeholders::_1));
 
+        // 订阅三区动作话题 (lift_cmd 收到时发一次: 1=抬升 2=降到架机 3=抬腿 4=伸腿 5=降下去)
+        zone3_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/lift_cmd", 10,
+            std::bind(&VirtualSerialPortNode::zone3_callback, this, std::placeholders::_1));
+
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/climber_status", 10);
@@ -177,6 +184,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅爬楼梯话题: /AT_R2/climb_stair, /AT_R2/descend_stair");
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
         RCLCPP_INFO(this->get_logger(), "已订阅底盘气泵使能话题: /AT_R2/chassis_pump_cmd (连续发送, 1=吸气 0=放气)");
+        RCLCPP_INFO(this->get_logger(), "已订阅三区动作话题: /AT_R2/lift_cmd (单次发送, 1=抬升 2=降到架机 3=抬腿 4=伸腿 5=降下去)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail");
     }
 
@@ -290,6 +298,19 @@ private:
             msg->data, current_pump_ ? "吸气" : "放气");
     }
 
+    void zone3_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        if (current_mode_ != 3) {
+            RCLCPP_WARN(this->get_logger(),
+                "当前 mode=%d (非三区), 忽略三区动作命令 %d", current_mode_, msg->data);
+            return;
+        }
+        current_zone3_cmd_ = static_cast<uint8_t>(msg->data);
+        zone3_send_once_ = true;
+        RCLCPP_INFO(this->get_logger(), "收到三区动作命令: %d (将发送一次)", msg->data);
+    }
+
     void send_thread_func()
     {
         using namespace std::chrono_literals;
@@ -338,6 +359,11 @@ private:
                     climb_send_once_ = false;
                     RCLCPP_INFO(this->get_logger(), "发送爬楼梯指令: action=%d, height=%d",
                         packet.action, packet.climb_height);
+                } else if (zone3_send_once_) {
+                    packet.action = current_zone3_cmd_;
+                    packet.climb_height = 0;
+                    zone3_send_once_ = false;
+                    RCLCPP_INFO(this->get_logger(), "发送三区动作指令: action=%d", packet.action);
                 } else {
                     packet.action = 0;
                     packet.climb_height = 0;
@@ -466,6 +492,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr mode_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr zone3_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_head_pub_;
@@ -492,6 +519,8 @@ private:
     uint8_t current_grasp_cmd_;
     bool grasp_send_once_;
     uint8_t current_pump_;
+    uint8_t current_zone3_cmd_;
+    bool zone3_send_once_;
 
     std::mutex status_mutex_;
     bool climber_running_{false};

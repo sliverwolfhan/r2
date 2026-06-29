@@ -37,6 +37,7 @@ public:
         std::string zone_mode_topic = "/" + robot_name_ + "/zone_mode";
         std::string pump_topic = "/" + robot_name_ + "/pump_cmd";
         std::string chassis_pump_topic = "/" + robot_name_ + "/chassis_pump_cmd";
+        std::string lift_topic = "/" + robot_name_ + "/lift_cmd";
 
         // 创建发布者
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cmd_vel_topic, 10);
@@ -54,6 +55,8 @@ public:
         // 底盘气泵使能: latched(transient_local), 1=吸气 0=放气, 连续保持当前值
         chassis_pump_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             chassis_pump_topic, rclcpp::QoS(1).transient_local().reliable());
+        // 三区抬升动作: 单次发送 (1=抬升 2=收腿 3=放下腿 4=放下抬升)
+        lift_pub_ = this->create_publisher<std_msgs::msg::Int32>(lift_topic, 10);
 
         // 速度参数
         linear_speed_ = 0.1;   // m/s
@@ -102,6 +105,13 @@ public:
         RCLCPP_INFO(this->get_logger(), "【底盘气泵 /chassia_pump_cmd】");
         RCLCPP_INFO(this->get_logger(), "   J - 吸气");
         RCLCPP_INFO(this->get_logger(), "   K - 放气");
+        RCLCPP_INFO(this->get_logger(), "");
+        RCLCPP_INFO(this->get_logger(), "【三区抬升 /lift_cmd (需先切三区)】");
+        RCLCPP_INFO(this->get_logger(), "   Y - 抬升");
+        RCLCPP_INFO(this->get_logger(), "   U - 降到架机");
+        RCLCPP_INFO(this->get_logger(), "   I - 抬腿");
+        RCLCPP_INFO(this->get_logger(), "   O - 伸腿");
+        RCLCPP_INFO(this->get_logger(), "   L - 降下去");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【参数调节】");
         RCLCPP_INFO(this->get_logger(), "   [/] - 移动速度 -/+10%%");
@@ -263,6 +273,23 @@ private:
                 publishChassisPump(0);  // 放气
                 break;
 
+            // ========== 三区抬升 ==========
+            case 'y': case 'Y':
+                publishLift(1);  // 抬升
+                break;
+            case 'u': case 'U':
+                publishLift(2);  // 降到架机
+                break;
+            case 'i': case 'I':
+                publishLift(3);  // 抬腿
+                break;
+            case 'o': case 'O':
+                publishLift(4);  // 伸腿
+                break;
+            case 'l': case 'L':
+                publishLift(5);  // 降下去
+                break;
+
             // ========== 参数调节 ==========
             case '[':
                 linear_speed_ *= 0.9;
@@ -348,6 +375,19 @@ private:
         chassis_pump_pub_->publish(msg);
     }
 
+    void publishLift(int32_t command)
+    {
+        const char* desc = command == 1 ? "抬升"
+                         : command == 2 ? "降到架机"
+                         : command == 3 ? "抬腿"
+                         : command == 4 ? "伸腿"
+                         : command == 5 ? "降下去" : "未知";
+        RCLCPP_INFO(this->get_logger(), "三区抬升动作: %d (%s)", command, desc);
+        auto msg = std_msgs::msg::Int32();
+        msg.data = command;
+        lift_pub_->publish(msg);
+    }
+
     void publishAll()
     {
         // 发布速度
@@ -373,6 +413,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr zone_mode_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr pump_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr chassis_pump_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr lift_pub_;
 
     // 参数
     std::string robot_name_;
