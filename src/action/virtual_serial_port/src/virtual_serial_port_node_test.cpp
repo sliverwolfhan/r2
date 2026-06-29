@@ -2,6 +2,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <std_msgs/msg/int32.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
 #include "virtual_serial_port/cdc_trans.hpp"
 #include <thread>
 #include <mutex>
@@ -40,6 +41,8 @@ struct StatusPacket {
     uint8_t climber_status;  // 爬楼梯状态 (1=开始执行, 2=执行完成)
     uint16_t distance_head;  // 距离
     uint16_t distance_tail;  // 距离
+    uint8_t sign;            // 对接状态 (1表示对接完成)
+    uint8_t MeiLin[12];      // 12 个方块的数据 (0:空, 1:R1, 2:R2, 3:Fake, 4:R1未取)
     uint8_t tail;            // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -80,6 +83,8 @@ public:
         current_grasp_cmd_ = 0;
         grasp_send_once_ = false;
         current_pump_ = 0;
+        current_pump_once_ = 0;
+        pump_send_once_ = false;
         current_zone3_cmd_ = 0;
         zone3_send_once_ = false;
 
@@ -136,6 +141,11 @@ public:
             "/AT_R2/lift_cmd", 10,
             std::bind(&VirtualSerialPortNode::zone3_callback, this, std::placeholders::_1));
 
+        // 订阅气泵单次命令话题 (pump_cmd 收到时发一次: 0->pump=3, 1->pump=4)
+        pump_cmd_sub_ = this->create_subscription<std_msgs::msg::Int32>(
+            "/AT_R2/pump_cmd", 10,
+            std::bind(&VirtualSerialPortNode::pump_cmd_callback, this, std::placeholders::_1));
+
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/climber_status", 10);
@@ -149,6 +159,14 @@ public:
             "/AT_R2/distance_head", 10);
         distance_tail_pub_ = this->create_publisher<std_msgs::msg::Float64>(
             "/AT_R2/distance_tail", 10);
+
+        // 创建梅林 12 方块数据发布器 (同 kfs_positions)
+        kfs_pub_ = this->create_publisher<std_msgs::msg::Int32MultiArray>(
+            "/AT_R2/kfs_positions", 10);
+
+        // 创建对接状态发布器 (sign)
+        docking_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/docking_status", 10);
 
         // 定时持续发布最新状态（10Hz）
         status_timer_ = this->create_wall_timer(
@@ -185,7 +203,9 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅区模式话题: /AT_R2/zone_mode (连续发送), 抓取命令话题: /AT_R2/head_gripper_cmd (单次发送)");
         RCLCPP_INFO(this->get_logger(), "已订阅底盘气泵使能话题: /AT_R2/chassis_pump_cmd (连续发送, 1=吸气 0=放气)");
         RCLCPP_INFO(this->get_logger(), "已订阅三区动作话题: /AT_R2/lift_cmd (单次发送, 1=抬升 2=降到架机 3=抬腿 4=伸腿 5=降下去)");
+        RCLCPP_INFO(this->get_logger(), "已订阅气泵单次命令话题: /AT_R2/pump_cmd (单次发送, 0->pump=3, 1->pump=4)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail");
+        RCLCPP_INFO(this->get_logger(), "已创建梅林/对接发布器: /AT_R2/kfs_positions, /AT_R2/docking_status");
     }
 
     ~VirtualSerialPortNode()
@@ -298,6 +318,23 @@ private:
             msg->data, current_pump_ ? "吸气" : "放气");
     }
 
+    void pump_cmd_callback(const std_msgs::msg::Int32::SharedPtr msg)
+    {
+        std::lock_guard<std::mutex> lock(velocity_mutex_);
+        if (msg->data == 0) {
+            current_pump_once_ = 3;
+        } else if (msg->data == 1) {
+            current_pump_once_ = 4;
+        } else {
+            RCLCPP_WARN(this->get_logger(),
+                "pump_cmd 未知值 %d, 忽略 (仅支持 0->3, 1->4)", msg->data);
+            return;
+        }
+        pump_send_once_ = true;
+        RCLCPP_INFO(this->get_logger(),
+            "收到 pump_cmd: %d -> 发送一次 pump=%d", msg->data, current_pump_once_);
+    }
+
     void zone3_callback(const std_msgs::msg::Int32::SharedPtr msg)
     {
         std::lock_guard<std::mutex> lock(velocity_mutex_);
@@ -347,7 +384,13 @@ private:
                     selected_source, selected_velocity.vx, selected_velocity.vy, selected_velocity.omega,
                     current_mode_);
                 packet.mode = current_mode_;
-                packet.pump = current_pump_;
+                if (pump_send_once_) {
+                    packet.pump = current_pump_once_;   // 单次: 0->3, 1->4
+                    pump_send_once_ = false;
+                    RCLCPP_INFO(this->get_logger(), "发送一次 pump=%d", packet.pump);
+                } else {
+                    packet.pump = current_pump_;        // 平时连续发 0/1
+                }
                 if (grasp_send_once_) {
                     packet.action = current_grasp_cmd_;
                     packet.climb_height = 0;
@@ -430,6 +473,25 @@ private:
                 status.distance_head / 1000.0,
                 status.distance_tail / 1000.0);
 
+            // 发布对接状态 (sign)
+            auto dock_msg = std_msgs::msg::Int32();
+            dock_msg.data = static_cast<int32_t>(status.sign);
+            docking_status_pub_->publish(dock_msg);
+
+            // 发布梅林 12 方块数据
+            auto meilin_msg = std_msgs::msg::Int32MultiArray();
+            for (int i = 0; i < 12; i++) {
+                meilin_msg.data.push_back(status.MeiLin[i]);
+            }
+            kfs_pub_->publish(meilin_msg);
+
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                "收到对接状态 sign=%d, 梅林[0..11]=%d %d %d %d %d %d %d %d %d %d %d %d",
+                status.sign,
+                status.MeiLin[0], status.MeiLin[1], status.MeiLin[2], status.MeiLin[3],
+                status.MeiLin[4], status.MeiLin[5], status.MeiLin[6], status.MeiLin[7],
+                status.MeiLin[8], status.MeiLin[9], status.MeiLin[10], status.MeiLin[11]);
+
             uint8_t new_status = status.climber_status;
 
             if (new_status == last_climber_raw_) {
@@ -492,11 +554,14 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr mode_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr grasp_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
+    rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_cmd_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr zone3_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_head_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_tail_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread send_thread_;
@@ -519,6 +584,8 @@ private:
     uint8_t current_grasp_cmd_;
     bool grasp_send_once_;
     uint8_t current_pump_;
+    uint8_t current_pump_once_;
+    bool pump_send_once_;
     uint8_t current_zone3_cmd_;
     bool zone3_send_once_;
 
