@@ -9,6 +9,7 @@
          - need_finish 置 1，告诉下一个 MOVE "我刚抓完，请做收尾"。 -->
   <BehaviorTree ID="PickAtBlock">
     <Sequence>
+<<<<<<< Updated upstream
       <!-- 导航到 prep || 臂 prep 兜底排队，二者并行
            - 导航：MOVE 段 C 已经走过则 IsPrepSkippable 通过，不再重复发 goal；
                    首次 PICK 前面没有 MOVE 时由这里兜底导航
@@ -58,6 +59,8 @@
       </ParallelAll>
       <Script code="arm_prep_queued := 0"/>
 
+=======
+>>>>>>> Stashed changes
       <!-- 等上一段 MOVE 后台跑的 arm prep 收尾，确保臂到位再发 PICK 的 ArmTask -->
       <WaitArmIdle timeout="20.0"/>
 

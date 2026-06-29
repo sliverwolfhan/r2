@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!--
+  DockToTag 单节点测试树
+  ============================================================
+  用途: 单独验证"通过坐标系(TF)对接"的动作节点 DockToTag。
+
+  前置条件:
+    1. 视觉模块正在发布 dock_target 这个 TF 坐标系
+       (默认 frame 名为 dock_target, 可用端口 target_frame 改)
+    2. /AT_R2/odometry 里程计话题有数据 (用于堵转判定)
+    3. 底盘订阅 cmd_vel_topic 指定的速度话题
+
+  运行:
+    ros2 run at_r2_bt simple_bt_runner test_dock_to_tag.xml
+
+  流程:
+    SetZoneMode  -> 设置区域模式(可选, 与正式流程保持一致)
+    WaitForEnter -> 停在这里, 确认现场安全后按 Enter 开始对接
+    DockToTag    -> 先 ALIGN 摆正, 再 APPROACH 推进, 到位 SUCCESS
+============================================================ -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+
+      <!-- 与正式流程一致: 进入对接区域模式(按需保留/删除) -->
+      <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
+
+      <!-- 安全门控: 现场确认后按 Enter 再开始动底盘 -->
+      <WaitForEnter node="{node}"
+                    prompt="DockToTag 测试: 确认 dock_target 已发布且现场安全, 按 Enter 开始对接"
+                    require_tty="false"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <!-- ============ 核心: 基于 TF 的对接 ============
+           误差全部在 dock_target 系下计算, 两阶段控制:
+             ALIGN    : 收敛横向 Y 和偏航 yaw, 前进被软门控压制
+             APPROACH : 锁住横向/yaw, 沿 dock 系 X 推进, 几何或堵转到位
+           下面的值都是节点默认值, 显式写出便于现场单独调参。 -->
+      <DockToTag node="{node}"
+                 target_frame="dock_target"
+                 base_frame="base_footprint"
+                 cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
+                 odom_topic="/AT_R2/odometry"
+
+                 pre_dock_offset_x="-0.5"
+                 target_yaw_in_dock_deg="-90.0"
+
+                 align_tol_lat="0.005"
+                 align_tol_yaw_deg="0.5"
+                 approach_tol="0.01"
+                 align_hyst_lat="0.015"
+                 align_hyst_yaw_deg="1.5"
+
+                 kp_x="1.0"
+                 kp_y="1.5"
+                 kp_yaw="2.0"
+
+                 max_vx="0.10"
+                 max_vy="0.10"
+                 max_wz="0.5"
+                 accel_vx="0.3"
+                 accel_vy="0.3"
+                 accel_wz="1.5"
+
+                 approach_min_speed="0.015"
+                 approach_decel_dist="0.05"
+                 gate_sigma_lat="0.015"
+                 gate_sigma_yaw_deg="3.0"
+
+                 stall_threshold="0.003"
+                 stall_duration="0.4"
+
+                 tag_max_age="0.5"
+                 tag_lost_freeze_time="1.0"
+                 timeout="30.0"
+                 publish_rate_hz="50.0"/>
+
+    </Sequence>
+  </BehaviorTree>
+</root>

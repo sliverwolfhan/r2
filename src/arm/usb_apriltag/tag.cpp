@@ -30,20 +30,22 @@ extern "C"
 
 // ---- USB 相机 ----
 constexpr int   CAMERA_DEVICE_ID = 2;     // /dev/videoX
-constexpr int   FRAME_WIDTH      = 640;
-constexpr int   FRAME_HEIGHT     = 480;
+constexpr int   FRAME_WIDTH      = 1920;
+constexpr int   FRAME_HEIGHT     = 1080;
 
 // ---- 相机内参（标定结果）----
-constexpr double FX = 325.53172475155594;
-constexpr double FY = 325.5127347957183;
-constexpr double CX = 323.4747330012186;
-constexpr double CY = 251.68298556701887;
+// 标定@1920x1080（camera_matrix）
+constexpr double FX = 746.3779577984797;
+constexpr double FY = 748.9374140286499;
+constexpr double CX = 960.4435881489499;
+constexpr double CY = 550.6904773752213;
 
-constexpr double K1 = -0.0011399200886537332;
-constexpr double K2 = -0.09491210221445738;
-constexpr double P1 = -0.0003002068636793419;
-constexpr double P2 =  0.00322949710749793;
-constexpr double K3 =  0.09408591579045257;
+// plumb_bob 畸变 [k1, k2, p1, p2, k3]
+constexpr double K1 = -0.026725234928875147;
+constexpr double K2 = -0.00888915907934674;
+constexpr double P1 = -0.0011308998061782486;
+constexpr double P2 = -0.001961026780100149;
+constexpr double K3 =  0.0;
 
 // ---- 窗口 ----
 constexpr int   WINDOW_WIDTH  = 1280;
@@ -66,11 +68,17 @@ constexpr float AXIS_LENGTH = 0.02f;
 
 // ---- ROS TF ----
 constexpr char  PARENT_FRAME[]      = "usb_camera";   // 父坐标系（相机）
-constexpr char  MERGED_FRAME[]      = "tag_merged";   // 融合后的坐标系
+constexpr char  MERGED_FRAME[]      = "R1_base_footprint";   // 融合后的坐标系（车体）
 constexpr int   TAG_ID_A = 0;                         // 要融合的 tag A
 constexpr int   TAG_ID_B = 1;                         // 要融合的 tag B
-constexpr double OFFSET_X = 0.0;                      // X 附加偏移量（米）
-constexpr double OFFSET_Z = 0.0;                      // Z 附加偏移量（米）
+// 安装偏移：tag 中心 → 车体原点，在【车体坐标系】下定义（米）
+constexpr double OFFSET_X = 0.0;                      // 车体 X 偏移
+constexpr double OFFSET_Y = 0.0;                      // 车体 Y 偏移
+constexpr double OFFSET_Z = 0.0;                      // 车体 Z 偏移
+
+// ---- 平滑 / 丢帧保持 ----
+constexpr double SMOOTH_ALPHA = 0.3;                  // EMA/SLERP 系数，越小越平滑(0~1)
+constexpr int    HOLD_FRAMES  = 10;                   // 检测丢失后最多保持发布上一次位姿的帧数
 
 // ============================================================
 //                 线程共享数据结构
@@ -87,10 +95,10 @@ struct TagPose
 struct MergedPose
 {
     bool    valid = false;
-    double  x_avg = 0.0;    // tag0 和 tag1 的 X 平均值 + OFFSET_X
-    double  z_avg = 0.0;    // tag0 和 tag1 的 Z 平均值 + OFFSET_Z
-    double  t[3];           // 完整平移
-    double  R[9];           // 完整旋转矩阵
+    double  x_avg = 0.0;    // 发布的车体原点 X（相机系，含偏移）
+    double  z_avg = 0.0;    // 发布的车体原点 Z（相机系，含偏移）
+    double  t[3];           // 完整平移（相机系下的车体原点）
+    double  R[9];           // 完整旋转矩阵（R_cam_car，车体系→相机系）
 };
 
 // ============================================================
@@ -177,6 +185,9 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    // 强制 MJPG，否则高分辨率会退回 YUYV，帧率只有几 fps
+    cap.set(cv::CAP_PROP_FOURCC,
+            cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     cap.set(cv::CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
 
@@ -213,12 +224,13 @@ int main(int argc, char **argv)
     // =========================================
     float s = TAG_SIZE / 2.0f;
 
+    // SOLVEPNP_IPPE_SQUARE 要求的角点顺序：左上→右上→右下→左下
     std::vector<cv::Point3f> objectPoints =
     {
-        {-s, -s, 0},
-        { s, -s, 0},
-        { s,  s, 0},
-        {-s,  s, 0}
+        {-s,  s, 0},   // 左上
+        { s,  s, 0},   // 右上
+        { s, -s, 0},   // 右下
+        {-s, -s, 0}    // 左下
     };
 
     // =========================================
@@ -237,6 +249,14 @@ int main(int argc, char **argv)
     // =========================================
     cv::Mat accum_gray;
     int     acc_count = 0;
+
+    // =========================================
+    // 滤波 / 丢帧保持 状态
+    // =========================================
+    bool            filt_valid = false;
+    double          filt_t[3]  = {0.0, 0.0, 0.0};
+    tf2::Quaternion filt_q(0.0, 0.0, 0.0, 1.0);
+    int             miss_count = 0;
 
     while (rclcpp::ok())
     {
@@ -301,19 +321,23 @@ int main(int argc, char **argv)
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
 
-            // 图像角点
-            std::vector<cv::Point2f> imagePoints;
-            for (int j = 0; j < 4; j++)
+            // 图像角点：重排成与 objectPoints(IPPE 顺序)一一对应的物理角点
+            //   apriltag 角点 p[0..3] 对应 (-s,-s)(s,-s)(s,s)(-s,s)
+            //   IPPE 顺序需要 (-s,s)(s,s)(s,-s)(-s,-s) = p[3] p[2] p[1] p[0]
+            std::vector<cv::Point2f> imagePoints =
             {
-                imagePoints.push_back(
-                    cv::Point2f(det->p[j][0], det->p[j][1]));
-            }
+                cv::Point2f(det->p[3][0], det->p[3][1]),
+                cv::Point2f(det->p[2][0], det->p[2][1]),
+                cv::Point2f(det->p[1][0], det->p[1][1]),
+                cv::Point2f(det->p[0][0], det->p[0][1])
+            };
 
-            // solvePnP
+            // solvePnP：正方形平面标记用 IPPE_SQUARE，单解稳定、消除翻转
             cv::Mat rvec, tvec;
             bool ok = cv::solvePnP(objectPoints, imagePoints,
                                    cameraMatrix, distCoeffs,
-                                   rvec, tvec);
+                                   rvec, tvec, false,
+                                   cv::SOLVEPNP_IPPE_SQUARE);
             if (!ok) continue;
 
             // ---- 提取 pose ----
@@ -381,49 +405,117 @@ int main(int argc, char **argv)
                         cv::Scalar(0, 255, 255), 2);
         }
 
-        // ---- 融合 pose → ROS 线程 + 串口 + 控制台 ----
+        // ---- 融合 + 平滑 + 丢帧保持 → ROS 线程 ----
+        MergedPose out;          // 本帧最终要发布的位姿
+        out.valid = false;
+
+        if (p0 && p1)
+        {
+            // ---- 1) 旋转矩阵平均 + SVD 正交化 → R_cam_tag ----
+            double Rsum[9];
+            for (int i = 0; i < 9; i++)
+                Rsum[i] = (p0->R[i] + p1->R[i]) * 0.5;
+            cv::Mat R_avg = (cv::Mat_<double>(3,3) <<
+                Rsum[0], Rsum[1], Rsum[2],
+                Rsum[3], Rsum[4], Rsum[5],
+                Rsum[6], Rsum[7], Rsum[8]);
+            cv::SVD svd(R_avg, cv::SVD::FULL_UV);
+            cv::Mat R_cam_tag = svd.u * svd.vt;   // 正交化后的 tag 朝向
+
+            // ---- 2) tag 系 → 车体系 的固定旋转 R_tag_car ----
+            //   车体 X = tag(-Z)，车体 Y = tag(-X)，车体 Z = tag(+Y)
+            cv::Mat R_tag_car = (cv::Mat_<double>(3,3) <<
+                 0, -1,  0,
+                 0,  0,  1,
+                -1,  0,  0);
+
+            // ---- 3) 发布的旋转：R_cam_car = R_cam_tag * R_tag_car ----
+            cv::Mat R_cam_car = R_cam_tag * R_tag_car;
+
+            // ---- 4) 平移：平均 tag 中心(相机系) + 车体系偏移旋到相机系 ----
+            double px = (p0->t[0] + p1->t[0]) * 0.5;
+            double py = (p0->t[1] + p1->t[1]) * 0.5;
+            double pz = (p0->t[2] + p1->t[2]) * 0.5;
+            cv::Mat off_car = (cv::Mat_<double>(3,1) <<
+                OFFSET_X, OFFSET_Y, OFFSET_Z);
+            cv::Mat off_cam = R_cam_car * off_car;   // 车体系偏移 → 相机系
+            double raw_t[3] = {
+                px + off_cam.at<double>(0),
+                py + off_cam.at<double>(1),
+                pz + off_cam.at<double>(2) };
+
+            // ---- 5) 原始旋转 → 四元数 ----
+            tf2::Matrix3x3 m_raw(
+                R_cam_car.at<double>(0,0), R_cam_car.at<double>(0,1), R_cam_car.at<double>(0,2),
+                R_cam_car.at<double>(1,0), R_cam_car.at<double>(1,1), R_cam_car.at<double>(1,2),
+                R_cam_car.at<double>(2,0), R_cam_car.at<double>(2,1), R_cam_car.at<double>(2,2));
+            tf2::Quaternion q_raw;
+            m_raw.getRotation(q_raw);
+            q_raw.normalize();
+
+            // ---- 6) 时间滤波：平移 EMA + 旋转 SLERP ----
+            if (!filt_valid)
+            {
+                for (int i = 0; i < 3; i++) filt_t[i] = raw_t[i];
+                filt_q     = q_raw;
+                filt_valid = true;
+            }
+            else
+            {
+                for (int i = 0; i < 3; i++)
+                    filt_t[i] = SMOOTH_ALPHA * raw_t[i] + (1.0 - SMOOTH_ALPHA) * filt_t[i];
+                // 取最短路径，避免四元数符号翻转
+                if (filt_q.dot(q_raw) < 0.0)
+                    q_raw = tf2::Quaternion(-q_raw.x(), -q_raw.y(), -q_raw.z(), -q_raw.w());
+                filt_q = filt_q.slerp(q_raw, SMOOTH_ALPHA);
+                filt_q.normalize();
+            }
+            miss_count = 0;
+            out.valid  = true;
+        }
+        else if (filt_valid && miss_count < HOLD_FRAMES)
+        {
+            // 检测丢失：继续发布上一次滤波后的位姿，避免 TF 闪断
+            miss_count++;
+            out.valid = true;
+        }
+
+        if (out.valid)
+        {
+            out.t[0] = filt_t[0];
+            out.t[1] = filt_t[1];
+            out.t[2] = filt_t[2];
+            tf2::Matrix3x3 m_out(filt_q);
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                    out.R[r*3 + c] = m_out[r][c];
+            out.x_avg = out.t[0];
+            out.z_avg = out.t[2];
+
+            std::cout << std::fixed << std::setprecision(4)
+                      << " >>> CAR  X=" << out.t[0]
+                      << "  Y=" << out.t[1]
+                      << "  Z=" << out.t[2]
+                      << ((p0 && p1) ? "" : "  (hold)") << " <<<"
+                      << std::endl;
+        }
+
+        // ---- 推送给 ROS 线程 ----
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            g_merged.valid = false;
-
-            if (p0 && p1)
-            {
-                g_merged.x_avg = (p0->t[0] + p1->t[0]) * 0.5 + OFFSET_X;
-                g_merged.z_avg = (p0->t[2] + p1->t[2]) * 0.5 + OFFSET_Z;
-                g_merged.t[0]  = g_merged.x_avg;
-                g_merged.t[1]  = (p0->t[1] + p1->t[1]) * 0.5;
-                g_merged.t[2]  = g_merged.z_avg;
-                g_merged.valid = true;
-
-                // 旋转矩阵平均 + SVD 正交化
-                for (int i = 0; i < 9; i++)
-                    g_merged.R[i] = (p0->R[i] + p1->R[i]) * 0.5;
-                cv::Mat R_avg = (cv::Mat_<double>(3,3) <<
-                    g_merged.R[0], g_merged.R[1], g_merged.R[2],
-                    g_merged.R[3], g_merged.R[4], g_merged.R[5],
-                    g_merged.R[6], g_merged.R[7], g_merged.R[8]);
-                cv::SVD svd(R_avg, cv::SVD::FULL_UV);
-                cv::Mat R_ortho = svd.u * svd.vt;
-                for (int r = 0; r < 3; r++)
-                    for (int c = 0; c < 3; c++)
-                        g_merged.R[r*3 + c] = R_ortho.at<double>(r, c);
-
-                // ====== 控制台打印平均值 ======
-                std::cout << " >>> MERGED  X_avg=" << g_merged.x_avg
-                          << "  Z_avg=" << g_merged.z_avg << " <<<"
-                          << std::endl;
-            }
+            g_merged   = out;
             g_new_data = true;
         }
         g_cv.notify_one();
 
-        // ---- 在图像上也画平均值 ----
-        if (p0 && p1)
+        // ---- 在图像上画发布的车体位置 ----
+        if (out.valid)
         {
             std::stringstream ss;
             ss << std::fixed << std::setprecision(3)
-               << "AVG X:" << g_merged.x_avg
-               << " Z:" << g_merged.z_avg;
+               << "CAR X:" << out.x_avg
+               << " Z:" << out.z_avg
+               << ((p0 && p1) ? "" : " (hold)");
             cv::putText(image, ss.str(),
                         cv::Point(10, image.rows - 20),
                         cv::FONT_HERSHEY_SIMPLEX, 0.7,
