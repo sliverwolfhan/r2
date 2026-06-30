@@ -13,8 +13,8 @@ simple_bt_runner:
 
     # KFS 放置顺序
     kfs_priority:
-      - kfs_1
       - kfs_2
+      - kfs_1
 
     # 每个 KFS 的参数：
     #   prep_x / prep_y / prep_yaw    -> 机器人预备点位姿 (map 系, m / rad)
@@ -24,7 +24,7 @@ simple_bt_runner:
     kfs_1.prep_y: 2.52
     kfs_1.prep_yaw: 0.0
     kfs_1.place_x: 11.825
-    kfs_1.place_y: 3.74
+    kfs_1.place_y: 2.74
 
     kfs_2.prep_x: 11.09
     kfs_2.prep_y: 3.22
@@ -41,9 +41,9 @@ simple_bt_runner:
     # 每个 slot 一组机器人导航预备点位姿 (map 系, m / rad)。
     # 机械臂关节姿态 (place_grid) 和过渡姿态 (place_interim_pos_0) 在 XML 写死。
     place_slot_priority:
+      - slot_3
       - slot_2
       - slot_1
-      - slot_3
 
     slot_1.x: 11.58
     slot_1.y: 4.95

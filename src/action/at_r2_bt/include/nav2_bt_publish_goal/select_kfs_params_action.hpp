@@ -17,6 +17,9 @@ namespace nav2_bt_publish_goal
  * 节点内部维护一个计数器 iter_(从 0 开始), 第 k 次被 tick 选定的 KFS 序号为
  *   index = start + k        (k = 0, 1, 2, ...)
  *
+ * 计数器存放在黑板键 "kfs_iter" 上, 跨实例共享, 这样 XML 里多处
+ * <SelectKfsParams> 标签按 tick 顺序累加, 不会各自从 0 重数。
+ *
  * 这些 kfs_<n>_ 键由 simple_bt_runner.cpp 从 place_kfs_params.yaml 预加载。
  *
  * 输入端口:
@@ -39,8 +42,6 @@ public:
 
 private:
   bool copyDouble(const std::string & prefix, const std::string & suffix);
-
-  int iter_{0};
 };
 
 }  // namespace nav2_bt_publish_goal

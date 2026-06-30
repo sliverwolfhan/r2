@@ -472,7 +472,7 @@ controller_server:
         trajectory_point_step: 1  
         threshold_to_consider: 0.3      # 设为预测时域
         offset_from_furthest: 15        # 调整为合理值
-        use_path_orientations: true
+        use_path_orientations: false
       PathFollowCritic:
         enabled: true
         cost_power: 1

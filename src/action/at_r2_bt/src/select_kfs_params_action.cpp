@@ -44,7 +44,14 @@ BT::NodeStatus SelectKfsParamsAction::tick()
   int start = 1;
   getInput("start", start);
 
-  const int index = start + iter_;
+  // 计数器跨实例共享: 黑板键 "kfs_iter" (XML 里多处 <SelectKfsParams>
+  // 必须按出现顺序递增, 否则不同实例各自从 0 数会撞同一个 KFS)。
+  int iter = 0;
+  if (config().blackboard->getEntry("kfs_iter")) {
+    (void)config().blackboard->get<int>("kfs_iter", iter);
+  }
+
+  const int index = start + iter;
   // simple_bt_runner.cpp 里写的键名是 "kfs_<i>_prep_x" 这种
   // (用 yaml 里的 kfs_<i> 直接作为前缀, 末尾接 "_" 再加 suffix)。
   const std::string prefix = "kfs_" + std::to_string(index) + "_";
@@ -65,9 +72,9 @@ BT::NodeStatus SelectKfsParamsAction::tick()
 
   RCLCPP_INFO(
     rclcpp::get_logger("SelectKfsParams"),
-    "✓ 第 %d 次取块: 选定 KFS 序号 %d (前缀 %s)", iter_ + 1, index, prefix.c_str());
+    "✓ 第 %d 次取块: 选定 KFS 序号 %d (前缀 %s)", iter + 1, index, prefix.c_str());
 
-  ++iter_;
+  config().blackboard->set<int>("kfs_iter", iter + 1);
   return BT::NodeStatus::SUCCESS;
 }
 
