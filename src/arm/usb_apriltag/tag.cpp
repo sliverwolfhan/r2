@@ -30,35 +30,35 @@ extern "C"
 
 // ---- USB 相机 ----
 constexpr int   CAMERA_DEVICE_ID = 2;     // /dev/videoX
-constexpr int   FRAME_WIDTH      = 1920;
-constexpr int   FRAME_HEIGHT     = 1080;
+constexpr int   FRAME_WIDTH      = 640;
+constexpr int   FRAME_HEIGHT     = 480;
 
 // ---- 相机内参（标定结果）----
-// 标定@1920x1080（camera_matrix）
-constexpr double FX = 746.3779577984797;
-constexpr double FY = 748.9374140286499;
-constexpr double CX = 960.4435881489499;
-constexpr double CY = 550.6904773752213;
+// 标定@640x480（camera_matrix）
+constexpr double FX = 325.53172475155594;
+constexpr double FY = 325.5127347957183;
+constexpr double CX = 323.4747330012186;
+constexpr double CY = 251.68298556701887;
 
 // plumb_bob 畸变 [k1, k2, p1, p2, k3]
-constexpr double K1 = -0.026725234928875147;
-constexpr double K2 = -0.00888915907934674;
-constexpr double P1 = -0.0011308998061782486;
-constexpr double P2 = -0.001961026780100149;
-constexpr double K3 =  0.0;
+constexpr double K1 = -0.0011399200886537332;
+constexpr double K2 = -0.09491210221445738;
+constexpr double P1 = -0.0003002068636793419;
+constexpr double P2 =  0.00322949710749793;
+constexpr double K3 =  0.09408591579045257;
 
 // ---- 窗口 ----
 constexpr int   WINDOW_WIDTH  = 1280;
 constexpr int   WINDOW_HEIGHT = 960;
 
 // ---- AprilTag 检测器 ----
-constexpr float QUAD_DECIMATE = 1.0f;
+constexpr float QUAD_DECIMATE = 1.0f;   // 1.0=全分辨率；想更快设 2.0（320x240等效检测）
 constexpr float QUAD_SIGMA    = 0.0f;
 constexpr int   NTHREADS      = 4;
-constexpr int   REFINE_EDGES  = 1;
+constexpr int   REFINE_EDGES  = 0;      // 关闭边缘细化，大幅提速
 
 // ---- 帧平均 ----
-constexpr int   FRAME_AVG_COUNT = 2;      // 几帧取平均（≥1）
+constexpr int   FRAME_AVG_COUNT = 1;      // 设为 1 = 每帧检测，零延迟
 
 // ---- Tag 物理尺寸（米）----
 constexpr float TAG_SIZE = 0.035f;
@@ -79,6 +79,7 @@ constexpr double OFFSET_Z = 0.0;                      // 车体 Z 偏移
 // ---- 平滑 / 丢帧保持 ----
 constexpr double SMOOTH_ALPHA = 0.3;                  // EMA/SLERP 系数，越小越平滑(0~1)
 constexpr int    HOLD_FRAMES  = 10;                   // 检测丢失后最多保持发布上一次位姿的帧数
+constexpr int    PRINT_EVERY_N = 5;                   // 每隔 N 帧打印一次控制台输出（减少 I/O）
 
 // ============================================================
 //                 线程共享数据结构
@@ -185,9 +186,6 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    // 强制 MJPG，否则高分辨率会退回 YUYV，帧率只有几 fps
-    cap.set(cv::CAP_PROP_FOURCC,
-            cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     cap.set(cv::CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT);
 
@@ -203,7 +201,6 @@ int main(int argc, char **argv)
     cv::Mat distCoeffs =
         (cv::Mat_<double>(5,1) << K1, K2, P1, P2, K3);
 
-    std::cout << "Camera: fx=" << FX << " fy=" << FY << std::endl;
 
     // =========================================
     // AprilTag 初始化
@@ -257,13 +254,17 @@ int main(int argc, char **argv)
     double          filt_t[3]  = {0.0, 0.0, 0.0};
     tf2::Quaternion filt_q(0.0, 0.0, 0.0, 1.0);
     int             miss_count = 0;
+    int             frame_count = 0;       // 帧计数器，用于跳帧打印
+    int64           tick_freq  = cv::getTickFrequency();
+    int64           tick_start = cv::getTickCount();   // FPS 计时
+    int             fps_count  = 0;        // FPS 专用帧计数
+    double          fps        = 0.0;
 
     while (rclcpp::ok())
     {
-        // ---- 采集一帧 ----
+        // ---- 采集帧 ----
         cv::Mat image;
-        cap >> image;
-        if (image.empty()) break;
+        if (!cap.read(image) || image.empty()) break;
 
         // ---- 转灰度 ----
         cv::Mat gray;
@@ -314,7 +315,7 @@ int main(int argc, char **argv)
 
         // ---- 收集本帧所有 pose ----
         std::vector<TagPose> frame_poses;
-        TagPose *p0 = nullptr, *p1 = nullptr;
+        int idx_a = -1, idx_b = -1;   // 索引代替指针，避免 vector 扩容导致悬垂
 
         for (int i = 0; i < zarray_size(detections); i++)
         {
@@ -355,10 +356,12 @@ int main(int argc, char **argv)
 
             frame_poses.push_back(pose);
 
-            if (det->id == TAG_ID_A) p0 = &frame_poses.back();
-            if (det->id == TAG_ID_B) p1 = &frame_poses.back();
+            if (det->id == TAG_ID_A) idx_a = static_cast<int>(frame_poses.size()) - 1;
+            if (det->id == TAG_ID_B) idx_b = static_cast<int>(frame_poses.size()) - 1;
 
             // ---- 控制台输出 ----
+            if (frame_count % PRINT_EVERY_N == 0)
+            {
             std::cout << std::fixed << std::setprecision(4);
             std::cout << "=== TF tag:" << det->id << " ===\n";
             std::cout << "t: [" << pose.t[0]
@@ -369,6 +372,7 @@ int main(int argc, char **argv)
                       << pose.R[3] << ", " << pose.R[4] << ", " << pose.R[5] << " | "
                       << pose.R[6] << ", " << pose.R[7] << ", " << pose.R[8] << "]\n";
             std::cout << std::endl;
+            }
 
             // ---- 画框 ----
             for (int j = 0; j < 4; j++)
@@ -409,12 +413,12 @@ int main(int argc, char **argv)
         MergedPose out;          // 本帧最终要发布的位姿
         out.valid = false;
 
-        if (p0 && p1)
+        if (idx_a >= 0 && idx_b >= 0)
         {
             // ---- 1) 旋转矩阵平均 + SVD 正交化 → R_cam_tag ----
             double Rsum[9];
             for (int i = 0; i < 9; i++)
-                Rsum[i] = (p0->R[i] + p1->R[i]) * 0.5;
+                Rsum[i] = (frame_poses[idx_a].R[i] + frame_poses[idx_b].R[i]) * 0.5;
             cv::Mat R_avg = (cv::Mat_<double>(3,3) <<
                 Rsum[0], Rsum[1], Rsum[2],
                 Rsum[3], Rsum[4], Rsum[5],
@@ -433,9 +437,9 @@ int main(int argc, char **argv)
             cv::Mat R_cam_car = R_cam_tag * R_tag_car;
 
             // ---- 4) 平移：平均 tag 中心(相机系) + 车体系偏移旋到相机系 ----
-            double px = (p0->t[0] + p1->t[0]) * 0.5;
-            double py = (p0->t[1] + p1->t[1]) * 0.5;
-            double pz = (p0->t[2] + p1->t[2]) * 0.5;
+            double px = (frame_poses[idx_a].t[0] + frame_poses[idx_b].t[0]) * 0.5;
+            double py = (frame_poses[idx_a].t[1] + frame_poses[idx_b].t[1]) * 0.5;
+            double pz = (frame_poses[idx_a].t[2] + frame_poses[idx_b].t[2]) * 0.5;
             cv::Mat off_car = (cv::Mat_<double>(3,1) <<
                 OFFSET_X, OFFSET_Y, OFFSET_Z);
             cv::Mat off_cam = R_cam_car * off_car;   // 车体系偏移 → 相机系
@@ -492,12 +496,15 @@ int main(int argc, char **argv)
             out.x_avg = out.t[0];
             out.z_avg = out.t[2];
 
+            if (frame_count % PRINT_EVERY_N == 0)
+            {
             std::cout << std::fixed << std::setprecision(4)
                       << " >>> CAR  X=" << out.t[0]
                       << "  Y=" << out.t[1]
                       << "  Z=" << out.t[2]
-                      << ((p0 && p1) ? "" : "  (hold)") << " <<<"
+                      << ((idx_a >= 0 && idx_b >= 0) ? "" : "  (hold)") << " <<<"
                       << std::endl;
+            }
         }
 
         // ---- 推送给 ROS 线程 ----
@@ -513,13 +520,32 @@ int main(int argc, char **argv)
         {
             std::stringstream ss;
             ss << std::fixed << std::setprecision(3)
-               << "CAR X:" << out.x_avg
-               << " Z:" << out.z_avg
-               << ((p0 && p1) ? "" : " (hold)");
+               << "CAR X:" << out.t[0]
+               << " Y:" << out.t[1]
+               << " Z:" << out.t[2]
+               << ((idx_a >= 0 && idx_b >= 0) ? "" : " (hold)");
             cv::putText(image, ss.str(),
                         cv::Point(10, image.rows - 20),
                         cv::FONT_HERSHEY_SIMPLEX, 0.7,
                         cv::Scalar(0, 255, 255), 2);
+        }
+
+        // ---- FPS 计算和显示 ----
+        {
+            int64 tick_now = cv::getTickCount();
+            double elapsed  = static_cast<double>(tick_now - tick_start) / tick_freq;
+            if (elapsed >= 0.5)   // 每 0.5 秒更新一次 FPS 读数
+            {
+                fps        = static_cast<double>(fps_count) / elapsed;
+                tick_start = tick_now;
+                fps_count  = 0;
+            }
+            std::stringstream sfps;
+            sfps << std::fixed << std::setprecision(1) << fps << " fps";
+            cv::putText(image, sfps.str(),
+                        cv::Point(10, 30),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                        cv::Scalar(0, 255, 0), 2);
         }
 
         // ---- 显示 ----
@@ -528,6 +554,8 @@ int main(int argc, char **argv)
         if (cv::waitKey(1) == 27) break;
 
         apriltag_detections_destroy(detections);
+        frame_count++;
+        fps_count++;
     }
 
     // =========================================
