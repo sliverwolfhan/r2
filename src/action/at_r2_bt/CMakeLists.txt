@@ -62,6 +62,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dock_to_tag_action.cpp
   src/publish_head_cmd_action.cpp
   src/publish_pump_cmd_action.cpp
+  src/publish_lift_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
@@ -122,6 +123,7 @@ add_executable(simple_bt_runner
   src/dock_to_tag_action.cpp
   src/publish_head_cmd_action.cpp
   src/publish_pump_cmd_action.cpp
+  src/publish_lift_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
