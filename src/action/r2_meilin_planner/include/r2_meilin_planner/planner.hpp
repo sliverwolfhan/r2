@@ -165,6 +165,9 @@ private:
     int moveHeading(int from_node, int to_node) const;
     // 从 cur 朝向转到 next 朝向需要的 90° 档数（0/1/2），用于转弯代价。
     int turnQuarters(int from_heading, int to_heading) const;
+    // 抓块转向的 90° 档数：块相对车头在 前/左 → 0（免转向，夹爪在左手），
+    // 右 → 1（转 90°），后 → 2（掉头）。block_heading 为块相对当前格的绝对方位。
+    int pickTurnQuarters(int from_heading, int block_heading) const;
 
     // 启发式函数 h(n)
     double calculateHeuristic(const SearchState& state) const;

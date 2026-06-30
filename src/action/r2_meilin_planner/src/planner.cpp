@@ -81,6 +81,14 @@ int R2MeilinPlanner::turnQuarters(int from_heading, int to_heading) const {
     return d;                                          // 0 直行 / 1 转 90° / 2 掉头
 }
 
+int R2MeilinPlanner::pickTurnQuarters(int from_heading, int block_heading) const {
+    // 块相对车头方位 r：0=正前 / 1=左 / 2=正后 / 3=右（heading 编码 +x/+y/-x/-y）。
+    const int r = ((block_heading - from_heading) % 4 + 4) % 4;
+    if (r == 0 || r == 1) return 0;                    // 前 / 左：夹爪在左手，免转向
+    if (r == 3) return 1;                              // 右：转 90°
+    return 2;                                          // 后：掉头 180°
+}
+
 double R2MeilinPlanner::calculateHeuristic(const SearchState& state) const {
     int remaining = KFS_TARGET_COUNT - state.kfs_held_count;
     double h_exit = 0.0;
@@ -163,6 +171,14 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                 // 规则 4.4.15：强制态下只能抓前排 R2（既不能上台阶也不能推）
                 bool is_adj_in_front = std::find(front_row.begin(), front_row.end(), adj) != front_row.end();
 
+                // 抓/推转向代价：块在前/左免转向，右转 90°、后掉头。免转向时朝向不变，
+                // 否则转到正对块——之后的朝向再交给后续 MOVE 计算「操作完→上下台阶」的转角。
+                // PICK 与 PUSH 同样收费（都要先正对块）。
+                const int bh = moveHeading(current->current_node_id, adj);
+                const int pq = pickTurnQuarters(current->heading, bh);
+                const double turn_extra = pq * config_.cost.turn_cost;
+                const int turned_heading = (pq == 0) ? current->heading : bh;
+
                 // PICK 准入：
                 //   held==0：强制态只能抓前排 R2；非强制态可自由抓。
                 //   held==1：挡道的相邻 R2 直接抓——抓走它既凑满 2 个、又顺手让开了路，
@@ -182,6 +198,8 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                     if (config_.preferred_pick_nodes.count(adj)) {
                         pick_cost -= config_.cost.preferred_column_pick_bonus;
                     }
+                    pick_cost += turn_extra;
+                    ns->heading = turned_heading;
                     ns->g_cost += pick_cost; ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
                     ns->parent = current; ns->action_taken = "PICK at " + std::to_string(adj);
                     if (!closed_set.count(*ns)) open_list.push(ns);
@@ -191,7 +209,9 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                 if (!is_forced_pick && current->kfs_held_count < KFS_TARGET_COUNT) {
                     auto ns_push = std::make_shared<SearchState>(*current);
                     ns_push->env_mask = clearNodeOccupied(ns_push->env_mask, adj);
-                    ns_push->g_cost += calculatePushCost(); ns_push->f_cost = ns_push->g_cost + calculateHeuristic(*ns_push);
+                    ns_push->heading = turned_heading;
+                    ns_push->g_cost += calculatePushCost() + turn_extra;
+                    ns_push->f_cost = ns_push->g_cost + calculateHeuristic(*ns_push);
                     ns_push->parent = current; ns_push->action_taken = "PUSH " + std::to_string(adj);
                     if (!closed_set.count(*ns_push)) open_list.push(ns_push);
                 }
@@ -244,6 +264,8 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
     int robot_node = ENTRY_NODE_ID;  // 机器人初始位置 = 入口
     double prev_heading = 0.0;       // 车头初始朝 +x（对着 1/2/3 侧），与 A* 起点一致
     bool has_prev_heading = true;
+    int robot_heading = 0;           // 整数车头 0/1/2/3=+x/+y/-x/-y，与 A* 同步；
+                                     // 供 PICK/PUSH 按块相对当前车头判方位（不是世界系）
 
     // prep = 机器人站立的 from 格中心，沿主方向(±x 或 ±y)朝目标轻推 offset 的位置。
     // 机器人在 from 格上对齐到这一点。MOVE/PICK/PUSH 共用，仅偏移量(offset)不同。
@@ -327,6 +349,7 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             }
 
             robot_node = step.target_id;  // 完成 MOVE 后机器人在新节点
+            robot_heading = moveHeading(step.from_id, step.target_id);  // 同步整数车头
         } else if (a.op == ParsedAction::PICK || a.op == ParsedAction::PUSH) {
             step.type = (a.op == ParsedAction::PICK)
                 ? robot_interfaces::msg::PlanStep::TYPE_PICK
@@ -338,17 +361,18 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
             fill_prep_pose(step.from_id, step.target_id, config_.grasp_prep_offset, step);
             const auto & f = blocks_.at(step.from_id);
             const auto & t = blocks_.at(step.target_id);
-            const double dx = t.x - f.x;
-            const double dy = t.y - f.y;
-            // 准备角度按目标在世界系下的方位离散取值（无后方情况）：
-            //   前(+x) 或 左(+y) → 0；右(-y) → -pi/2。再叠加可调偏移。
-            double prep_theta = 0.0;
-            if (std::abs(dy) > std::abs(dx) + AXIS_EPS && dy < 0.0) {
-                prep_theta = -M_PI_2;          // 目标在右方
-            }
-            prep_theta += config_.grasp_prep_theta_offset;
+            // 准备朝向按目标相对【机器人当前车头】的方位决定（与 A* pickTurnQuarters 一致，
+            // 不再用世界系）：块在 前/左 → 车头角度不变；右 → 向右转 90°；后 → 掉头。
+            const int bh = moveHeading(step.from_id, step.target_id);
+            const int pq = pickTurnQuarters(robot_heading, bh);
+            const int turned_heading = (pq == 0) ? robot_heading : bh;
+            double prep_theta = normalize_angle(turned_heading * M_PI_2)
+                                + config_.grasp_prep_theta_offset;
             step.prep_pose.theta = prep_theta;
             step.grasp_yaw = prep_theta;       // 已弃用，留同值兼容下游 BT
+            // 旋转后更新车头，供后续 MOVE 计算「操作完→上下台阶」的转角（用未叠偏移值）。
+            robot_heading = turned_heading;
+            prev_heading = normalize_angle(turned_heading * M_PI_2);
 
             step.cube_x = t.cube_x;
             step.cube_y = t.cube_y;
