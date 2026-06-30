@@ -78,6 +78,6 @@ def generate_launch_description():
         arm_calc,
         rviz2,
         static_tf_camera,
-        vision,
+        # vision,
         arm_task
     ])

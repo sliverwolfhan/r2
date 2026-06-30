@@ -201,7 +201,7 @@
                     wz="0.0"
                     stall_threshold="0.05"
                     stall_duration="0.4"
-                    timeout="0.8"
+                    timeout="0.5"
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
@@ -210,7 +210,7 @@
       <Fallback>
         <GraspReadyByPoseDistance node="{node}"
                                   map_frame="map"
-                                  base_frame="base_link"
+                                  base_frame="base_footprint"
                                   target_y="{grasp_prep_y}"
                                   y_tolerance="{grasp_prep_y_tolerance}"
                                   target_yaw="{grasp_prep_yaw}"
@@ -236,7 +236,7 @@
                             publish_rate_hz="50.0"
                             cmd_axis="x"
                             positive_error_direction="-1.0"
-                            side_speed_scale="4.0"
+                            side_speed_scale="1.0"
                             side_speed_direction="-1.0"
                             filter_enable="true"
                             median_window="3"

@@ -162,7 +162,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     RCLCPP_INFO(robot->node_->get_logger(), "准备获取抓取目标位姿");
     geometry_msgs::msg::PoseStamped object_pose;
 
-    double grasp_right_run_ = 0.15;
+    double grasp_right_run_ = 0.05;
     double grasp_right_run_qian_ = 0.0;
     double grasp_duration_ = 0.8;
     double grasp_height = 0.0;
