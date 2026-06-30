@@ -335,8 +335,8 @@
 
         <!--传感器-->
         <!--3D激光雷达-->
-        <xmacro_block name="livox" prefix="mid360" parent="chassis" pose="-0.32001 -0.14497 0.53 3.1415926 0.0 3.1415926" update_rate="20" samples="1875"/>
-        <!--双目相机-->
+        <xmacro_block name="livox" prefix="mid360" parent="chassis" pose="-0.32001 -0.14497 0.46 3.1415926 0.0 1.57" update_rate="20" samples="1875"/>
+        <!--双目相机 32001-->
         <!-- <xmacro_block name="industrial_camera" prefix="front_left" parent="chassis" pose="0.25 0.1 0.1 0 0 0" update_rate="30" horizontal_fov="1.2" width="1280" height="720"/>
         <xmacro_block name="industrial_camera" prefix="front_right" parent="chassis" pose="0.25 -0.1 0.1 0 0 0" update_rate="30" horizontal_fov="1.2" width="1280" height="720"/> -->
 

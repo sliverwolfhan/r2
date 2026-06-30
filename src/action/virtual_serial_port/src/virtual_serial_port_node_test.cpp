@@ -322,9 +322,9 @@ private:
     {
         std::lock_guard<std::mutex> lock(velocity_mutex_);
         if (msg->data == 0) {
-            current_pump_once_ = 3;
+            current_pump_once_ = 2;
         } else if (msg->data == 1) {
-            current_pump_once_ = 4;
+            current_pump_once_ = 3;
         } else {
             RCLCPP_WARN(this->get_logger(),
                 "pump_cmd 未知值 %d, 忽略 (仅支持 0->3, 1->4)", msg->data);

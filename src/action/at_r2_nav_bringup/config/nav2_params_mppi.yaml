@@ -45,9 +45,9 @@ point_lio:
       blind: 0.5
       # Body filter parameters - 车体点云滤波参数
       body_filter_en: true                              # 启用车体滤波
-      body_min_x: -0.9                                  # 车体包围盒 X 最小值 (米)
-      body_max_x: 0.4                                   # 车体包围盒 X 最大值 (米)
-      body_min_y: -0.6                                  # 车体包围盒 Y 最小值 (米)
+      body_min_x: -0.4                                  # 车体包围盒 X 最小值 (米)
+      body_max_x: 0.8                                   # 车体包围盒 X 最大值 (米)
+      body_min_y: -0.3                                  # 车体包围盒 Y 最小值 (米)
       body_max_y: 1.0                                   # 车体包围盒 Y 最大值 (米)
       body_min_z: -0.5                                  # 车体包围盒 Z 最小值 (米)
       body_max_z: 1.20                                   # 车体包围盒 Z 最大值 (米)
