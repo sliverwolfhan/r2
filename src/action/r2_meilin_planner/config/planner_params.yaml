@@ -22,6 +22,11 @@ kfs_subscriber_node:
     # 400 台阶开关：
     can_climb_400: true
 
+    # 抓取偏好列代价减免（柔性偏好）：抓机器人物理左手列（红 {3,6,9,12} / 蓝 {1,4,7,10}）
+    # 时从 pick_cost 里减去此值。默认 1.5 ≈ 1 个 move+climb_200 的代价，
+    # 表示愿意为去左手列多走 1 格台阶。设 0 关闭；调大几乎硬选左手列。
+    preferred_column_pick_bonus: 1.5
+
     # 高度开关：true 时忽略台阶高度（升/降代价清零、强制可上 400）。
     ignore_height: false
 

@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <queue>
 #include <string>
 #include <memory>
@@ -43,6 +44,10 @@ struct CostConfig {
     double turn_cost = 0.5;          // 每转 90° 的额外代价（掉头 180° = 2×）
     bool   can_climb_400 = true;     // false → 400 档不可上（代价极大，绕开）
     double prohibitive_cost = 10000.0; // 不可通行档（>0.4 或 400 被禁）
+    // 抓取偏好列时的代价减免（柔性偏好）：抓 preferred_pick_nodes 中的目标时
+    // 从 pick_cost 里减去此值。默认 1.5 / 抓，能盖过 1 个 move+climb_200 的代价，
+    // 即愿意多走一格台阶去抓左手列；调小退化为 tie-breaker，调大几乎硬选。
+    double preferred_column_pick_bonus = 1.5;
 };
 
 struct ForestConfig {
@@ -77,6 +82,11 @@ struct ForestConfig {
 
     // 代价配置（可由 yaml 覆盖）
     CostConfig cost;
+
+    // 抓取偏好集合：A* 抓取这些节点的 R2 时享受 cost.preferred_column_pick_bonus 减免。
+    // 由调用方按红/蓝区填写（红区填机器人物理左手列 {3,6,9,12}，蓝区 {1,4,7,10}）；
+    // 留空则关闭该偏好。仅影响 PICK 代价、不影响 MOVE/PUSH，前排强制抓取规则保持不变。
+    std::unordered_set<int> preferred_pick_nodes;
 };
 
 // --- 状态表示 ---

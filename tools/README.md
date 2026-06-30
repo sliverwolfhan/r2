@@ -2,6 +2,8 @@
 
 把 Point-LIO 建出来的 PCD 通过若干已知锚点对齐到目标 `map` 坐标系，输出可以直接喂给 `small_gicp_relocalization` 的先验地图。
 
+> **比赛现场没时间手点锚点？** 如果场地是**矩形**且建图起姿大致可控，用 [auto/](auto/) 目录里的 `auto_align_walls.py`，一条命令出图，不用 CloudCompare。本节的锚点法保留给非矩形场地 / 高精度需求。
+
 ## 解决什么问题
 
 Point-LIO 启动那一刻机器人当前位置就是原点 (0,0,0)，朝向就是坐标轴方向，**每次开机原点都不一样**。但导航和行为树要用的是固定的 `map` 系（比如以场地某个角为原点）。本脚本通过场地里几个已知坐标的物理锚点，求出从 LIO 系到 map 系的刚体变换 `T_map_lio`，并把整张 PCD 套上这个变换。
@@ -226,3 +228,7 @@ min_T  Σᵢ ‖ T · pᵢ_lio − pᵢ_map ‖²
 其中 `T` 是 4×4 刚体变换（默认）或相似变换（`--allow-scale`）。3 个不共线的锚点理论上能唯一求解；4 个以上做最小二乘。
 
 实现见 [align_pcd_to_map.py:31-58](align_pcd_to_map.py#L31-L58)。
+
+---
+
+> 矩形场地的**无标定自动对齐**已挪到 [auto/](auto/) 目录，见 [auto/README.md](auto/README.md)。

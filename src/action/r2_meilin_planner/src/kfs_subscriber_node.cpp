@@ -59,6 +59,7 @@ public:
   {
     // 红蓝区：red → block_red.yaml，blue → block_blue.yaml
     const std::string zone = this->declare_parameter<std::string>("zone", "red");
+    zone_blue_ = (zone == "blue");
     const std::string share =
       ament_index_cpp::get_package_share_directory("r2_meilin_planner");
     const std::string block_file =
@@ -88,6 +89,8 @@ public:
     cost_.climb_400_cost   = this->declare_parameter<double>("climb_400_cost", cost_.climb_400_cost);
     cost_.turn_cost        = this->declare_parameter<double>("turn_cost", cost_.turn_cost);
     cost_.can_climb_400    = this->declare_parameter<bool>("can_climb_400", cost_.can_climb_400);
+    cost_.preferred_column_pick_bonus = this->declare_parameter<double>(
+      "preferred_column_pick_bonus", cost_.preferred_column_pick_bonus);
 
     // 准备位姿偏移量（米，越小越靠近目标），MOVE 与 PICK/PUSH 分开设
     move_prep_offset_  = this->declare_parameter<double>("move_prep_offset", 0.6);
@@ -151,6 +154,10 @@ private:
     config.block_height_offset = block_height_offset_;
     config.grasp_prep_theta_offset = grasp_prep_theta_offset_;
     config.move_prep_theta_offset = move_prep_theta_offset_;
+    // 抓取偏好：机器人物理左手列（+y 那一列）。红区 {3,6,9,12}，蓝区镜像 {1,4,7,10}。
+    config.preferred_pick_nodes = zone_blue_
+      ? std::unordered_set<int>{1, 4, 7, 10}
+      : std::unordered_set<int>{3, 6, 9, 12};
 
     std::string line;
     for (int i = 0; i < 12; ++i) {
@@ -204,6 +211,7 @@ private:
   double grasp_prep_theta_offset_ = 0.0;
   double move_prep_theta_offset_ = 0.0;
   std::string blocks_path_;
+  bool zone_blue_ = false;
   std::atomic<bool> planned_{false};
 };
 

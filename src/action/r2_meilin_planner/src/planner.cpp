@@ -95,7 +95,10 @@ double R2MeilinPlanner::calculateHeuristic(const SearchState& state) const {
         // 距离 = 5 - 当前行
         h_exit = (5.0 - row) * 1.0;
     }
-    return remaining * 2.0 + h_exit;
+    // 剩余 pick 的下界：可能抓到偏好列享受 bonus 减免，必须按减免后的下界估计
+    // 才能保持 admissible（否则 A* 可能错过偏好列里更便宜的路径）。
+    const double pick_lb = std::max(0.0, config_.cost.pick_cost - config_.cost.preferred_column_pick_bonus);
+    return remaining * pick_lb + h_exit;
 }
 
 std::vector<std::string> R2MeilinPlanner::planPath() {
@@ -174,7 +177,12 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                 if (pick_allowed && current->kfs_held_count < KFS_TARGET_COUNT) {
                     auto ns = std::make_shared<SearchState>(*current);
                     ns->kfs_held_count += 1; ns->env_mask = clearNodeOccupied(ns->env_mask, adj);
-                    ns->g_cost += calculatePickCost(); ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
+                    double pick_cost = calculatePickCost();
+                    // 偏好列 PICK 减免：鼓励抓机器人物理左手列（红 {3,6,9,12} / 蓝 {1,4,7,10}）。
+                    if (config_.preferred_pick_nodes.count(adj)) {
+                        pick_cost -= config_.cost.preferred_column_pick_bonus;
+                    }
+                    ns->g_cost += pick_cost; ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
                     ns->parent = current; ns->action_taken = "PICK at " + std::to_string(adj);
                     if (!closed_set.count(*ns)) open_list.push(ns);
                 }
