@@ -93,6 +93,12 @@ private:
   double last_robot_yaw_in_dock_{0.0};
   bool has_last_pose_{false};
 
+  // 航位推算锚点：TF 新鲜时同时记录 tag 测得的 dock 位姿与同一时刻的 odom 位姿，
+  // TF 丢失时用 odom 增量把 dock 位姿往前推。仅 tick 线程(onRunning)读写，无需锁。
+  double anchor_dock_x_{0.0}, anchor_dock_y_{0.0}, anchor_dock_yaw_{0.0};
+  double anchor_odom_x_{0.0}, anchor_odom_y_{0.0}, anchor_odom_yaw_{0.0};
+  bool has_anchor_{false};
+
   geometry_msgs::msg::Twist cmd_;          // 当前下发指令(body 系)
   double prev_vx_body_{0.0};
   double prev_vy_body_{0.0};
@@ -101,7 +107,7 @@ private:
 
   // odom stall 监测
   double odom_ref_x_{0.0}, odom_ref_y_{0.0};
-  double odom_cur_x_{0.0}, odom_cur_y_{0.0};
+  double odom_cur_x_{0.0}, odom_cur_y_{0.0}, odom_cur_yaw_{0.0};
   bool odom_received_{false};
   rclcpp::Time odom_ref_time_;
 };

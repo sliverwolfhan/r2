@@ -43,6 +43,32 @@ double slewLimit(double prev, double target, double accel, double dt)
   if (diff < -max_step) {return prev - max_step;}
   return target;
 }
+
+// 把 odom 系下从 t0 到 t 的相对运动，叠加到 t0 时刻 tag 锚定的 dock 系位姿上。
+// dock 与 odom 都是世界固定系，二者间的常量旋转偏置在 t0 锚定时自动消去。
+// T_dock_base(t) = T_dock_base(t0) * T_odom_base(t0)^-1 * T_odom_base(t)
+void composeDeadReckon(
+  double dock_x0, double dock_y0, double dock_yaw0,
+  double odom_x0, double odom_y0, double odom_yaw0,
+  double odom_x, double odom_y, double odom_yaw,
+  double & out_x, double & out_y, double & out_yaw)
+{
+  // A) base(t) 相对 base(t0) 的位移/转角（在 base(t0) 系下表达）
+  const double dyaw = wrapAngle(odom_yaw - odom_yaw0);
+  const double ddx = odom_x - odom_x0;
+  const double ddy = odom_y - odom_y0;
+  const double c0 = std::cos(odom_yaw0);
+  const double s0 = std::sin(odom_yaw0);
+  const double dx_b = c0 * ddx + s0 * ddy;
+  const double dy_b = -s0 * ddx + c0 * ddy;
+
+  // B) 叠加到 dock 系锚点位姿
+  const double cr = std::cos(dock_yaw0);
+  const double sr = std::sin(dock_yaw0);
+  out_x = dock_x0 + (cr * dx_b - sr * dy_b);
+  out_y = dock_y0 + (sr * dx_b + cr * dy_b);
+  out_yaw = wrapAngle(dock_yaw0 + dyaw);
+}
 }  // namespace
 
 DockToTagAction::DockToTagAction(const std::string & name, const BT::NodeConfig & config)
@@ -166,6 +192,9 @@ BT::NodeStatus DockToTagAction::onStart()
   prev_vx_body_ = prev_vy_body_ = prev_wz_ = 0.0;
   phase_ = Phase::ALIGN;
   has_last_pose_ = false;
+  has_anchor_ = false;
+  anchor_dock_x_ = anchor_dock_y_ = anchor_dock_yaw_ = 0.0;
+  anchor_odom_x_ = anchor_odom_y_ = anchor_odom_yaw_ = 0.0;
   stall_timer_active_ = false;
   {
     std::lock_guard<std::mutex> lock(odom_mutex_);
@@ -256,6 +285,13 @@ void DockToTagAction::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
   std::lock_guard<std::mutex> lock(odom_mutex_);
   odom_cur_x_ = msg->pose.pose.position.x;
   odom_cur_y_ = msg->pose.pose.position.y;
+  {
+    tf2::Quaternion q(
+      msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
+      msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    double roll, pitch;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, odom_cur_yaw_);
+  }
   if (!odom_received_) {
     odom_ref_x_ = odom_cur_x_;
     odom_ref_y_ = odom_cur_y_;
@@ -289,6 +325,28 @@ BT::NodeStatus DockToTagAction::onRunning()
     last_robot_yaw_in_dock_ = ryaw;
     has_last_pose_ = true;
     last_valid_tf_time_ = now;
+
+    // 记录 dock 锚点 + 同一时刻的 odom 锚点，供 TF 丢失时航位推算。
+    double ox = 0.0, oy = 0.0, oyaw = 0.0;
+    bool odom_ok_now = false;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      if (odom_received_) {
+        ox = odom_cur_x_;
+        oy = odom_cur_y_;
+        oyaw = odom_cur_yaw_;
+        odom_ok_now = true;
+      }
+    }
+    if (odom_ok_now) {
+      anchor_dock_x_ = rx;
+      anchor_dock_y_ = ry;
+      anchor_dock_yaw_ = ryaw;
+      anchor_odom_x_ = ox;
+      anchor_odom_y_ = oy;
+      anchor_odom_yaw_ = oyaw;
+      has_anchor_ = true;
+    }
   } else {
     const double lost_for = (now - last_valid_tf_time_).seconds();
     if (!has_last_pose_ || lost_for > tag_lost_freeze_time_) {
@@ -297,11 +355,37 @@ BT::NodeStatus DockToTagAction::onRunning()
       stopAll();
       return BT::NodeStatus::FAILURE;
     }
-    rx = last_robot_x_in_dock_;
-    ry = last_robot_y_in_dock_;
-    ryaw = last_robot_yaw_in_dock_;
-    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
-      "DockToTag: TF stale, holding last pose for %.2fs", lost_for);
+
+    // 读取当前 odom 活体位姿（跨线程，必须持锁），用于把 dock 位姿往前推。
+    double ox = 0.0, oy = 0.0, oyaw = 0.0;
+    bool odom_ok_now = false;
+    {
+      std::lock_guard<std::mutex> lock(odom_mutex_);
+      if (odom_received_) {
+        ox = odom_cur_x_;
+        oy = odom_cur_y_;
+        oyaw = odom_cur_yaw_;
+        odom_ok_now = true;
+      }
+    }
+    if (has_anchor_ && odom_ok_now) {
+      // 航位推算：把 odom 测得的相对运动叠加到 tag 锚定的 dock 位姿上。
+      composeDeadReckon(
+        anchor_dock_x_, anchor_dock_y_, anchor_dock_yaw_,
+        anchor_odom_x_, anchor_odom_y_, anchor_odom_yaw_,
+        ox, oy, oyaw,
+        rx, ry, ryaw);
+      RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
+        "DockToTag: TF stale %.2fs, dead-reckon via odom -> dock=(%.4f,%.4f,%.3f)",
+        lost_for, rx, ry, ryaw);
+    } else {
+      // 无锚点或无 odom：退回冻结上一次 dock 位姿（旧行为）。
+      rx = last_robot_x_in_dock_;
+      ry = last_robot_y_in_dock_;
+      ryaw = last_robot_yaw_in_dock_;
+      RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 500,
+        "DockToTag: TF stale %.2fs, no odom anchor, freezing last pose", lost_for);
+    }
   }
 
   // 2) 在 dock 系下算误差

@@ -23,7 +23,7 @@
     <Sequence>
 
       <!-- 与正式流程一致: 进入对接区域模式(按需保留/删除) -->
-      <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
+      <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
       <!-- 安全门控: 现场确认后按 Enter 再开始动底盘 -->
       <WaitForEnter node="{node}"
@@ -38,7 +38,7 @@
              APPROACH : 锁住横向/yaw, 沿 dock 系 X 推进, 几何或堵转到位
            下面的值都是节点默认值, 显式写出便于现场单独调参。 -->
       <DockToTag node="{node}"
-                 target_frame="dock_target"
+                 target_frame="R1_base_footprint"
                  base_frame="base_footprint"
                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                  odom_topic="/AT_R2/odometry"
