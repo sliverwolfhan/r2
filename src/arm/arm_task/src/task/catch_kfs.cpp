@@ -206,16 +206,16 @@ std::string CatchKFS::process(const std::string last_task_name) {
     tf2::Quaternion quat;
     quat.setRPY(0, 0, 0);  // 兜底单位四元数，避免 |x|==|y| 时未初始化
     if (std::abs(final_position_x_) >= std::abs(final_position_y_)) {
-        // 末端 Z 轴指向 base_link 的 ±X：绕 Y 轴旋转
+        // 末端 -Z 轴指向 base_link 的 ±X：绕 Y 轴旋转
         const bool x_positive = final_position_x_ >= 0.0;
-        quat.setRPY(0.0, x_positive ? M_PI / 2.0 : -M_PI / 2.0, 0.0);
+        quat.setRPY(0.0, x_positive ? -M_PI / 2.0 : M_PI / 2.0, 0.0);
         if (!using_tf_data) {
             object_pose.pose.position.x = shrink_toward_zero(object_pose.pose.position.x, grasp_right_run_);
         }
     } else {
-        // 末端 Z 轴指向 base_link 的 ±Y：绕 X 轴旋转
+        // 末端 -Z 轴指向 base_link 的 ±Y：绕 X 轴旋转
         const bool y_positive = final_position_y_ >= 0.0;
-        quat.setRPY(y_positive ? -M_PI / 2.0 : M_PI / 2.0, 0.0, 0.0);
+        quat.setRPY(y_positive ? M_PI / 2.0 : -M_PI / 2.0, 0.0, 0.0);
         if (!using_tf_data) {
             object_pose.pose.position.y = shrink_toward_zero(object_pose.pose.position.y, grasp_right_run_);
         }
@@ -235,17 +235,17 @@ std::string CatchKFS::process(const std::string last_task_name) {
     std::this_thread::sleep_for(500ms);
 
     const double lift_up_z_ = 0.20;          // 垂直向上抬升量
-    const double lift_retract_along_tcp_ = 0.15;  // 沿末端 -Z 方向回退量
+    const double lift_retract_along_tcp_ = 0.15;  // 沿末端 +Z 方向回退量
 
     object_pose.pose.position.z += lift_up_z_;
-    tf2::Vector3 retract_in_tcp(0.0, 0.0, -lift_retract_along_tcp_);
+    tf2::Vector3 retract_in_tcp(0.0, 0.0, lift_retract_along_tcp_);
     tf2::Vector3 retract_in_base = tf2::quatRotate(quat, retract_in_tcp);
     object_pose.pose.position.x += retract_in_base.x();
     object_pose.pose.position.y += retract_in_base.y();
     object_pose.pose.position.z += retract_in_base.z();
 
     RCLCPP_INFO(robot->node_->get_logger(),
-        "执行抬起动作: 垂直 +%.3f m, 沿末端-Z 回退 %.3f m (base 偏移 dx=%.3f dy=%.3f dz=%.3f)",
+        "执行抬起动作: 垂直 +%.3f m, 沿末端+Z 回退 %.3f m (base 偏移 dx=%.3f dy=%.3f dz=%.3f)",
         lift_up_z_, lift_retract_along_tcp_,
         retract_in_base.x(), retract_in_base.y(), retract_in_base.z());
     if (!robot->execute_cartesian_space_trajectory(object_pose, 0.7)) { // 0.8

@@ -21,9 +21,9 @@ struct BlockEntry
 struct BlockOffsets
 {
   double map_x = 0.02;
-  double map_y = 0.09;
+  double map_y = 0.04;
   double cube_x = 0.02;
-  double cube_y = 0.09;
+  double cube_y = -0.05;
 };
 
 /**
