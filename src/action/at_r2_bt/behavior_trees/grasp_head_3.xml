@@ -61,6 +61,8 @@
 
       <!-- 首轮标志: 子树内首轮才执行 SetMppiParams, 之后保留上一轮末尾的参数 -->
       <Script code="first_grasp := 1"/>
+      <!-- 对接状态计数器: 每轮 +1, 作为本轮等待的 docking_status 目标值(第1轮=1, 第2轮=2, ...) -->
+      <Script code="dock_idx := 0"/>
 
       <!-- ===== 循环抓取 grasp_count 个武器, 从 grasp_start 开始 ===== -->
       <Repeat num_cycles="{grasp_count}">
@@ -374,15 +376,31 @@
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
-      <!-- 等操作员按 Enter 后松爪 cmd=7 -->
-      <WaitForEnter node="{node}"
-                    prompt="对接完成后按 Enter 松爪 (cmd=7)"
-                    require_tty="true"
-                    clear_buffer="true"
-                    timeout="0.0"/>
-      <PublishHeadCmd node="{node}" command="7"
-                      topic="/AT_R2/head_gripper_cmd"
-                      wait_done="false"/>
+      <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status == 本轮目标值,
+           任一满足即松爪(只松一次)。本轮目标值随循环递增: 第1轮=1, 第2轮=2, 第3轮=3。
+           Parallel: success_count=1 任一分支成功即整体成功并 halt 另一分支;
+                     failure_count=2 需两分支都失败才失败(无 TTY 时 WaitForEnter 直接失败, 退化为只看话题)。 -->
+      <Script code="dock_idx := dock_idx + 1"/>
+      <Parallel success_count="1" failure_count="2">
+        <!-- 分支A: 操作员按 Enter -> 自行发松爪 cmd=7 -->
+        <Sequence>
+          <WaitForEnter node="{node}"
+                        prompt="对接完成后按 Enter 松爪 (cmd=7), 或等下位机发布 docking_status"
+                        require_tty="true"
+                        clear_buffer="true"
+                        timeout="0.0"/>
+          <PublishHeadCmd node="{node}" command="7"
+                          topic="/AT_R2/head_gripper_cmd"
+                          wait_done="false"/>
+        </Sequence>
+        <!-- 分支B: 收到 docking_status == dock_idx -> 节点内部自行发松爪 release_cmd=7 -->
+        <WaitDockingRelease node="{node}"
+                            status_topic="/AT_R2/docking_status"
+                            gripper_topic="/AT_R2/head_gripper_cmd"
+                            target_status="{dock_idx}"
+                            release_cmd="7"
+                            timeout="1000.0"/>
+      </Parallel>
       <DelayMs delay_msec="2000">
         <AlwaysSuccess/>
       </DelayMs>
