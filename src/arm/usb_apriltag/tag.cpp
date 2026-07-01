@@ -29,7 +29,7 @@ extern "C"
 // ============================================================
 
 // ---- USB 相机 ----
-constexpr int   CAMERA_DEVICE_ID = 2;     // /dev/videoX
+constexpr int   CAMERA_DEVICE_ID = 0;     // /dev/videoX
 constexpr int   FRAME_WIDTH      = 640;
 constexpr int   FRAME_HEIGHT     = 480;
 

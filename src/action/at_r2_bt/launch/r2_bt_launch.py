@@ -27,7 +27,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'bt_xml',
-            default_value='grasp_head_3.xml',
+            default_value='test_dock_to_tag.xml',
             description='行为树 xml 文件名 (位于 at_r2_bt/behavior_trees/)',
         ),
         Node(

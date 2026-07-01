@@ -25,6 +25,20 @@
       <!-- 与正式流程一致: 进入对接区域模式(按需保留/删除) -->
       <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
+      <ArmMoveNamed node="{node}"
+              pose_name="place_grid"
+              server_name="robotic_task"
+              task_id="1"
+              duration="2.0"/>
+      
+      <PublishLiftCmd node="{node}" command="1"/>
+      <DelayMs delay_msec="900"><AlwaysSuccess/></DelayMs>
+      <ArmMoveNamed node="{node}"
+                  pose_name="place_grid_finish"
+                  server_name="robotic_task"
+                  task_id="1"
+                  duration="1.0"/>
+                 <!-- 抬升, 发完即成功 -->
       <!-- 安全门控: 现场确认后按 Enter 再开始动底盘 -->
       <WaitForEnter node="{node}"
                     prompt="DockToTag 测试: 确认 dock_target 已发布且现场安全, 按 Enter 开始对接"
@@ -43,22 +57,22 @@
                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"
                  odom_topic="/AT_R2/odometry"
 
-                 pre_dock_offset_x="-0.5"
+                 pre_dock_offset_x="-0.7"
                  target_yaw_in_dock_deg="-90.0"
 
-                 align_tol_lat="0.005"
+                 align_tol_lat="0.01"
                  align_tol_yaw_deg="0.5"
                  approach_tol="0.01"
                  align_hyst_lat="0.015"
                  align_hyst_yaw_deg="1.5"
 
                  kp_x="1.0"
-                 kp_y="1.5"
-                 kp_yaw="2.0"
+                 kp_y="0.6"
+                 kp_yaw="0.6"
 
                  max_vx="0.10"
                  max_vy="0.10"
-                 max_wz="0.5"
+                 max_wz="0.3"
                  accel_vx="0.3"
                  accel_vy="0.3"
                  accel_wz="1.5"
@@ -71,10 +85,23 @@
                  stall_threshold="0.003"
                  stall_duration="0.4"
 
-                 tag_max_age="0.5"
-                 tag_lost_freeze_time="1.0"
+                 tag_max_age="1.0"
+                 tag_lost_freeze_time="5.0"
                  timeout="30.0"
-                 publish_rate_hz="50.0"/>
+                 publish_rate_hz="50.0"
+
+                 lock_samples="10"/>
+                 <!-- lock_samples>0: 起步采 10 帧 tag 取平均, 锁进 odom 系,
+                      之后全程只用里程计推算对准, 不再读 TF(免疫标签丢失/抖动)。
+                      设为 0 则维持原来的实时 TF 跟踪模式。 -->
+                 
+                 
+                 <PublishLiftCmd node="{node}" command="2"/>
+                 <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
+                 <PublishLiftCmd node="{node}" command="3"/>
+                 <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
+                 <PublishLiftCmd node="{node}" command="4"/>
+
 
     </Sequence>
   </BehaviorTree>

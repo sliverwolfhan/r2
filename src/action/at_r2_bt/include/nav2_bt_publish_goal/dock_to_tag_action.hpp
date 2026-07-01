@@ -39,6 +39,9 @@ private:
 
   bool ensureTfBuffer();
   bool lookupRobotInDock(double & x, double & y, double & yaw, rclcpp::Time & stamp);
+  // 快照模式采样：取一帧新鲜 tag 位姿累加；采够 lock_samples_ 帧后平均并锁进 odom，
+  // 返回 true 表示已锁定(locked_=true)。
+  bool collectLockSample(const rclcpp::Time & now);
   void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
   void publishCmdTimerCallback();
   void publishZero();
@@ -81,6 +84,7 @@ private:
   double tag_max_age_{0.5};
   double tag_lost_freeze_time_{1.0};
   double timeout_{30.0};
+  int lock_samples_{0};  // >0: 采 N 帧平均, 把 dock 目标冻进 odom, 之后纯航位推算
 
   // 运行态
   Phase phase_{Phase::ALIGN};
@@ -98,6 +102,13 @@ private:
   double anchor_dock_x_{0.0}, anchor_dock_y_{0.0}, anchor_dock_yaw_{0.0};
   double anchor_odom_x_{0.0}, anchor_odom_y_{0.0}, anchor_odom_yaw_{0.0};
   bool has_anchor_{false};
+
+  // 快照锁定 (lock_samples_>0)：起步阶段连采 N 帧 tag 位姿做平均，
+  // 锁进 odom 后 locked_=true，此后 onRunning 不再读 TF，全靠 odom 推算。
+  bool locked_{false};
+  int lock_count_{0};
+  double lock_sum_x_{0.0}, lock_sum_y_{0.0};
+  double lock_sum_sin_{0.0}, lock_sum_cos_{0.0};  // yaw 圆均值累加
 
   geometry_msgs::msg::Twist cmd_;          // 当前下发指令(body 系)
   double prev_vx_body_{0.0};

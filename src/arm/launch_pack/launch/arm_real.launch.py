@@ -14,16 +14,25 @@ def generate_launch_description():
     with open(urdf_path, "r", encoding="utf-8") as inf:
         robot_desc = inf.read()
 
+    # 把 /tf、/tf_static 重映射到 /AT_R2/tf、/AT_R2/tf_static，
+    # 与 nav2 栈（PushRosNamespace=AT_R2）共用同一棵 TF 树。
+    tf_remappings = [
+        ("/tf", "/AT_R2/tf"),
+        ("/tf_static", "/AT_R2/tf_static"),
+    ]
+
     robot_state_pub = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         parameters=[{"robot_description": robot_desc}],
+        remappings=tf_remappings,
         output="screen",
     )
 
     arm_calc = Node(
         package="arm_calc",
         executable="arm_calc",
+        remappings=tf_remappings,
         output="screen",
     )
 
@@ -31,6 +40,7 @@ def generate_launch_description():
         package="arm_task",
         executable="arm_task",
         output="screen",
+        remappings=tf_remappings,
         parameters=[{
             # 估算"最快移动时间"用的上限（duration<=0 时生效）。
             # 关节空间: 最快时间 = 最大关节角度差 / max_joint_velocity，再 clamp 到 [min, max]。
@@ -46,6 +56,7 @@ def generate_launch_description():
     arm_driver = Node(
         package="robot_driver",
         executable="robot_driver",
+        remappings=tf_remappings,
         output="screen",
     )
 
@@ -53,10 +64,20 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         arguments=["-d", rviz_path],
+        remappings=tf_remappings,
     )
 
     vision=Node(package="vision",
         executable="vision_node",
+        remappings=tf_remappings,
+        output="screen",
+    )
+
+    # AprilTag 定位：USB 相机检测 tag 0/1，融合发布 usb_camera -> R1_base_footprint 的 TF
+    usb_apriltag = Node(
+        package="usb_apriltag_tf",
+        executable="tag",
+        remappings=tf_remappings,
         output="screen",
     )
 
@@ -64,11 +85,12 @@ def generate_launch_description():
     package="tf2_ros",
     executable="static_transform_publisher",
     arguments=[
-        "0.0", "0.09625", "0.11225",
-        "0.5", "0.5", "0.5", "-0.5",
+        "0.0", "0.09625", "0.09225",
+        "-0.5", "-0.5", "-0.5", "-0.5",
         "link1",
-        "camera_link"
+        "usb_camera"
     ],
+    remappings=tf_remappings,
     output="screen",
 )
 
@@ -79,5 +101,6 @@ def generate_launch_description():
         rviz2,
         static_tf_camera,
         # vision,
+        usb_apriltag,
         arm_task
     ])
