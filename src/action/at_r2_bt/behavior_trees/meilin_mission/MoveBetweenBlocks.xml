@@ -35,7 +35,11 @@
                 <WaitArmIdle timeout="20.0"/>
                 <PublishPumpCmd node="{node}" command="0"/>
               </Sequence>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="-1.0"/>
+              <Sequence>
+                <ArmMoveNamedAsync pose_name="lift_block2" task_id="1" duration="-1.0"/>
+                <ArmMoveNamedAsync pose_name="stow_block2" task_id="1" duration="1.2"/>
+                <ArmMoveNamedAsync pose_name="place_block2" task_id="1" duration="1.0"/>
+              </Sequence>
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
@@ -68,8 +72,8 @@
                 <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
                 <ArmMoveNamedAsync pose_name="ready"      task_id="1" duration="0.8"/>
               </Sequence>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.0"/>
-              <ArmMoveNamedAsync pose_name="hold_block" task_id="1" duration="1.5"/>
+              <ArmMoveNamedAsync pose_name="place_block2" task_id="1" duration="1.0"/>
+              <ArmMoveNamedAsync pose_name="ready" task_id="1" duration="1.5"/>
             </Switch2>
             <Sequence>
               <WaitArmIdle timeout="20.0"/>

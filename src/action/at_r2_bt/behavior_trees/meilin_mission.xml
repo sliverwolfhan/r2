@@ -114,8 +114,8 @@
                           vx_std="0.45"
                           vy_std="0.35"/>
                 <SetCostmapInflation node="{node}"
-                          local_radius="0.3"
-                          global_radius="0.3"
+                          local_radius="0.25"
+                          global_radius="0.25"
                           local_cost_scaling_factor="1.0"
                           global_cost_scaling_factor="4.0"/>
               </Sequence>

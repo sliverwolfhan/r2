@@ -194,7 +194,7 @@
 
 
       <!-- C. 侧向贴靠柜台 -->
-      <!-- <ForceSuccess>
+      <ForceSuccess>
         <DockToWall node="{node}"
                     vy="-0.25"
                     vx="0.0"
@@ -205,7 +205,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess> -->
+      </ForceSuccess>
       <!-- D. 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 -->
       <Fallback>
         <GraspReadyByPoseDistance node="{node}"
@@ -227,7 +227,7 @@
                             distance_scale="0.001"
                             target_distance="{grasp_laser_target_distance}"
                             tolerance="0.01"
-                            kp="1.0"
+                            kp="0.8"
                             max_speed="0.2"
                             min_speed="0.015"
                             stable_count="2"
@@ -248,13 +248,13 @@
       <PublishHeadCmd node="{node}" command="2"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="500">
+      <DelayMs delay_msec="600">
         <AlwaysSuccess/>
       </DelayMs>
       <PublishHeadCmd node="{node}" command="3"
                       topic="/AT_R2/head_gripper_cmd"
                       wait_done="false"/>
-      <DelayMs delay_msec="1000">
+      <DelayMs delay_msec="1200">
         <AlwaysSuccess/>
       </DelayMs>
 
@@ -306,7 +306,7 @@
             <FollowSpinPath node="{node}"
                             goal_x="0.45"
                             goal_y="5.1"
-                            goal_yaw="-0.1"
+                            goal_yaw="-0.0"
                             rotation_start_distance="0.5"
                             rotation_end_distance="0.5"
                             rotation_direction="ccw"

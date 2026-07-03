@@ -65,7 +65,7 @@ struct ForestConfig {
 
     // 准备位姿相对目标中心的偏移量（米，沿单轴向目标方向退此距离；越小越靠近目标）
     double move_prep_offset  = 0.05;  // MOVE 准备点
-    double grasp_prep_offset = 0.17;  // PICK / PUSH 准备点
+    double grasp_prep_offset = 0.12;  // PICK / PUSH 准备点
 
     // PICK / PUSH 步骤发布的 block_height 偏移量（米）。
     // block_height = (target.height - from.height) + block_height_offset。
