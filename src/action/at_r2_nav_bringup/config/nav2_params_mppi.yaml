@@ -63,10 +63,10 @@ point_lio:
       lidar_meas_cov: 0.001                              # 0.001激光点测量噪声协方差
       acc_cov_output: 500.0                              #输出模型下的加速度过程噪声
       gyr_cov_output: 1000.0                             #输出模型下的角速度过程噪声
-      b_acc_cov: 0.0001                                  #加速度零偏随机游走噪声
-      b_gyr_cov: 0.0001                                  #陀螺仪零偏随机游走噪声
-      imu_meas_acc_cov: 0.1                              #IMU 加速度测量噪声协方差
-      imu_meas_omg_cov: 0.1                              #IMU 角速度测量噪声协方差
+      b_acc_cov: 0.0005                                  #加速度零偏随机游走噪声
+      b_gyr_cov: 0.0005                                  #陀螺仪零偏随机游走噪声
+      imu_meas_acc_cov: 0.2                              #IMU 加速度测量噪声协方差
+      imu_meas_omg_cov: 0.2                              #IMU 角速度测量噪声协方差
       gyr_cov_input: 0.01                                # for IMU as input model  输入模型下的加速度过程噪声
       acc_cov_input: 0.1                                # for IMU as input model 输入模型下的角速度过程噪声
       plane_thr: 0.05                                    # 0.05, the threshold for plane criteria, the smaller, the flatter a plane
@@ -195,14 +195,15 @@ small_gicp_relocalization:
     base_frame: "base_footprint"
     robot_base_frame: "chassis"
     lidar_frame: "mid360"
-    init_pose: [0.35, 4.6, 0.0, 0.0, 0.0, 3.14]   # [x, y, z, roll, pitch, yaw]
+    init_pose: [0.35, -4.6, 0.0, 0.0, 0.0, 0.0]   # [x, y, z, roll, pitch, yaw]
+    # init_pose: [0.35, -4.6, 0.0, 0.0, 0.0, 0.0]   # [x, y, z, roll, pitch, yaw]
     # The prior_pcd_file does not need to be specified since it going to be set by defaults in launch.
     # prior_pcd_file: ""
 
 transformed_pcd_publisher:
   ros__parameters:
     use_sim_time: False
-    pcd_file: "/home/pc1/AT_RC/src/action/at_r2_nav_bringup/pcd/rc_2026_red4.pcd"
+    pcd_file: "/home/pc1/AT_RC/src/action/at_r2_nav_bringup/pcd/rc_2026_blue.pcd"
     frame_id: "map"
     topic_name: "prior_pcd_transformed"
     offset_x: -0.3975
@@ -387,16 +388,18 @@ controller_server:
       plugin: "pb_nav2_plugins/PreciseGoalChecker"
       x_goal_tolerance: 0.07
       y_goal_tolerance: 0.07
-      yaw_goal_tolerance: 0.05
+      yaw_goal_tolerance: 0.07
+
       stable_duration: 0.1
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 30
+      time_steps: 40
       model_dt: 0.05      # 改为 0.1s，预测时域 = 30 × 0.1 = 3s
       batch_size: 5000
       vx_std: 0.45        # 增大速度采样标准差以匹配更高速度
       vy_std: 0.45
       wz_std: 0.35
+      
       vx_max: 2.0        # 提高速度
       vx_min: -6.0
       vy_max: 2.0
@@ -424,7 +427,7 @@ controller_server:
         consider_footprint: true      # 改为 true 与 CostCritic 一致
       AckermannConstraints:
         min_turning_r: 0.0
-      critics: ["ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic", "PathAlignCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "TwirlingCritic"]
+      critics: ["ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic", "PathAlignCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "TwirlingCritic", "VelocityDeadbandCritic"]
       ConstraintCritic:         #该批评者会对超出设定的动力学或运动学约束范围的轨迹进行惩罚。
         enabled: true
         cost_power: 1
@@ -467,7 +470,7 @@ controller_server:
       PathAlignCritic:        #该批评器鼓励在相关情况下与全局路径保持一致，但它并不实现路径跟随行为
         enabled: true
         cost_power: 1
-        cost_weight: 10.0
+        cost_weight: 15.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 1  
         threshold_to_consider: 0.3      # 设为预测时域
@@ -487,11 +490,11 @@ controller_server:
         threshold_to_consider: 0.1
         max_angle_to_furthest: 1.0
         mode: 0
-      # VelocityDeadbandCritic:
-      #   enabled: true
-      #   cost_power: 1
-      #   cost_weight: 35.0
-      #   deadband_velocities: [0.05, 0.05, 0.05]
+      VelocityDeadbandCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 10.0
+        deadband_velocities: [0.05, 0.05, 0.05]
       TwirlingCritic:
         enabled: false
         twirling_cost_power: 1

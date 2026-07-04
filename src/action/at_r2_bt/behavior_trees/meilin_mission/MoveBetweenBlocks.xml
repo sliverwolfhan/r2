@@ -19,7 +19,7 @@
             <ScriptCondition code="need_finish == 0"/>
             <IsPrepSkippable node="{node}"
                              target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
-                             x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+                             x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
           </Sequence>
           <PublishGoal node="{node}"
                        x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"

@@ -1,0 +1,410 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="GraspHeadBlue">
+
+  <!-- ================== 连续抓取多个武器头(循环) ==================
+       与 grasp_head.xml 同一套"武器头爪子", 话题 /AT_R2/head_gripper_cmd (Int32):
+         1 = 准备抓取(张开爪子)   2 = 抓取   3 = 抬起武器头   4 = 对接交付
+       循环控制(由 simple_bt_runner.cpp 写进黑板, 可用 ROS 参数覆盖):
+         grasp_count 抓几个(Repeat 循环次数, 默认 3)
+         grasp_start 从第几个武器开始(1-based, 默认 1)
+       每一轮:
+         0. SelectWeaponParams 选定下一个武器, 把 w{n}_* 参数拷到工作键 grasp_*
+         A. 通知爪子"准备抓取/张开" (cmd=1, 不等反馈, 张爪时间靠并行导航消化)
+         B. 导航到该武器柜台前预备点 (PublishGoal)
+         C. 侧向贴靠柜台 (DockToWall)
+         D. 激光对距精对齐 (GraspReadyByPoseDistance / DistanceServoAlign)
+         E. 抓取 (cmd=2) -> 抬起 (cmd=3)
+         F. 对接交付 (cmd=4) -> 后退 (cmd=5) -> 导航到对接点 ->
+            等 /AT_R2/docking_status==1 (对接完成) -> 松爪 (cmd=7)
+
+       各武器位置来自 weapon_grasp_params.yaml(weapon_1/2/...),
+       由 simple_bt_runner.cpp 加载为 w1_/w2_/... 前缀的黑板键。
+       例: grasp_count=2,grasp_start=1 -> 抓 weapon_1、weapon_2;
+           grasp_count=3,grasp_start=4 -> 抓 weapon_4、weapon_5、weapon_6。
+  -->
+  <BehaviorTree ID="GraspHeadBlue">
+    <Sequence>
+
+      <!-- ===== 全局一次性设置: 模式 / 代价地图 / MPPI ===== -->
+      <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
+
+      <SetCostmapInflation node="{node}"
+                    local_radius="0.01"
+                    global_radius="0.01"
+                    local_cost_scaling_factor="5.0"
+                    global_cost_scaling_factor="5.0"/>
+      <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="6.0"
+               goal_angle_threshold="2.0"
+               vx_max="1.2"
+               vx_min="-1.2"
+               vy_max="1.2"
+               wz_max="4.0"
+               vx_std="0.4"
+               vy_std="0.4"
+               wz_std="0.4"
+               goal_x_tolerance="0.03"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.05"
+               goal_stable_duration="0.3"
+               wait_after_set="0.2"/>
+
+      <!-- 一键启动门控: 参数已设置完成, 按 Enter 开始 -->
+      <!-- require_tty="false": ros2 launch 下无 TTY 时自动跳过, ros2 run 直接从终端启动时仍会等待 Enter。 -->
+      <WaitForEnter node="{node}"
+                    prompt="参数已设置完成，按 Enter 开始连续抓取武器头"
+                    require_tty="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <!-- 首轮标志: 子树内首轮才执行 SetMppiParams, 之后保留上一轮末尾的参数 -->
+      <Script code="first_grasp := 1"/>
+      <!-- 对接状态计数器: 每轮 +1, 作为本轮等待的 docking_status 目标值(第1轮=1, 第2轮=2, ...) -->
+      <Script code="dock_idx := 0"/>
+
+      <!-- ===== 循环抓取 grasp_count 个武器, 从 grasp_start 开始 ===== -->
+      <Repeat num_cycles="{grasp_count}">
+        <Sequence>
+          <!-- 选定本轮武器, 把 w{n}_* 拷到工作键 grasp_* -->
+          <SelectWeaponParams start="{grasp_start}"/>
+          <!-- 完整抓取流程; 子树内直接读工作键 grasp_* -->
+          <SubTree ID="GraspOneWeapon" _autoremap="true"/>
+        </Sequence>
+      </Repeat>
+
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ================== 单个武器的完整抓取流程(可复用) ==================
+       直接读取工作键(由 SelectWeaponParams 每轮刷新):
+         grasp_prep_x / grasp_prep_y / grasp_prep_yaw   该武器柜台前预备点
+         grasp_prep_y_tolerance / grasp_prep_yaw_tolerance  预备点容忍度
+         grasp_laser_target_distance                    激光对距目标距离
+       流程与 grasp_head.xml 完全一致(各 cmd 均 wait_done="false"), 仅由外层
+       Repeat 循环驱动、每轮 SelectWeaponParams 刷新 grasp_* 工作键。
+  -->
+  <BehaviorTree ID="GraspOneWeapon">
+    <Sequence>
+
+      <!-- 首轮 MPPI 参数(宽 yaw 阈值, 远距离接近) -->
+
+      <Fallback>
+        <ScriptCondition code="first_grasp == 0"/>
+        <Sequence>
+            <ParallelAll max_failures="1">
+                <Sequence>
+                    <SetMppiParams node="{node}"
+                            controller_node="/AT_R2/controller_server"
+                            plugin_prefix="FollowPath"
+                            goal_angle_weight="6.0"
+                            goal_angle_threshold="2.0"
+                            vx_max="1.2"
+                            vx_min="-1.2"
+                            vy_max="1.2"
+                            wz_max="4.0"
+                            vx_std="0.35"
+                            vy_std="0.35"
+                            wz_std="0.35"
+                            goal_x_tolerance="0.03"
+                            goal_y_tolerance="0.05"
+                            goal_yaw_tolerance="0.05"
+                            goal_stable_duration="0.3"
+                            pathalign_use_path_orientations="false"
+                            wait_after_set="0.2"/>
+                    <PublishGoal node="{node}"
+                            x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                            frame_id="map"
+                            goal="{nav_goal}"/>
+
+                </Sequence>
+                <Sequence>
+                <DelayMs delay_msec="1000">
+                    <AlwaysSuccess/>
+                </DelayMs>
+                <PublishHeadCmd node="{node}" command="1"
+                                topic="/AT_R2/head_gripper_cmd"
+                                wait_done="false"/>
+                </Sequence>
+            </ParallelAll>    
+        </Sequence>
+      </Fallback>
+
+      
+      <!-- 后续轮 MPPI 参数(占位, 待调整数值) -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 1"/>
+        <ParallelAll max_failures="1">
+            <Sequence>
+                <SetMppiParams node="{node}"
+                                controller_node="/AT_R2/controller_server"
+                                plugin_prefix="FollowPath"
+                                goal_angle_weight="6.0"
+                                goal_angle_threshold="2.0"
+                                vx_max="1.2"
+                                vx_min="-1.2"
+                                vy_max="1.2"
+                                wz_max="4.0"
+                                vx_std="0.2"
+                                vy_std="0.2"
+                                wz_std="0.5"
+                                goal_x_tolerance="0.05"
+                                goal_y_tolerance="0.05"
+                                goal_yaw_tolerance="0.08"
+                                goal_stable_duration="0.3"
+                                pathalign_use_path_orientations="true"
+                                wait_after_set="0.2"/>
+                <FollowSpinPath node="{node}"
+                        goal_x="{grasp_prep_x}"
+                        goal_y="{grasp_prep_y}"
+                        goal_yaw="{grasp_prep_yaw}"
+                        rotation_start_distance="0.8"
+                        rotation_end_distance="0.8"
+                        rotation_direction="cw"
+                        num_points="150"
+                        frame_id="map"
+                        map_frame="map"
+                        base_frame="base_footprint"
+                        tf_timeout="0.5"
+                        tf_namespace="AT_R2"
+                        action_name="/AT_R2/follow_path"
+                        controller_id="FollowPath"
+                        goal_checker_id="general_goal_checker"
+                        goal="{spin_goal}"/>
+            </Sequence>
+            <Sequence>
+            <DelayMs delay_msec="1000">
+                <AlwaysSuccess/>
+            </DelayMs>
+            <PublishHeadCmd node="{node}" command="1"
+                            topic="/AT_R2/head_gripper_cmd"
+                            wait_done="false"/>
+            </Sequence>
+        </ParallelAll>.
+      </Fallback>
+
+
+      <!-- 翻转首轮标志(两个 Fallback 都判断完再改, 避免首轮同时触发后续轮分支) -->
+      <Script code="first_grasp := 0"/>
+      <!-- A. 导航到该武器 prep 点, 同时通知爪子"准备抓取/张开"。
+           cmd=1 用 wait_done="false"(与 grasp_head.xml 一致): 下位机不对准备抓取
+           单独回执(反馈只在 /AT_R2/grasp_status 上, 且仅抓取/对接才有), 所以这里
+           只发命令, 张爪时间靠并行的导航 + 前面 400ms 延时消化。 -->
+
+
+      <!-- C. 侧向贴靠柜台 -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="-0.20"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.06"
+                    stall_duration="0.5"
+                    timeout="3.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      <!-- D. 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 -->
+      <Fallback>
+        <GraspReadyByPoseDistance node="{node}"
+                                  map_frame="map"
+                                  base_frame="base_footprint"
+                                  target_y="{grasp_prep_y}"
+                                  y_tolerance="{grasp_prep_y_tolerance}"
+                                  target_yaw="{grasp_prep_yaw}"
+                                  yaw_tolerance="{grasp_prep_yaw_tolerance}"
+                                  distance_topic="/AT_R2/distance_tail"
+                                  distance_scale="0.001"
+                                  target_distance="{grasp_laser_target_distance}"
+                                  distance_tolerance="0.01"
+                                  stable_count="3"
+                                  max_data_age="0.5"/>
+
+        <DistanceServoAlign node="{node}"
+                            distance_topic="/AT_R2/distance_tail"
+                            distance_scale="0.001"
+                            target_distance="{grasp_laser_target_distance}"
+                            tolerance="0.01"
+                            kp="0.8"
+                            max_speed="0.2"
+                            min_speed="0.015"
+                            stable_count="2"
+                            max_data_age="0.5"
+                            timeout="8.0"
+                            publish_rate_hz="50.0"
+                            cmd_axis="x"
+                            positive_error_direction="1.0"
+                            side_speed_scale="1.0"
+                            side_speed_direction="-1.0"
+                            filter_enable="true"
+                            median_window="3"
+                            ema_tau="0.1"
+                            cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+      </Fallback>
+
+      <!-- E. 抓取 -> 抬起 -->
+      <PublishHeadCmd node="{node}" command="2"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="600">
+        <AlwaysSuccess/>
+      </DelayMs>
+      <PublishHeadCmd node="{node}" command="3"
+                      topic="/AT_R2/head_gripper_cmd"
+                      wait_done="false"/>
+      <DelayMs delay_msec="1200">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- F. 对接交付: 抬起后再退, 避免武器头还在柜台上就拖动 -->
+      <ForceSuccess>
+        <PublishHeadCmd node="{node}" command="4"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"
+                        timeout="1.0"/>
+      </ForceSuccess>
+
+      <!-- G. 抬起完成后向后退离开柜台, 并发 cmd=5 -->
+
+
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="500">
+            <AlwaysSuccess/>
+          </DelayMs>  
+          <PublishHeadCmd node="{node}" command="5"
+                  topic="/AT_R2/head_gripper_cmd"
+                  wait_done="false"/>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>  
+          <PublishHeadCmd node="{node}" command="6"
+                topic="/AT_R2/head_gripper_cmd"
+                wait_done="false"/>
+        </Sequence>
+        <Sequence>
+            <SetMppiParams node="{node}"
+                     controller_node="/AT_R2/controller_server"
+                     plugin_prefix="FollowPath"
+                     goal_angle_weight="6.0"
+                     goal_angle_threshold="2.0"
+                     vx_max="1.2"
+                     vx_min="-1.2"
+                     vy_max="1.2"
+                     wz_max="4.0"
+                     vx_std="0.2"
+                     vy_std="0.2"
+                     wz_std="0.5"
+                     goal_x_tolerance="0.05"
+                     goal_y_tolerance="0.05"
+                     goal_yaw_tolerance="0.08"
+                     goal_stable_duration="0.3"
+                     pathalign_use_path_orientations="true"
+                     wait_after_set="0.2"/>
+            <FollowSpinPath node="{node}"
+                            goal_x="0.65"
+                            goal_y="-5.1"
+                            goal_yaw="3.14"
+                            rotation_start_distance="0.7"
+                            rotation_end_distance="0.5"
+                            rotation_direction="ccw"
+                            num_points="150"
+                            frame_id="map"
+                            map_frame="map"
+                            base_frame="base_footprint"
+                            tf_timeout="0.5"
+                            tf_namespace="AT_R2"
+                            action_name="/AT_R2/follow_path"
+                            controller_id="FollowPath"
+                            goal_checker_id="general_goal_checker"
+                            goal="{spin_goal}"/>
+        </Sequence>
+      </ParallelAll>
+
+
+      <!-- 命令6 -->
+                          <!-- <ParallelAll max_failures="1">
+                            <PublishGoal node="{node}"
+                                      x="0.65" y="5.1" yaw="0.0"
+                                      frame_id="map"
+                                      goal="{nav_goal}"/>
+
+                            <Sequence>
+                              <DelayMs delay_msec="500">
+                                <AlwaysSuccess/>
+                              </DelayMs>  
+                              <PublishHeadCmd node="{node}" command="6"
+                                              topic="/AT_R2/head_gripper_cmd"
+                                              wait_done="false"/>
+                            </Sequence>
+                          </ParallelAll>     -->
+
+      <!-- 导航到与持杆机器人对接的位置, 到点后等对接完成再松爪 -->
+      <!-- <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="5.0"
+               goal_angle_threshold="0.5"
+               vx_max="1.2"
+               vx_min="-1.2"
+               vy_max="1.2"
+               wz_max="4.0"
+               vx_std="0.3"
+               vy_std="0.3"
+               wz_std="0.3"
+               goal_x_tolerance="0.03"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.05"
+               goal_stable_duration="0.3"
+               wait_after_set="0.2"/>
+
+      <PublishGoal node="{node}"
+                x="0.40" y="5.1" yaw="0.0"
+                frame_id="map"
+                goal="{nav_goal}"/> -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="0.2"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="0.4"
+                    timeout="2.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status == 本轮目标值,
+           任一满足即松爪(只松一次)。本轮目标值随循环递增: 第1轮=1, 第2轮=2, 第3轮=3。
+           Parallel: success_count=1 任一分支成功即整体成功并 halt 另一分支;
+                     failure_count=2 需两分支都失败才失败(无 TTY 时 WaitForEnter 直接失败, 退化为只看话题)。 -->
+      <Script code="dock_idx := dock_idx + 1"/>
+      <Parallel success_count="1" failure_count="2">
+        <!-- 分支A: 操作员按 Enter -> 自行发松爪 cmd=7 -->
+        <Sequence>
+          <WaitForEnter node="{node}"
+                        prompt="对接完成后按 Enter 松爪 (cmd=7), 或等下位机发布 docking_status"
+                        require_tty="true"
+                        clear_buffer="true"
+                        timeout="0.0"/>
+          <PublishHeadCmd node="{node}" command="7"
+                          topic="/AT_R2/head_gripper_cmd"
+                          wait_done="false"/>
+        </Sequence>
+        <!-- 分支B: 收到 docking_status == dock_idx -> 节点内部自行发松爪 release_cmd=7 -->
+        <WaitDockingRelease node="{node}"
+                            status_topic="/AT_R2/docking_status"
+                            gripper_topic="/AT_R2/head_gripper_cmd"
+                            target_status="{dock_idx}"
+                            release_cmd="7"
+                            timeout="1000.0"/>
+      </Parallel>
+      <DelayMs delay_msec="2000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+    </Sequence>
+  </BehaviorTree>
+</root>
