@@ -69,6 +69,9 @@ void ArmCtrlNode::declare_parameters() {
     this->declare_parameter<std::vector<double>>("joint_target", std::vector<double>(kJointDoF, 0.0));
     this->declare_parameter<std::vector<double>>("cartesian_target_position", std::vector<double>{0.7, 0.0, 0.15});
     this->declare_parameter<std::vector<double>>("cartesian_target_quaternion", std::vector<double>{1.0, 0.0, 0.0, 0.0});
+    this->declare_parameter<bool>("use_payload", false);
+    this->declare_parameter<std::string>("payload_urdf_path",
+        ament_index_cpp::get_package_share_directory("arm") + "/model_2/robotic_arm.urdf");
 }
 
 void ArmCtrlNode::create_interfaces() {
@@ -122,7 +125,26 @@ void ArmCtrlNode::load_robot_description_and_build_solver() {
         throw std::runtime_error("failed to build KDL chain from " + base_link_ + " to " + tip_link_);
     }
 
-    arm_calc_ = std::make_shared<ArmCalc>(arm_chain_);
+    // Load payload URDF from local file and build the payload KDL chain.
+    const std::string payload_urdf_path = this->get_parameter("payload_urdf_path").as_string();
+    KDL::Chain payload_chain;
+    {
+        std::ifstream input(payload_urdf_path);
+        if (!input.is_open()) {
+            throw std::runtime_error("unable to open payload URDF: " + payload_urdf_path);
+        }
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        KDL::Tree payload_tree;
+        if (!kdl_parser::treeFromString(buffer.str(), payload_tree)) {
+            throw std::runtime_error("failed to parse payload URDF into KDL tree: " + payload_urdf_path);
+        }
+        if (!payload_tree.getChain(base_link_, tip_link_, payload_chain)) {
+            throw std::runtime_error("failed to build payload KDL chain from " + base_link_ + " to " + tip_link_);
+        }
+    }
+
+    arm_calc_ = std::make_shared<ArmCalc>(arm_chain_, payload_chain);
     joint_space_move_ = std::make_shared<arm_action::JointSpaceMove>(arm_calc_);
     cartesian_space_move_ = std::make_shared<arm_action::JCartesianSpaceMove>(arm_calc_);
     visual_servo_move_ = std::make_shared<arm_action::VisualServoMove>(arm_calc_);
@@ -524,6 +546,10 @@ rcl_interfaces::msg::SetParametersResult ArmCtrlNode::on_parameters_changed(cons
             visual_servo_max_linear_acceleration_ = std::max(param.as_double(), 0.0);
             if (visual_servo_move_) {
                 visual_servo_move_->set_max_linear_acceleration(visual_servo_max_linear_acceleration_);
+            }
+        } else if (param.get_name() == "use_payload") {
+            if (arm_calc_) {
+                arm_calc_->SetPayloadMode(param.as_bool());
             }
         } else if (param.get_name() == "joint_target") {
             const auto values = param.as_double_array();
