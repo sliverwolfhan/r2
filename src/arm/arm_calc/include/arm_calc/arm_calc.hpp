@@ -2,8 +2,6 @@
 
 #include "arm_calc/common_types.hpp"
 
-#include <rclcpp/logger.hpp>
-
 #include <kdl/chain.hpp>
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
@@ -102,7 +100,6 @@ private:
     JointVector kd_{JointVector::Constant(3.0)};
 
     mutable std::recursive_mutex active_mutex_;
-    rclcpp::Logger logger_{rclcpp::get_logger("arm_calc")};
 };
 
 }  // namespace arm_calc

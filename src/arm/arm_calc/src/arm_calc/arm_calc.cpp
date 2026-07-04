@@ -2,7 +2,6 @@
 
 #include <Eigen/Geometry>
 #include <iostream>
-#include <rclcpp/rclcpp.hpp>
 
 namespace arm_calc {
 
@@ -70,7 +69,7 @@ void ArmCalc::SetPayloadMode(bool use_payload) {
         dyn_active_ = &dyn_nominal_;
     }
     use_payload_ = use_payload;
-    RCLCPP_INFO(logger_, "KDL chain switched to: %s", use_payload ? "PAYLOAD" : "NOMINAL");
+    std::cout << "[ArmCalc] KDL chain switched to: " << (use_payload ? "PAYLOAD" : "NOMINAL") << std::endl;
 }
 
 JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result) {

@@ -7,8 +7,6 @@
 #include <cmath>
 #include <iostream>
 
-#include <rclcpp/rclcpp.hpp>
-
 // 建一条 6-DOF 简易链：joint1 绕 Z（竖直），joint2 绕 Y（水平），其余绕 Y。
 // link6 惯量可变：nominal 0.15kg，payload 0.78kg。
 KDL::Chain MakeChain(double link6_mass) {
