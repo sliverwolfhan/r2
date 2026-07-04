@@ -184,6 +184,14 @@ int main(int argc, char** argv)
   blackboard->set("tf_buffer", tf_buffer);
   blackboard->set("arm_runner", arm_runner);
 
+  // 分区块坐标 yaml: 红区 block_red.yaml / 蓝区 block_blue.yaml, 由 launch 传入。
+  // SelectArmPrepName 通过黑板键 block_yaml 读取; 未设置时该节点内部仍回退默认值。
+  std::string block_yaml = pkg_dir + "/yaml/block_red.yaml";
+  node->declare_parameter<std::string>("block_yaml", block_yaml);
+  node->get_parameter("block_yaml", block_yaml);
+  blackboard->set("block_yaml", block_yaml);
+  RCLCPP_INFO(node->get_logger(), "block_yaml: %s", block_yaml.c_str());
+
   std::vector<std::string> weapon_priority = {
     "weapon_1", "weapon_2", "weapon_3", "weapon_4", "weapon_5", "weapon_6"};
   node->declare_parameter<std::vector<std::string>>("weapon_priority", weapon_priority);

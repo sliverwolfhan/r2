@@ -104,8 +104,8 @@
                             vx_min="-1.2"
                             vy_max="1.2"
                             wz_max="4.0"
-                            vx_std="0.35"
-                            vy_std="0.35"
+                            vx_std="0.4"
+                            vy_std="0.4"
                             wz_std="0.35"
                             goal_x_tolerance="0.03"
                             goal_y_tolerance="0.05"
@@ -159,8 +159,8 @@
                         goal_x="{grasp_prep_x}"
                         goal_y="{grasp_prep_y}"
                         goal_yaw="{grasp_prep_yaw}"
-                        rotation_start_distance="0.8"
-                        rotation_end_distance="0.8"
+                        rotation_start_distance="0.45"
+                        rotation_end_distance="0.45"
                         rotation_direction="cw"
                         num_points="150"
                         frame_id="map"
@@ -206,6 +206,46 @@
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
+
+      <!-- C2. 贴靠后只检查 y 是否到位(yaw/距离容忍度放大 -> 忽略, 只看 y);
+           y 不对则再侧向贴靠, 最多尝试 3 次, 之后无论对不对都返回成功继续 -->
+      <ForceSuccess>
+        <RetryUntilSuccessful num_attempts="3">
+          <Fallback>
+            <!-- y 已到位 -> 成功, 结束重试 -->
+            <GraspReadyByPoseDistance node="{node}"
+                                      map_frame="map"
+                                      base_frame="base_footprint"
+                                      target_y="-5.45"
+                                      y_tolerance="0.05"
+                                      target_yaw="{grasp_prep_yaw}"
+                                      yaw_tolerance="100.0"
+                                      distance_topic="/AT_R2/distance_tail"
+                                      distance_scale="0.001"
+                                      target_distance="{grasp_laser_target_distance}"
+                                      distance_tolerance="1000.0"
+                                      stable_count="3"
+                                      max_data_age="0.5"/>
+            <!-- y 不对 -> 再侧靠一次, 然后返回失败让 RetryUntilSuccessful 再试 -->
+            <Sequence>
+              <ForceSuccess>
+                <DockToWall node="{node}"
+                            vy="-0.20"
+                            vx="0.0"
+                            wz="0.0"
+                            stall_threshold="0.06"
+                            stall_duration="0.5"
+                            timeout="3.0"
+                            publish_rate_hz="50.0"
+                            cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                            odom_topic="/AT_R2/odometry"/>
+              </ForceSuccess>
+              <AlwaysFailure/>
+            </Sequence>
+          </Fallback>
+        </RetryUntilSuccessful>
+      </ForceSuccess>
+
       <!-- D. 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 -->
       <Fallback>
         <GraspReadyByPoseDistance node="{node}"

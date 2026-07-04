@@ -232,7 +232,7 @@ std::string CatchKFS::process(const std::string last_task_name) {
     if (!robot->execute_cartesian_space_trajectory(object_pose, 0.7)) { // 0.8
         return fail_task("执行抓取轨迹失败");
     }
-    std::this_thread::sleep_for(500ms);
+    std::this_thread::sleep_for(1000ms);
 
     const double lift_up_z_ = 0.20;          // 垂直向上抬升量
     const double lift_retract_along_tcp_ = 0.15;  // 沿末端 +Z 方向回退量

@@ -470,12 +470,12 @@ controller_server:
       PathAlignCritic:        #该批评器鼓励在相关情况下与全局路径保持一致，但它并不实现路径跟随行为
         enabled: true
         cost_power: 1
-        cost_weight: 15.0
+        cost_weight: 10.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 1  
         threshold_to_consider: 0.3      # 设为预测时域
         offset_from_furthest: 15        # 调整为合理值
-        use_path_orientations: false
+        use_path_orientations: true
       PathFollowCritic:
         enabled: true
         cost_power: 1
@@ -491,7 +491,7 @@ controller_server:
         max_angle_to_furthest: 1.0
         mode: 0
       VelocityDeadbandCritic:
-        enabled: true
+        enabled: false
         cost_power: 1
         cost_weight: 10.0
         deadband_velocities: [0.05, 0.05, 0.05]

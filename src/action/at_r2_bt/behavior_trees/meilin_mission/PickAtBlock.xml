@@ -31,7 +31,11 @@
               <Sequence>
                 <SelectArmPrepName next_from_id="{from_id}"
                                   next_target_id="{target_id}"
-                                  arm_prep_name="{arm_prep_name}"/>
+                                  from_x_override="{prep_x}"
+                                  from_y_override="{prep_y}"
+                                  from_yaw_override="{prep_yaw}"
+                                  arm_prep_name="{arm_prep_name}"
+                                  block_yaml="{block_yaml}"/>
                 <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
               </Sequence>
             </Fallback>

@@ -97,8 +97,12 @@
           <ForceSuccess>
             <SelectArmPrepName next_from_id="{next_from_id}"
                                next_target_id="{next_target_id}"
+                               from_x_override="{next_prep_x}"
+                               from_y_override="{next_prep_y}"
+                               from_yaw_override="{next_prep_yaw}"
                                arm_prep_name="{arm_prep_name}"
-                               arm_prep_is_low="{arm_prep_is_low}"/>
+                               arm_prep_is_low="{arm_prep_is_low}"
+                               block_yaml="{block_yaml}"/>
           </ForceSuccess>
           <Fallback>
             <!-- 低姿态 prep: 串行 — 先到 prep 再下臂 -->

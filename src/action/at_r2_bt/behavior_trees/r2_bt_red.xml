@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <!-- ================== R2 总流程 ==================
+       直接组合两棵已有子行为树:
+         1. GraspHead3      (grasp_head_2.xml)     —— 连续抓多个武器头 + 对接
+         2. MeilinMission   (meilin_mission.xml)   —— 梅林区域块导航/抓取/推
+       子树内部各自负责自己的 SetZoneMode / MPPI / Costmap / WaitForEnter,
+       这里只做串行编排，避免参数重复维护。 -->
+  <include path="grasp_head_red.xml"/>
+  <include path="meilin_mission.xml"/>
+
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <SubTree ID="GraspHeadRed"    _autoremap="true"/>
+      <WaitForEnter node="{node}"
+                prompt="按下开始2区任务"
+                require_tty="false"
+                clear_buffer="true"
+                timeout="0.0"/>
+      <SubTree ID="MeilinMission" _autoremap="true"/>
+    </Sequence>
+  </BehaviorTree>
+
+</root>

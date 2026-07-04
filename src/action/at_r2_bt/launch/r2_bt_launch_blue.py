@@ -20,15 +20,16 @@ def generate_launch_description():
 
     pkg_dir = get_package_share_directory('at_r2_bt')
     # weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_blue.yaml')
-    weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_red.yaml')
+    weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_blue.yaml')
     place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params.yaml')
+    block_yaml_file = os.path.join(pkg_dir, 'yaml', 'block_blue.yaml')
 
     bt_xml = LaunchConfiguration('bt_xml')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'bt_xml',
-            default_value='grasp_head_red.xml',
+            default_value='r2_bt_blue.xml',
             description='行为树 xml 文件名 (位于 at_r2_bt/behavior_trees/)',
         ),
         Node(
@@ -42,6 +43,7 @@ def generate_launch_description():
                 place_kfs_params_file,
                 {
                     'use_sim_time': False,
+                    'block_yaml': block_yaml_file,
                 },
             ],
             # 在独立的 gnome-terminal 窗口里运行, 让 simple_bt_runner 拥有自己的 stdin TTY,

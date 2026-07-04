@@ -17,6 +17,10 @@ namespace nav2_bt_publish_goal
  * Input ports:
  *   - next_from_id   (int32_t)  the from-node id of the next step
  *   - next_target_id (int32_t)  the target-node id of the next step
+ *   - from_x_override / from_y_override / from_yaw_override (double, optional)
+ *                    机器人抓/推这一块时的准备位姿 (prep, map frame)。由 PICK/PUSH 段传入。
+ *                    三者齐备 → 把目标块变换到机器人系判定左/前抓(与朝向无关);
+ *                    缺任一 → 退回 map 系 dy 判定(仅 yaw≈0 正确)。
  *   - block_yaml     (string, optional) absolute path to block_*.yaml.
  *                    Empty/unset → defaults to share/at_r2_bt/yaml/block_blue.yaml
  *   - arm_yaml       (string, optional) absolute path to arm_ready_position.yaml.
@@ -35,13 +39,16 @@ namespace nav2_bt_publish_goal
  *
  * Selection rule:
  *   The arm can only physically reach to the left of the body, so:
- *     - When the target is on the left in map frame (dy > 0) AND the matching
- *       `pick_left_<suffix>` exists in arm_yaml → use it.
+ *     - When the target block's bearing falls in the left sector (45°~135°) AND the
+ *       matching `pick_left_<suffix>` exists in arm_yaml → use it.
  *     - Otherwise fall back to `pick_front_<suffix>` if it exists.
  *     - If neither exists → FAILURE (with empty arm_prep_name).
  *
- *   dy = target.y - from.y       (map frame, x+ = front, y+ = left)
- *   bucket = round((target.height - from.height) / 0.2)
+ *   bearing = atan2(ry, rx)      (机器人系: 0°=正前, +90°=正左, -90°=正右)
+ *   (rx, ry) = 目标块在机器人坐标系下的前向/横向坐标。用 pick/push 传入的准备位姿
+ *              (from_x/y/yaw_override) 把目标块从 map 变换到机器人系算得; 三者未齐则退回
+ *              map 系差值 (rx=target.x-from.x, ry=target.y-from.y)(仅 yaw≈0 时正确)。
+ *   bucket = round((target.height - from.height) / 0.2)   (height 始终取自块)
  *   suffix:  +1 → up200,  +2 → up400,  -1 → down200,  -2 → down400
  *            (bucket == 0 or out of range → FAILURE)
  */
