@@ -7,6 +7,8 @@
 #include <cmath>
 #include <iostream>
 
+#include <rclcpp/rclcpp.hpp>
+
 // 建一条 6-DOF 简易链：joint1 绕 Z（竖直），joint2 绕 Y（水平），其余绕 Y。
 // link6 惯量可变：nominal 0.15kg，payload 0.78kg。
 KDL::Chain MakeChain(double link6_mass) {
@@ -87,6 +89,35 @@ int main() {
     arm_calc::JointVector tau_back = calc.joint_torque_inverse_dynamics(
         q, arm_calc::JointVector::Zero(), arm_calc::JointVector::Zero());
     assert((tau_back - tau_nominal).norm() < 1e-12);
+
+    // ---- Deep-path recursive lock test ----------------------------------
+    // Recreate a fresh ArmCalc so last_joint_solution_ is at zero; that
+    // guarantees the seed for signal_arm_calc is the zero config which we
+    // will also use as the FK pose source.  Without this, the IK seed would
+    // be the last 2-arg call's solution (still zero here, but explicit
+    // rebuild is honest).
+    arm_calc::ArmCalc calc2(nominal, payload);
+    // Reachable Cartesian target = FK(q_zero) on the active (nominal) chain.
+    arm_calc::CartesianPose target = calc2.end_pose(q);
+    arm_calc::CartesianTrajectoryPoint cart_target;
+    cart_target.pose = target;
+    // Zero velocity/acceleration: round-trip should reproduce q_zero.
+    cart_target.linear_velocity = Eigen::Vector3d::Zero();
+    cart_target.angular_velocity = Eigen::Vector3d::Zero();
+    cart_target.linear_acceleration = Eigen::Vector3d::Zero();
+    cart_target.angular_acceleration = Eigen::Vector3d::Zero();
+
+    // signal_arm_calc takes the lock, then calls joint_pos (lock again),
+    // joint_vel (lock again), joint_acc (lock again), joint_torque_dynamic
+    // (lock again -> joint_acc (lock again)).  Six nested acquisitions on
+    // the same recursive_mutex.  A nonrecursive mutex would deadlock here.
+    arm_calc::JointTrajectoryPoint jtp = calc2.signal_arm_calc(cart_target);
+    double err = (jtp.position - q).norm();
+    std::cout << "signal_arm_calc round-trip position error = " << err << std::endl;
+    // The IK may not converge exactly back to q_zero for all chain configs;
+    // per-joint tolerance ~1e-3 is well within the LMA solver's epsilon.
+    assert(err < 1e-3 && "signal_arm_calc q round-trip regressed");
+    std::cout << "signal_arm_calc round-trip OK\n";
 
     std::cout << "All dual-chain tests passed.\n";
     return 0;
