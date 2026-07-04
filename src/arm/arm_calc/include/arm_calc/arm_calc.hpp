@@ -48,7 +48,7 @@ public:
     // 新增
     void SetPayloadMode(bool use_payload);
     bool payload_mode() const {
-        std::lock_guard<std::mutex> lock(active_mutex_);
+        std::lock_guard<std::recursive_mutex> lock(active_mutex_);
         return use_payload_;
     }
 
@@ -99,7 +99,7 @@ private:
     JointVector kp_{JointVector::Constant(50.0)};
     JointVector kd_{JointVector::Constant(3.0)};
 
-    mutable std::mutex active_mutex_;
+    mutable std::recursive_mutex active_mutex_;
 };
 
 }  // namespace arm_calc

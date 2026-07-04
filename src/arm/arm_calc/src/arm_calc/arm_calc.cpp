@@ -51,7 +51,7 @@ ArmCalc::ArmCalc(const KDL::Chain& nominal_chain, const KDL::Chain& payload_chai
 }
 
 void ArmCalc::SetPayloadMode(bool use_payload) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     if (use_payload == use_payload_) return;
     if (use_payload) {
         fk_active_ = &fk_payload_;
@@ -73,12 +73,12 @@ void ArmCalc::SetPayloadMode(bool use_payload) {
 }
 
 JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     return joint_pos(pose, result, from_kdl_joints(last_joint_solution_));
 }
 
 JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result, const JointVector& seed_joint_pos) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     KDL::JntArray seed = to_kdl_joints(seed_joint_pos);
     KDL::Frame target_frame = to_kdl_frame(pose);
     *result = ik_active_->CartToJnt(seed, target_frame, seed);
@@ -89,7 +89,7 @@ JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result, const Joi
 }
 
 JointVector ArmCalc::joint_vel(const JointVector& joint_pos, const CartesianVector& cartesian_twist) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
     jac_active_->JntToJac(joints, jacobian_cache_);
     Eigen::Matrix<double, 6, 6> jacobian = jacobian_cache_.data;
@@ -97,7 +97,7 @@ JointVector ArmCalc::joint_vel(const JointVector& joint_pos, const CartesianVect
 }
 
 JointVector ArmCalc::joint_acc(const JointVector& joint_pos, const JointVector& joint_vel, const CartesianVector& cartesian_acc) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     joint_vel_cache_.q = to_kdl_joints(joint_pos);
     joint_vel_cache_.qdot = to_kdl_joints(joint_vel);
     jac_active_->JntToJac(joint_vel_cache_.q, jacobian_cache_);
@@ -111,14 +111,14 @@ JointVector ArmCalc::joint_acc(const JointVector& joint_pos, const JointVector& 
 JointVector ArmCalc::joint_torque_dynamic(const JointVector& joint_pos,
                                           const JointVector& joint_vel,
                                           const CartesianVector& cartesian_acc) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     return joint_torque_inverse_dynamics(joint_pos, joint_vel, joint_acc(joint_pos, joint_vel, cartesian_acc));
 }
 
 JointVector ArmCalc::joint_torque_inverse_dynamics(const JointVector& joint_pos,
                                                    const JointVector& joint_vel,
                                                    const JointVector& joint_acc) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     const KDL::JntArray kdl_joint_pos = to_kdl_joints(joint_pos);
     const KDL::JntArray kdl_joint_vel = to_kdl_joints(joint_vel);
 
@@ -133,7 +133,7 @@ JointVector ArmCalc::joint_torque_inverse_dynamics(const JointVector& joint_pos,
 }
 
 JointVector ArmCalc::joint_torque_cartesian_wrench(const JointVector& joint_pos, const CartesianVector& cartesian_wrench) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
     jac_active_->JntToJac(joints, jacobian_cache_);
     Eigen::Matrix<double, 6, 6> jacobian = jacobian_cache_.data;
@@ -141,14 +141,14 @@ JointVector ArmCalc::joint_torque_cartesian_wrench(const JointVector& joint_pos,
 }
 
 CartesianPose ArmCalc::end_pose(const JointVector& joint_pos) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     KDL::Frame frame;
     fk_active_->JntToCart(to_kdl_joints(joint_pos), frame);
     return from_kdl_frame(frame);
 }
 
 CartesianState ArmCalc::end_state(const JointVector& joint_pos, const JointVector& joint_vel) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     CartesianState state;
     state.pose = end_pose(joint_pos);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
@@ -160,13 +160,14 @@ CartesianState ArmCalc::end_state(const JointVector& joint_pos, const JointVecto
 }
 
 KDL::Jacobian ArmCalc::jacobian(const JointVector& joint_pos) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
     jac_active_->JntToJac(joints, jacobian_cache_);
     return jacobian_cache_;
 }
 
 void ArmCalc::set_joint_pd(std::size_t index, double kp, double kd) {
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     if (index >= kJointDoF) {
         return;
     }
@@ -175,6 +176,7 @@ void ArmCalc::set_joint_pd(std::size_t index, double kp, double kd) {
 }
 
 void ArmCalc::get_joint_pd(std::size_t index, double& kp, double& kd) const {
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     if (index >= kJointDoF) {
         kp = 0.0;
         kd = 0.0;
@@ -185,12 +187,12 @@ void ArmCalc::get_joint_pd(std::size_t index, double& kp, double& kd) const {
 }
 
 JointTrajectoryPoint ArmCalc::signal_arm_calc(const CartesianTrajectoryPoint& cartesian_target) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     return signal_arm_calc(cartesian_target, from_kdl_joints(last_joint_solution_));
 }
 
 JointTrajectoryPoint ArmCalc::signal_arm_calc(const CartesianTrajectoryPoint& cartesian_target, const JointVector& seed_joint_pos) {
-    std::lock_guard<std::mutex> lock(active_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(active_mutex_);
     JointTrajectoryPoint point;
     int result = -1;
     point.position = joint_pos(cartesian_target.pose, &result, seed_joint_pos);
