@@ -1,6 +1,7 @@
 #include "arm_calc/arm_calc.hpp"
 
 #include <Eigen/Geometry>
+#include <iostream>
 
 namespace arm_calc {
 
@@ -15,33 +16,72 @@ CartesianVector ToCartesianVector(const Eigen::Vector3d& linear, const Eigen::Ve
 
 }  // namespace
 
-ArmCalc::ArmCalc(const KDL::Chain& chain)
-    : chain_(chain),
-      fk_solver_(chain_),
-      jacobian_solver_(chain_),
-      jdot_solver_(chain_),
-      vel_solver_(chain_),
-      ik_solver_(chain_, Eigen::Matrix<double, 6, 1>::Ones(), 1e-6, 200, 1e-10),
-      dynamic_solver_(chain_, KDL::Vector(0.0, 0.0, -9.81)),
-      mass_matrix_(chain_.getNrOfJoints()),
-      coriolis_(chain_.getNrOfJoints()),
-      gravity_(chain_.getNrOfJoints()),
-      jacobian_cache_(chain_.getNrOfJoints()),
-      last_joint_solution_(chain_.getNrOfJoints()),
-      joint_vel_cache_(chain_.getNrOfJoints()) {
-    for (unsigned int i = 0; i < chain_.getNrOfJoints(); ++i) {
+ArmCalc::ArmCalc(const KDL::Chain& nominal_chain, const KDL::Chain& payload_chain)
+    : chain_nominal_(nominal_chain),
+      chain_payload_(payload_chain),
+      fk_nominal_(chain_nominal_),
+      jac_nominal_(chain_nominal_),
+      jdot_nominal_(chain_nominal_),
+      vel_nominal_(chain_nominal_),
+      ik_nominal_(chain_nominal_, Eigen::Matrix<double, 6, 1>::Ones(), 1e-6, 200, 1e-10),
+      dyn_nominal_(chain_nominal_, KDL::Vector(0.0, 0.0, -9.81)),
+      fk_payload_(chain_payload_),
+      jac_payload_(chain_payload_),
+      jdot_payload_(chain_payload_),
+      vel_payload_(chain_payload_),
+      ik_payload_(chain_payload_, Eigen::Matrix<double, 6, 1>::Ones(), 1e-6, 200, 1e-10),
+      dyn_payload_(chain_payload_, KDL::Vector(0.0, 0.0, -9.81)),
+      mass_matrix_(chain_nominal_.getNrOfJoints()),
+      coriolis_(chain_nominal_.getNrOfJoints()),
+      gravity_(chain_nominal_.getNrOfJoints()),
+      jacobian_cache_(chain_nominal_.getNrOfJoints()),
+      last_joint_solution_(chain_nominal_.getNrOfJoints()),
+      joint_vel_cache_(chain_nominal_.getNrOfJoints()) {
+    for (unsigned int i = 0; i < chain_nominal_.getNrOfJoints(); ++i) {
         last_joint_solution_(i) = 0.0;
     }
+    // 默认 nominal
+    fk_active_ = &fk_nominal_;
+    jac_active_ = &jac_nominal_;
+    jdot_active_ = &jdot_nominal_;
+    vel_active_ = &vel_nominal_;
+    ik_active_ = &ik_nominal_;
+    dyn_active_ = &dyn_nominal_;
+    use_payload_ = false;
+}
+
+void ArmCalc::SetPayloadMode(bool use_payload) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
+    if (use_payload == use_payload_) return;
+    if (use_payload) {
+        fk_active_ = &fk_payload_;
+        jac_active_ = &jac_payload_;
+        jdot_active_ = &jdot_payload_;
+        vel_active_ = &vel_payload_;
+        ik_active_ = &ik_payload_;
+        dyn_active_ = &dyn_payload_;
+    } else {
+        fk_active_ = &fk_nominal_;
+        jac_active_ = &jac_nominal_;
+        jdot_active_ = &jdot_nominal_;
+        vel_active_ = &vel_nominal_;
+        ik_active_ = &ik_nominal_;
+        dyn_active_ = &dyn_nominal_;
+    }
+    use_payload_ = use_payload;
+    std::cout << "[ArmCalc] KDL chain switched to: " << (use_payload ? "PAYLOAD" : "NOMINAL") << std::endl;
 }
 
 JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     return joint_pos(pose, result, from_kdl_joints(last_joint_solution_));
 }
 
 JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result, const JointVector& seed_joint_pos) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     KDL::JntArray seed = to_kdl_joints(seed_joint_pos);
     KDL::Frame target_frame = to_kdl_frame(pose);
-    *result = ik_solver_.CartToJnt(seed, target_frame, seed);
+    *result = ik_active_->CartToJnt(seed, target_frame, seed);
     if (*result >= 0) {
         last_joint_solution_ = seed;
     }
@@ -49,17 +89,19 @@ JointVector ArmCalc::joint_pos(const CartesianPose& pose, int* result, const Joi
 }
 
 JointVector ArmCalc::joint_vel(const JointVector& joint_pos, const CartesianVector& cartesian_twist) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
-    jacobian_solver_.JntToJac(joints, jacobian_cache_);
+    jac_active_->JntToJac(joints, jacobian_cache_);
     Eigen::Matrix<double, 6, 6> jacobian = jacobian_cache_.data;
     return jacobian.completeOrthogonalDecomposition().solve(cartesian_twist);
 }
 
 JointVector ArmCalc::joint_acc(const JointVector& joint_pos, const JointVector& joint_vel, const CartesianVector& cartesian_acc) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     joint_vel_cache_.q = to_kdl_joints(joint_pos);
     joint_vel_cache_.qdot = to_kdl_joints(joint_vel);
-    jacobian_solver_.JntToJac(joint_vel_cache_.q, jacobian_cache_);
-    jdot_solver_.JntToJacDot(joint_vel_cache_, jdot_qdot_cache_);
+    jac_active_->JntToJac(joint_vel_cache_.q, jacobian_cache_);
+    jdot_active_->JntToJacDot(joint_vel_cache_, jdot_qdot_cache_);
 
     Eigen::Matrix<double, 6, 6> jacobian = jacobian_cache_.data;
     const CartesianVector jdot_qdot = twist_to_vector(jdot_qdot_cache_);
@@ -69,18 +111,20 @@ JointVector ArmCalc::joint_acc(const JointVector& joint_pos, const JointVector& 
 JointVector ArmCalc::joint_torque_dynamic(const JointVector& joint_pos,
                                           const JointVector& joint_vel,
                                           const CartesianVector& cartesian_acc) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     return joint_torque_inverse_dynamics(joint_pos, joint_vel, joint_acc(joint_pos, joint_vel, cartesian_acc));
 }
 
 JointVector ArmCalc::joint_torque_inverse_dynamics(const JointVector& joint_pos,
                                                    const JointVector& joint_vel,
                                                    const JointVector& joint_acc) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     const KDL::JntArray kdl_joint_pos = to_kdl_joints(joint_pos);
     const KDL::JntArray kdl_joint_vel = to_kdl_joints(joint_vel);
 
-    dynamic_solver_.JntToGravity(kdl_joint_pos, gravity_);
-    dynamic_solver_.JntToCoriolis(kdl_joint_pos, kdl_joint_vel, coriolis_);
-    dynamic_solver_.JntToMass(kdl_joint_pos, mass_matrix_);
+    dyn_active_->JntToGravity(kdl_joint_pos, gravity_);
+    dyn_active_->JntToCoriolis(kdl_joint_pos, kdl_joint_vel, coriolis_);
+    dyn_active_->JntToMass(kdl_joint_pos, mass_matrix_);
 
     JointMatrix mass = mass_matrix_.data;
     JointVector coriolis = from_kdl_joints(coriolis_);
@@ -89,23 +133,26 @@ JointVector ArmCalc::joint_torque_inverse_dynamics(const JointVector& joint_pos,
 }
 
 JointVector ArmCalc::joint_torque_cartesian_wrench(const JointVector& joint_pos, const CartesianVector& cartesian_wrench) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
-    jacobian_solver_.JntToJac(joints, jacobian_cache_);
+    jac_active_->JntToJac(joints, jacobian_cache_);
     Eigen::Matrix<double, 6, 6> jacobian = jacobian_cache_.data;
     return jacobian.transpose() * cartesian_wrench;
 }
 
 CartesianPose ArmCalc::end_pose(const JointVector& joint_pos) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     KDL::Frame frame;
-    fk_solver_.JntToCart(to_kdl_joints(joint_pos), frame);
+    fk_active_->JntToCart(to_kdl_joints(joint_pos), frame);
     return from_kdl_frame(frame);
 }
 
 CartesianState ArmCalc::end_state(const JointVector& joint_pos, const JointVector& joint_vel) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     CartesianState state;
     state.pose = end_pose(joint_pos);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
-    jacobian_solver_.JntToJac(joints, jacobian_cache_);
+    jac_active_->JntToJac(joints, jacobian_cache_);
     const CartesianVector twist = jacobian_cache_.data * joint_vel;
     state.linear_velocity = twist.head<3>();
     state.angular_velocity = twist.tail<3>();
@@ -113,8 +160,9 @@ CartesianState ArmCalc::end_state(const JointVector& joint_pos, const JointVecto
 }
 
 KDL::Jacobian ArmCalc::jacobian(const JointVector& joint_pos) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     KDL::JntArray joints = to_kdl_joints(joint_pos);
-    jacobian_solver_.JntToJac(joints, jacobian_cache_);
+    jac_active_->JntToJac(joints, jacobian_cache_);
     return jacobian_cache_;
 }
 
@@ -137,10 +185,12 @@ void ArmCalc::get_joint_pd(std::size_t index, double& kp, double& kd) const {
 }
 
 JointTrajectoryPoint ArmCalc::signal_arm_calc(const CartesianTrajectoryPoint& cartesian_target) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     return signal_arm_calc(cartesian_target, from_kdl_joints(last_joint_solution_));
 }
 
 JointTrajectoryPoint ArmCalc::signal_arm_calc(const CartesianTrajectoryPoint& cartesian_target, const JointVector& seed_joint_pos) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
     JointTrajectoryPoint point;
     int result = -1;
     point.position = joint_pos(cartesian_target.pose, &result, seed_joint_pos);
