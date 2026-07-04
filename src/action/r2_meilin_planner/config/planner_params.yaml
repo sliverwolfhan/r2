@@ -30,6 +30,17 @@ kfs_subscriber_node:
     # 高度开关：true 时忽略台阶高度（升/降代价清零、强制可上 400）。
     ignore_height: false
 
+    # --- R1 块定时消失 ---
+    # 把下位机码1的 R1 块（R1 正在收取的目标）建模为"会随时间让开的硬障碍"：
+    # 未消失前 R2 不能踩，可原地等待(WAIT)；消失后正常通行。
+    # false（默认）时码1仍当空地，规划行为与历史一致。
+    r1_timed_removal_enable: false
+    # R2 每走几步 R1 消失一个（所有动作 MOVE/PICK/PUSH/WAIT 都算一步）。
+    # 600 高度（节点6、8）最先消失，其余按高度降序假设顺序。
+    r1_removal_steps: 3
+    # 原地等待一步(WAIT)的代价。默认 = move_cost(1.0)；调大→更倾向绕路而非干等。
+    wait_cost: 1.0
+
     # 准备位姿偏移量（米）：准备点 = 目标中心沿单轴退此距离，越小越靠近目标。
     move_prep_offset: 0.1   # MOVE 准备点
     grasp_prep_offset: 0.1  # PICK / PUSH 准备点

@@ -4,6 +4,7 @@
 uint8 TYPE_MOVE = 0
 uint8 TYPE_PICK = 1
 uint8 TYPE_PUSH = 2
+uint8 TYPE_WAIT = 3    # 原地等待一拍（R1 块尚未让开）：from_id==target_id==当前节点，无坐标动作
 
 uint8 type
 int32 target_id        # 1..13

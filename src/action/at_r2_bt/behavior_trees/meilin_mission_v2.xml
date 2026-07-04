@@ -75,15 +75,21 @@
                           next_prep_x="{next_prep_x}"
                           next_prep_y="{next_prep_y}"
                           next_prep_yaw="{next_prep_yaw}"/>
-            <Switch3 variable="{step_type}"
+            <Switch4 variable="{step_type}"
                     case_1="MOVE"
                     case_2="PICK"
-                    case_3="PUSH">
+                    case_3="PUSH"
+                    case_4="WAIT">
               <SubTree ID="MoveBetweenBlocks" _autoremap="true"/>
               <SubTree ID="PickAtBlock" _autoremap="true"/>
               <SubTree ID="PushAtBlock" _autoremap="true"/>
+              <!-- WAIT：R1 块尚未让开，原地停一拍。delay_msec 应对齐 R2 走一步的耗时，
+                   需现场标定（与规划器 r1_removal_steps 节奏配合）。 -->
+              <DelayMs delay_msec="3000">
+                <AlwaysSuccess/>
+              </DelayMs>
               <AlwaysFailure/>
-            </Switch3>
+            </Switch4>
           </Sequence>
         </Repeat>
       </Sequence>

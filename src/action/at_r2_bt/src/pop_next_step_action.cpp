@@ -56,6 +56,7 @@ BT::NodeStatus PopNextStepAction::tick()
     case PS::TYPE_MOVE: type_str = "MOVE"; break;
     case PS::TYPE_PICK: type_str = "PICK"; break;
     case PS::TYPE_PUSH: type_str = "PUSH"; break;
+    case PS::TYPE_WAIT: type_str = "WAIT"; break;
     default: break;
   }
   setOutput<std::string>("step_type", type_str);

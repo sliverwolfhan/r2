@@ -111,9 +111,9 @@ python3 tools/align_pcd_to_map.py \
 
 ```bash
 python3 tools/align_pcd_to_map.py \
-  --anchors tools/my_anchors.yaml \
-  --in  src/location/point_lio/PCD/scans1.pcd \
-  --out src/location/point_lio/PCD/scans1_map.pcd \
+  --anchors tools/anchors.example.yaml \
+  --in  src/location/point_lio/PCD/scans.pcd \
+  --out src/location/point_lio/PCD/scans_map.pcd \
   --matrix-out src/location/point_lio/PCD/T_map_lio.yaml
 ```
 

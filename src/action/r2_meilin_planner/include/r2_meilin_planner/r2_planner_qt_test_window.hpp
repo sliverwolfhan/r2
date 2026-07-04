@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/int32_multi_array.hpp>
 
 #include "robot_interfaces/msg/plan.hpp"
 
@@ -19,6 +20,7 @@ class QGraphicsView;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
+class QDoubleSpinBox;
 class QCheckBox;
 
 class PlannerWindow : public QMainWindow
@@ -38,6 +40,13 @@ private slots:
   void on_zone_toggle_clicked();
 
 private:
+  // 监视话题回调（在 Qt 线程内经 spin_some 触发，可直接改控件）。
+  void on_kfs_msg(const std_msgs::msg::Int32MultiArray::SharedPtr msg);
+  void on_plan_msg(const robot_interfaces::msg::Plan::SharedPtr msg);
+  // 下位机码 -> 界面相位（0空/1R1/2R2/3假/4R1待）。
+  static int phase_from_code(int code);
+
+private:
   rclcpp::Node::SharedPtr node_;
   r2_planner::BlockTable blocks_;
   rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub_;
@@ -48,12 +57,21 @@ private:
   QPushButton * zone_btn_ = nullptr;
   QCheckBox * ignore_height_chk_ = nullptr;  // 勾选=忽略高度（升/降代价清零、强制可上 400）
   QCheckBox * can_climb_400_chk_ = nullptr;  // 勾选=可上/下 400 台阶；取消=400 档不可通行
+  QCheckBox * r1_timed_removal_chk_ = nullptr;   // 勾选=R1待块(码1)定时消失，可原地 WAIT 等它让开
+  QSpinBox * r1_removal_steps_spin_ = nullptr;   // R2 每走几步 R1 消失一个
+  QDoubleSpinBox * wait_cost_spin_ = nullptr;    // 原地等待一步的代价
   QGraphicsScene * scene_;
   QGraphicsView * view_;
   QPlainTextEdit * log_;
   QSpinBox * r1_preclear_display_a_;
   QSpinBox * r1_preclear_display_b_;
   std::vector<std::string> last_path_;
+  std::vector<robot_interfaces::msg::PlanStep> last_steps_;  // 最近一次规划的完整步骤（含真实 map 坐标 prep_pose），供真实坐标绘图
+
+  // 监视模式：订阅真车话题，收到布局/路径就画出来（不本地重规划）。
+  QCheckBox * monitor_chk_ = nullptr;   // 勾选=监视话题自动填充布局与路径
+  rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_sub_;
+  rclcpp::Subscription<robot_interfaces::msg::Plan>::SharedPtr plan_monitor_sub_;
 
   static r2_planner::BlockState block_from_phase(int phase);
   /** 显示序号 <-> 按钮下标。红区：第一行 3/2/1…最后一行 12/11/10。
@@ -69,7 +87,6 @@ private:
   /** R1 removes up to two R1_KFS cells before planning (simulates the pre-game R1 pick). */
   void apply_r1_preclear_selection(r2_planner::ForestConfig & config, std::string * notes_out) const;
   void redraw_scene();
-  static QPointF scene_pos_for_node(int node_id);
   /** 重新加载红/蓝区方块表并刷新界面（序号镜像 + 按钮重绘）。 */
   void reload_zone_blocks();
 };

@@ -21,13 +21,17 @@
 #include <QPushButton>
 #include <QSplitter>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+
+#include <QLineF>
 
 PlannerWindow::PlannerWindow(
   rclcpp::Node::SharedPtr node,
@@ -108,6 +112,37 @@ PlannerWindow::PlannerWindow(
     QString::fromUtf8("取消勾选后：400 档台阶视为不可通行，A* 绕开（等价于 can_climb_400:=false）"));
   left_lay->addWidget(can_climb_400_chk_);
 
+  // R1 定时消失：勾选后「R1待」格(码1)按"会随时间让开的硬障碍"处理，可原地 WAIT 等它让开。
+  r1_timed_removal_chk_ = new QCheckBox(QString::fromUtf8("R1 定时消失（R1待块随步数让开）"), left);
+  r1_timed_removal_chk_->setToolTip(
+    QString::fromUtf8("勾选后：橙色「R1待」格建模为定时消失障碍，未消失前不可踩、可 WAIT 等待；"
+                      "取消勾选则「R1待」当空地（等价 r1_timed_removal_enable:=false）"));
+  left_lay->addWidget(r1_timed_removal_chk_);
+  {
+    auto * r1t_row = new QHBoxLayout();
+    r1t_row->addWidget(new QLabel(QString::fromUtf8("每走几步消失一个:"), left));
+    r1_removal_steps_spin_ = new QSpinBox(left);
+    r1_removal_steps_spin_->setRange(1, 99);
+    r1_removal_steps_spin_->setValue(3);
+    r1t_row->addWidget(r1_removal_steps_spin_);
+    r1t_row->addWidget(new QLabel(QString::fromUtf8("等待代价:"), left));
+    wait_cost_spin_ = new QDoubleSpinBox(left);
+    wait_cost_spin_->setRange(0.0, 1000.0);
+    wait_cost_spin_->setSingleStep(0.5);
+    wait_cost_spin_->setValue(1.0);
+    r1t_row->addWidget(wait_cost_spin_);
+    r1t_row->addStretch(1);
+    left_lay->addLayout(r1t_row);
+  }
+
+  // 监视模式：勾选后订阅真车话题，收到布局/路径就画出来（不本地重规划）。
+  monitor_chk_ = new QCheckBox(QString::fromUtf8("监视话题（自动显示 /AT_R2/kfs_positions + /r2_planner/plan）"), left);
+  monitor_chk_->setChecked(true);
+  monitor_chk_->setToolTip(
+    QString::fromUtf8("勾选后：格子按收到的 kfs 布局着色，路径按真车发布的 plan 用真实 map 坐标画出；"
+                      "取消勾选可手动摆场离线规划"));
+  left_lay->addWidget(monitor_chk_);
+
   {
     auto * r1_hint = new QLabel(
       QString::fromUtf8("R1 赛前取走哪两个方块（填序号 1–12，0=不填）：填的格子在规划时按已取走处理。"),
@@ -141,7 +176,6 @@ PlannerWindow::PlannerWindow(
   auto * right_lay = new QVBoxLayout(right);
   right_lay->addWidget(new QLabel(QString::fromUtf8("路径示意（黄线为 MOVE 折线）"), right));
   scene_ = new QGraphicsScene(this);
-  scene_->setSceneRect(-40, -80, 360, 520);
   view_ = new QGraphicsView(scene_, right);
   view_->setMinimumSize(240, 360);
   view_->setRenderHint(QPainter::Antialiasing, true);
@@ -159,20 +193,30 @@ PlannerWindow::PlannerWindow(
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
 
+  // 监视订阅：kfs 布局用普通可靠 QoS；plan 用 latched(transient_local) 以便窗口后开也能拿到最近一条。
+  kfs_sub_ = node_->create_subscription<std_msgs::msg::Int32MultiArray>(
+    "/AT_R2/kfs_positions", 10,
+    std::bind(&PlannerWindow::on_kfs_msg, this, std::placeholders::_1));
+  plan_monitor_sub_ = node_->create_subscription<robot_interfaces::msg::Plan>(
+    "/r2_planner/plan", rclcpp::QoS(1).transient_local().reliable(),
+    std::bind(&PlannerWindow::on_plan_msg, this, std::placeholders::_1));
+
   redraw_scene();
 }
 
 r2_planner::BlockState PlannerWindow::block_from_phase(int phase)
 {
-  switch (phase % 4) {
+  switch (phase % 5) {
     case 0:
       return r2_planner::BlockState::EMPTY;
     case 1:
       return r2_planner::BlockState::R1_KFS;
     case 2:
       return r2_planner::BlockState::R2_KFS;
-    default:
+    case 3:
       return r2_planner::BlockState::FAKE_KFS;
+    default:
+      return r2_planner::BlockState::R1_PENDING;
   }
 }
 
@@ -218,6 +262,8 @@ int PlannerWindow::phase_from_block_state(r2_planner::BlockState state)
       return 2;
     case r2_planner::BlockState::FAKE_KFS:
       return 3;
+    case r2_planner::BlockState::R1_PENDING:
+      return 4;
     default:
       return 0;
   }
@@ -247,7 +293,7 @@ void PlannerWindow::apply_phase_to_button(int index)
     return;
   }
   QPushButton * b = cells_[static_cast<size_t>(index)];
-  const int ph = cell_phase_[static_cast<size_t>(index)] % 4;
+  const int ph = cell_phase_[static_cast<size_t>(index)] % 5;
   QString text;
   QString style;
   switch (ph) {
@@ -263,9 +309,13 @@ void PlannerWindow::apply_phase_to_button(int index)
       text = QString::fromUtf8("R2");
       style = "background:#90ee90;color:#030;";
       break;
-    default:
+    case 3:
       text = QString::fromUtf8("假");
       style = "background:#87ceeb;color:#012;";
+      break;
+    default:
+      text = QString::fromUtf8("R1待");
+      style = "background:#f0b060;color:#210;";
       break;
   }
   const int disp = display_number_from_cell_index(index);
@@ -291,7 +341,7 @@ void PlannerWindow::on_cell_clicked()
     return;
   }
   const int idx = static_cast<int>(std::distance(cells_.begin(), it));
-  cell_phase_[static_cast<size_t>(idx)] = (cell_phase_[static_cast<size_t>(idx)] + 1) % 4;
+  cell_phase_[static_cast<size_t>(idx)] = (cell_phase_[static_cast<size_t>(idx)] + 1) % 5;
   apply_phase_to_button(idx);
   redraw_scene();
 }
@@ -364,6 +414,17 @@ void PlannerWindow::build_config_from_ui(r2_planner::ForestConfig & config) cons
   config.preferred_pick_nodes = zone_blue_
     ? std::unordered_set<int>{1, 4, 7, 10}
     : std::unordered_set<int>{3, 6, 9, 12};
+
+  // R1 定时消失：把「R1待」格建模为随步数让开的硬障碍（与 kfs_subscriber_node 一致）。
+  if (r1_timed_removal_chk_) {
+    config.r1_timed_removal_enable = r1_timed_removal_chk_->isChecked();
+  }
+  if (r1_removal_steps_spin_) {
+    config.r1_removal_steps = r1_removal_steps_spin_->value();
+  }
+  if (wait_cost_spin_) {
+    config.wait_cost = wait_cost_spin_->value();
+  }
 }
 
 void PlannerWindow::apply_r1_preclear_selection(r2_planner::ForestConfig & config, std::string * notes_out) const
@@ -407,90 +468,124 @@ void PlannerWindow::apply_r1_preclear_selection(r2_planner::ForestConfig & confi
   }
 }
 
-QPointF PlannerWindow::scene_pos_for_node(int node_id)
-{
-  if (node_id == 0) {
-    return QPointF(120, 20 + 4 * 100 + 30);
-  }
-  if (node_id == 13) {
-    return QPointF(120, -40);
-  }
-  if (node_id >= 1 && node_id <= 12) {
-    const int legacy = 13 - node_id;
-    const int r = (legacy - 1) / 3;
-    const int c = (legacy - 1) % 3;
-    return QPointF(20 + c * 110 + 45, 20 + r * 100 + 45);
-  }
-  return QPointF(0, 0);
-}
-
 void PlannerWindow::redraw_scene()
 {
   scene_->clear();
 
+  // 收集所有已知节点(0..13)的真实 map 坐标，算边界用于缩放。
+  double minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  bool any = false;
+  for (int id = 0; id <= 13; ++id) {
+    if (!blocks_.has(id)) continue;
+    const auto & b = blocks_.at(id);
+    minx = std::min(minx, b.x); maxx = std::max(maxx, b.x);
+    miny = std::min(miny, b.y); maxy = std::max(maxy, b.y);
+    any = true;
+  }
+  if (!any) { return; }
+  const double pad = 0.8;                 // m，四周留白
+  minx -= pad; maxx += pad; miny -= pad; maxy += pad;
+
+  const double scale = 90.0;              // px/m（fitInView 再自适应，仅决定相对字号）
+  // map(x,y) -> scene（x、y 方向对调）：
+  //   屏幕横轴 = map y（+y 机器人左手 → 屏幕左）；屏幕纵轴 = map x（+x 前进 → 屏幕上，入口在下出口在上）。
+  auto to_scene = [&](double x, double y) {
+    return QPointF((maxy - y) * scale, (maxx - x) * scale);
+  };
+  auto center = [&](int nid) { const auto & b = blocks_.at(nid); return to_scene(b.x, b.y); };
+
+  // ---- 网格 + 米制坐标轴刻度（浅灰虚线，每 1m 一格）----
+  QPen grid_pen(QColor(210, 210, 210), 1, Qt::DashLine);
+  for (int xm = static_cast<int>(std::ceil(minx)); xm <= static_cast<int>(std::floor(maxx)); ++xm) {
+    auto * l = scene_->addLine(QLineF(to_scene(xm, maxy), to_scene(xm, miny)), grid_pen);
+    l->setZValue(-1);
+    auto * t = scene_->addSimpleText(QString::asprintf("x=%d", xm));
+    t->setBrush(QColor(150, 150, 150));
+    t->setPos(to_scene(xm, maxy).x() + 1, to_scene(xm, maxy).y() - 14);
+    t->setZValue(-1);
+  }
+  for (int ym = static_cast<int>(std::ceil(miny)); ym <= static_cast<int>(std::floor(maxy)); ++ym) {
+    auto * l = scene_->addLine(QLineF(to_scene(minx, ym), to_scene(maxx, ym)), grid_pen);
+    l->setZValue(-1);
+    auto * t = scene_->addSimpleText(QString::asprintf("y=%d", ym));
+    t->setBrush(QColor(150, 150, 150));
+    t->setPos(to_scene(minx, ym).x() + 1, to_scene(minx, ym).y() + 1);
+    t->setZValue(-1);
+  }
+
+  // ---- 12 个方块：按真实坐标居中，1.0m 见方，按状态着色，标注编号+真实(x,y)----
+  const double half = 0.5 * scale;        // 1.0m 见方的半边（像素）
   for (int id = 1; id <= 12; ++id) {
-    const int legacy = 13 - id;
-    const int r = (legacy - 1) / 3;
-    const int c = (legacy - 1) % 3;
-    const QRectF rect(20 + c * 110, 20 + r * 100, 100, 85);
+    if (!blocks_.has(id)) continue;
+    const auto & b = blocks_.at(id);
+    const QPointF c = to_scene(b.x, b.y);
+    const QRectF rect(c.x() - half, c.y() - half, 2 * half, 2 * half);
     const int idx = cell_index_from_display_number(id);
-    const int ph = (idx >= 0) ? (cell_phase_[static_cast<size_t>(idx)] % 4) : 0;
+    const int ph = (idx >= 0) ? (cell_phase_[static_cast<size_t>(idx)] % 5) : 0;
     QColor fill(230, 230, 230);
-    if (ph == 1) {
-      fill = QColor(240, 128, 128);
-    } else if (ph == 2) {
-      fill = QColor(144, 238, 144);
-    } else if (ph == 3) {
-      fill = QColor(135, 206, 235);
-    }
+    if (ph == 1) fill = QColor(240, 128, 128);
+    else if (ph == 2) fill = QColor(144, 238, 144);
+    else if (ph == 3) fill = QColor(135, 206, 235);
+    else if (ph == 4) fill = QColor(240, 176, 96);
     auto * cell = scene_->addRect(rect, QPen(Qt::darkGray, 1), QBrush(fill));
     cell->setZValue(0);
-    auto * t = scene_->addSimpleText(QString::number(id));
+    auto * t = scene_->addSimpleText(QString::asprintf("%d\n(%.2f,%.2f)", id, b.x, b.y));
     t->setBrush(Qt::black);
-    t->setPos(rect.left() + 4, rect.top() + 4);
+    t->setPos(rect.left() + 3, rect.top() + 2);
     t->setZValue(1);
   }
 
-  auto * entry = scene_->addEllipse(
-    QRectF(scene_pos_for_node(0).x() - 8, scene_pos_for_node(0).y() - 8, 16, 16), QPen(Qt::black),
-    QBrush(QColor(255, 220, 0)));
-  entry->setZValue(2);
+  // ---- 入口/出口标记 ----
+  auto draw_marker = [&](int nid, QColor col, const QString & label) {
+    if (!blocks_.has(nid)) return;
+    const QPointF c = center(nid);
+    auto * e = scene_->addEllipse(QRectF(c.x() - 8, c.y() - 8, 16, 16), QPen(Qt::black), QBrush(col));
+    e->setZValue(2);
+    auto * t = scene_->addSimpleText(label);
+    t->setBrush(Qt::black); t->setPos(c.x() + 8, c.y() - 8); t->setZValue(2);
+  };
+  draw_marker(0, QColor(255, 220, 0), QString::fromUtf8("入口0"));
+  draw_marker(13, QColor(200, 200, 255), QString::fromUtf8("出口13"));
 
-  auto * exit = scene_->addEllipse(
-    QRectF(scene_pos_for_node(13).x() - 8, scene_pos_for_node(13).y() - 8, 16, 16), QPen(Qt::black),
-    QBrush(QColor(200, 200, 255)));
-  exit->setZValue(2);
-
-  if (last_path_.empty()) {
-    view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
+  // ---- 路径：从入口起，沿实际经过的方块中心（真实坐标）连线；抓/推/等就地标注 ----
+  if (last_steps_.empty() || !blocks_.has(0)) {
+    view_->fitInView(scene_->itemsBoundingRect().adjusted(-10, -10, 10, 10), Qt::KeepAspectRatio);
     return;
   }
-
+  using PS = robot_interfaces::msg::PlanStep;
   QPainterPath road;
-  QPointF robot_pt = scene_pos_for_node(0);
+  int robot_node = 0;
+  QPointF robot_pt = center(0);
   road.moveTo(robot_pt);
-  bool any_move_segment = false;
-  for (const auto & s : last_path_) {
-    if (s.rfind("MOVE to ", 0) == 0) {
-      try {
-        const int nid = std::stoi(s.substr(8));
-        robot_pt = scene_pos_for_node(nid);
-        road.lineTo(robot_pt);
-        any_move_segment = true;
-      } catch (const std::exception &) {
-      }
+  for (const auto & s : last_steps_) {
+    if (s.type == PS::TYPE_MOVE) {
+      if (!blocks_.has(s.target_id)) continue;
+      robot_node = s.target_id;
+      robot_pt = center(robot_node);
+      road.lineTo(robot_pt);
+    } else if (s.type == PS::TYPE_PICK || s.type == PS::TYPE_PUSH) {
+      if (!blocks_.has(robot_node)) continue;
+      const QPointF c = center(robot_node);
+      const QColor dot = (s.type == PS::TYPE_PICK) ? QColor(0, 160, 0) : QColor(200, 80, 0);
+      auto * d = scene_->addEllipse(QRectF(c.x() - 5, c.y() - 5, 10, 10), QPen(Qt::black, 1), QBrush(dot));
+      d->setZValue(2.5);
+      auto * t = scene_->addSimpleText(
+        QString::fromUtf8(s.type == PS::TYPE_PICK ? "抓" : "推") + QString::number(s.target_id));
+      t->setBrush(dot); t->setPos(c.x() + 5, c.y() - 16); t->setZValue(2.5);
+    } else if (s.type == PS::TYPE_WAIT) {
+      if (!blocks_.has(robot_node)) continue;
+      const QPointF c = center(robot_node);
+      auto * t = scene_->addSimpleText(QString::fromUtf8("等"));
+      t->setBrush(QColor(200, 120, 0)); t->setPos(c.x() + 5, c.y() + 2); t->setZValue(2.5);
     }
   }
-  if (any_move_segment) {
-    auto * path_item = scene_->addPath(road, QPen(QColor(255, 200, 0), 3));
-    path_item->setZValue(1.5);
-  }
-
-  auto * bot = scene_->addEllipse(QRectF(robot_pt.x() - 10, robot_pt.y() - 10, 20, 20), QPen(Qt::black, 2),
-    QBrush(QColor(255, 255, 0)));
+  auto * path_item = scene_->addPath(road, QPen(QColor(255, 170, 0), 3));
+  path_item->setZValue(1.5);
+  auto * bot = scene_->addEllipse(QRectF(robot_pt.x() - 9, robot_pt.y() - 9, 18, 18),
+    QPen(Qt::black, 2), QBrush(QColor(255, 255, 0)));
   bot->setZValue(3);
 
-  view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
+  view_->fitInView(scene_->itemsBoundingRect().adjusted(-10, -10, 10, 10), Qt::KeepAspectRatio);
 }
 
 namespace {
@@ -542,6 +637,10 @@ QString format_step(
         "推 %s  (人在 %s，高度差 %+.2fm)",
         name_of(s.target_id).toUtf8().constData(),
         name_of(s.from_id).toUtf8().constData(), dh);
+    }
+    case PS::TYPE_WAIT: {
+      return QString::asprintf(
+        "等待一拍  (在 %s，等 R1 让开)", name_of(s.from_id).toUtf8().constData());
     }
     default:
       return QString::asprintf("未知步骤 type=%d target=%d", s.type, s.target_id);
@@ -627,6 +726,7 @@ void PlannerWindow::on_plan_clicked()
     }
     log_->setPlainText(QString::fromStdString(oss.str()));
     last_path_.clear();
+    last_steps_.clear();
     redraw_scene();
     r1_preclear_display_a_->setValue(0);
     r1_preclear_display_b_->setValue(0);
@@ -676,16 +776,68 @@ void PlannerWindow::on_plan_clicked()
       node_->get_logger(), "[%zu] %s", i + 1, format_step(steps[i], config.node_heights).toStdString().c_str());
   }
 
-  // 重新构造仅供 redraw_scene() 使用的 MOVE 字符串路径
-  last_path_.clear();
-  for (const auto & step : steps) {
-    if (step.type == robot_interfaces::msg::PlanStep::TYPE_MOVE) {
-      last_path_.push_back("MOVE to " + std::to_string(step.target_id));
-    }
-  }
+  // 存完整步骤供真实坐标绘图（含每步 prep_pose 的 map 坐标）。
+  last_steps_ = steps;
 
   r1_preclear_display_a_->setValue(0);
   r1_preclear_display_b_->setValue(0);
 
+  redraw_scene();
+}
+
+int PlannerWindow::phase_from_code(int code)
+{
+  // 下位机码 -> 界面相位（与 kfs_subscriber_node::state_from_code 语义一致）。
+  //   0 空 / 1 R1正在收取(R1待) / 2 R2 / 3 假 / 4 R1未取(永久障碍)
+  switch (code) {
+    case 1: return 4;   // R1待（橙）
+    case 2: return 2;   // R2
+    case 3: return 3;   // 假
+    case 4: return 1;   // R1 永久障碍
+    default: return 0;  // 0 及未知 → 空
+  }
+}
+
+void PlannerWindow::on_kfs_msg(const std_msgs::msg::Int32MultiArray::SharedPtr msg)
+{
+  if (monitor_chk_ && !monitor_chk_->isChecked()) {
+    return;  // 未开监视：不覆盖手动摆场
+  }
+  if (msg->data.size() != 12) {
+    RCLCPP_WARN(node_->get_logger(), "kfs_positions 长度异常: 期望 12, 收到 %zu", msg->data.size());
+    return;
+  }
+  // data[i] 对应节点 id = i+1；按当前红/蓝区映射回按钮格子。
+  for (int i = 0; i < 12; ++i) {
+    const int idx = cell_index_from_display_number(i + 1);
+    if (idx >= 0) {
+      cell_phase_[static_cast<size_t>(idx)] = phase_from_code(msg->data[static_cast<size_t>(i)]);
+    }
+  }
+  for (int i = 0; i < 12; ++i) {
+    apply_phase_to_button(i);
+  }
+  redraw_scene();
+}
+
+void PlannerWindow::on_plan_msg(const robot_interfaces::msg::Plan::SharedPtr msg)
+{
+  if (monitor_chk_ && !monitor_chk_->isChecked()) {
+    return;
+  }
+  last_steps_ = msg->steps;
+
+  // 文字明细：优先展示真车发来的 notes；再附上本地按同源高度重算的总览+每步。
+  std::ostringstream oss;
+  if (!msg->notes.empty()) {
+    oss << msg->notes;
+    if (msg->notes.back() != '\n') oss << '\n';
+  }
+  oss << format_summary(msg->steps, node_heights_);
+  oss << "----- 每步明细 -----\n";
+  for (size_t i = 0; i < msg->steps.size(); ++i) {
+    oss << "[" << (i + 1) << "] " << format_step(msg->steps[i], node_heights_).toStdString() << '\n';
+  }
+  log_->setPlainText(QString::fromStdString(oss.str()));
   redraw_scene();
 }

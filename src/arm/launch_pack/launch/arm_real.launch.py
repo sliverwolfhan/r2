@@ -81,6 +81,13 @@ def generate_launch_description():
         output="screen",
     )
 
+    # AprilTag 定位：USB 相机检测 tag 0/1，融合发布 usb_camera -> R1_base_footprint 的 TF
+    usb_apriltag = Node(
+        package="usb_apriltag_tf",
+        executable="tag",
+        output="screen",
+    )
+
     static_tf_camera = Node(
     package="tf2_ros",
     executable="static_transform_publisher",

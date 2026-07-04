@@ -62,11 +62,31 @@ def apply(T, xyz):
     return (T @ np.hstack([xyz, np.ones((len(xyz), 1))]).T).T[:, :3]
 
 
-def start_pose_to_T0(start_pose):
-    """Nominal T_map_lio from rough start pose [x, y, yaw]: the LIO origin
-    (robot boot, facing +x) sits at start_pose in the map frame."""
-    T0 = rot_z(start_pose[2])
-    T0[0, 3], T0[1, 3] = start_pose[0], start_pose[1]
+def euler_to_R(roll, pitch, yaw):
+    """ZYX-intrinsic Euler (ROS / tf2 convention): R = Rz(yaw) Ry(pitch) Rx(roll)."""
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    Rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
+    Ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
+    Rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
+    return Rz @ Ry @ Rx
+
+
+def start_pose_to_T0(sp):
+    """Nominal T_map_lio from 6D start pose [x, y, z, roll, pitch, yaw]: the
+    LIO frame origin (lidar at boot) sits at this pose in the map frame.
+
+    Covers two awkward cases that 3D (x,y,yaw) couldn't:
+      · z lets you specify the lidar's height above the map's ground plane,
+        so an LIO output whose z=0 sits at the sensor (not the ground) is
+        handled by the user telling us the offset.
+      · roll/pitch let you describe a tilted or upside-down lidar mount
+        (e.g. roll=pi for a z-down lidar). After T0 is applied the cloud is
+        gravity-aligned in the map frame, so Stage 1/2's 2D rigid suffices."""
+    T0 = np.eye(4)
+    T0[:3, :3] = euler_to_R(sp[3], sp[4], sp[5])
+    T0[:3, 3] = sp[:3]
     return T0
 
 
@@ -76,18 +96,23 @@ def start_pose_to_T0(start_pose):
 def load_config(path: Path):
     with path.open() as f:
         cfg = yaml.safe_load(f)
+    sp = np.asarray(cfg["start_pose_map"], float)
+    if sp.shape != (6,):
+        sys.exit(f"start_pose_map must be 6D [x, y, z, roll, pitch, yaw], "
+                 f"got shape {sp.shape}: {sp.tolist()}")
     return {
         "blocks_red": cfg["blocks_red"],
         "blocks_blue": cfg["blocks_blue"],
         "default_zone": str(cfg.get("default_zone", "red")),
-        "start_pose": np.asarray(cfg["start_pose_map"], float),
+        "start_pose": sp,
         "cell_radius": float(cfg.get("cell_radius", 0.25)),
         "edge_halfwin": float(cfg.get("edge_halfwin", 0.15)),
         "edge_band": float(cfg.get("edge_band", 0.30)),
         "height_tol": float(cfg.get("height_tol", 0.12)),
         "converge_rms": float(cfg.get("converge_rms", 0.03)),
-        "search_xy": float(cfg.get("search_xy", 0.4)),
-        "search_yaw_deg": float(cfg.get("search_yaw_deg", 15.0)),
+        "search_xy": float(cfg.get("search_xy", 0.6)),
+        "search_yaw_deg": float(cfg.get("search_yaw_deg", 25.0)),
+        "z_search_band": float(cfg.get("z_search_band", 5.0)),
     }
 
 
@@ -111,23 +136,57 @@ def load_blocks(yaml_path: Path):
 
 
 # --------------------------------------------------------------------------- #
+# stage 0: auto-correct z error in T0
+# --------------------------------------------------------------------------- #
+def autocorrect_z(xyz, T0, search_band):
+    """After T0 is applied, the ground SHOULD land near map z=0. Any vertical
+    offset means the user's start_pose_map z (lidar mounting height) was off.
+    Find the densest z layer just below the lowest possible block top (0.2 m),
+    treat that as the actual ground, and adjust T0[2,3] to bring it to 0.
+
+    Search range is ASYMMETRIC by design: from -search_band up to +0.15 m.
+    The upper bound is locked at +0.15 m (just below the lowest block top of
+    0.2 m) so we never mistake a block top for the ground; this also makes
+    the function blind to start_pose z values that are TOO BIG (ground
+    lands above +0.15 m in map frame). Lower bound is freely widenable —
+    bump search_band if your lidar is mounted higher than this default."""
+    in_map = apply(T0, xyz)
+    z = in_map[:, 2]
+    lo, hi = -float(search_band), 0.15
+    mask = (z > lo) & (z < hi)
+    if mask.sum() < 1000:
+        return T0, 0.0
+    nbins = max(40, int((hi - lo) / 0.05))
+    hist, edges = np.histogram(z[mask], bins=nbins, range=(lo, hi))
+    i = int(hist.argmax())
+    z_off = float((edges[i] + edges[i + 1]) / 2)
+    if abs(z_off) > 0.10:                  # below this, it's likely binning noise
+        T0 = T0.copy()
+        T0[2, 3] -= z_off
+        return T0, z_off
+    return T0, 0.0
+
+
+# --------------------------------------------------------------------------- #
 # stage 1: height-pattern coarse alignment
 # --------------------------------------------------------------------------- #
 def sample_height(near, cx, cy, r):
+    """Return median z inside a disk at (cx, cy). Caller passes a cloud
+    pre-transformed by T0 (start_pose_to_T0), so ground sits near z=0 in
+    map frame and these z's are directly comparable to block_*.yaml heights."""
     nx, ny, nz = near[:, 0], near[:, 1], near[:, 2]
     m = ((nx - cx) ** 2 + (ny - cy) ** 2 < r * r) & (nz > 0.05)
     zz = nz[m]
     return np.median(zz) if len(zz) >= 10 else np.nan
 
 
-def coarse_align(xyz, grid, xs, ys, cfg):
+def coarse_align(xyz, grid, xs, ys, cfg, T0):
     """Grid-search (dx,dy,dyaw) around T0 to best match the 12 known heights.
 
     Speed: only points in/near the block region matter, so after applying T0
     we crop to the block bounding box (+ a margin covering the search range)
     and subsample. The grid search then runs on ~tens of thousands of points,
     not the full cloud — turning minutes into a second or two."""
-    T0 = start_pose_to_T0(cfg["start_pose"])
     base = apply(T0, xyz)
     centres = [(x, y, grid[(x, y)]) for x in xs for y in ys]
     r = cfg["cell_radius"]
@@ -190,7 +249,8 @@ def coarse_align(xyz, grid, xs, ys, cfg):
 def find_step_along(near, axis, edge_coord, fixed_coord, halfwin, band):
     """Locate a z-step crossing along `axis` (0=x,1=y) at expected `edge_coord`,
     sampling a strip at the other coordinate = fixed_coord +/- band.
-    Returns measured edge position, or None."""
+    Returns measured edge position, or None. Caller passes a cloud already
+    transformed near the map frame (ground ~= z=0)."""
     a = near[:, axis]
     o = near[:, 1 - axis]
     z = near[:, 2]
@@ -311,17 +371,28 @@ def main():
     grid, xs, ys = load_blocks(bpath)
     print(f"Zone: {zone}   block table: {bpath}")
     sp = cfg["start_pose"]
-    print(f"Start pose (T0): x={sp[0]:.2f} y={sp[1]:.2f} yaw={np.degrees(sp[2]):.0f}deg")
+    print(f"Start pose (T0): "
+          f"xyz=[{sp[0]:.2f}, {sp[1]:.2f}, {sp[2]:.2f}]  "
+          f"rpy=[{np.degrees(sp[3]):.1f}, {np.degrees(sp[4]):.1f}, "
+          f"{np.degrees(sp[5]):.1f}]deg")
 
     print(f"Reading {args.in_pcd} ...")
     xyz = read_pcd_xyz(str(args.in_pcd))
     print(f"  {len(xyz)} points")
 
+    T0 = start_pose_to_T0(sp)
+    T0, z_off = autocorrect_z(xyz, T0, cfg["z_search_band"])
+    if abs(z_off) > 0.0:
+        print(f"z auto-correction: ground was at map z={z_off:+.2f} m after "
+              f"your T0; shifting T0[2,3] by {-z_off:+.2f} m so ground -> 0. "
+              f"(Effective lidar height = {sp[2] - z_off:.2f} m; update "
+              f"start_pose_map[2] to skip this next time.)")
+
     print("\nStage 1: height-pattern coarse align ...")
-    T_coarse, hcost = coarse_align(xyz, grid, xs, ys, cfg)
+    T_coarse, hcost = coarse_align(xyz, grid, xs, ys, cfg, T0)
     print(f"  mean height residual: {hcost:.3f} m  "
           f"(yaw={np.degrees(np.arctan2(T_coarse[1,0],T_coarse[0,0])):.2f}deg, "
-          f"t=[{T_coarse[0,3]:.2f}, {T_coarse[1,3]:.2f}])")
+          f"t=[{T_coarse[0,3]:.2f}, {T_coarse[1,3]:.2f}, {T_coarse[2,3]:.2f}])")
     if hcost > cfg["height_tol"]:
         sys.exit(f"\nHeight pattern does not match (residual {hcost:.3f} m > "
                  f"{cfg['height_tol']} m). Wrong --zone, 90deg off, or "

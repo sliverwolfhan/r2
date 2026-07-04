@@ -41,10 +41,11 @@ const char * state_name(r2_planner::BlockState s)
 {
   using r2_planner::BlockState;
   switch (s) {
-    case BlockState::EMPTY:    return "EMPTY";
-    case BlockState::R1_KFS:   return "R1_KFS";
-    case BlockState::R2_KFS:   return "R2_KFS";
-    case BlockState::FAKE_KFS: return "FAKE_KFS";
+    case BlockState::EMPTY:      return "EMPTY";
+    case BlockState::R1_KFS:     return "R1_KFS";
+    case BlockState::R2_KFS:     return "R2_KFS";
+    case BlockState::FAKE_KFS:   return "FAKE_KFS";
+    case BlockState::R1_PENDING: return "R1_PENDING";
   }
   return "?";
 }
@@ -106,6 +107,13 @@ public:
     // MOVE 发布的 prep_pose.theta 偏移（弧度），不影响 turn_deg
     move_prep_theta_offset_ = this->declare_parameter<double>("move_prep_theta_offset", 0.0);
 
+    // R1 块定时消失：把码1的 R1 块建模为"会随时间让开的硬障碍"。
+    //   enable=false（默认）时码1仍当空地，行为与历史一致。
+    r1_timed_removal_enable_ = this->declare_parameter<bool>("r1_timed_removal_enable", false);
+    r1_removal_steps_ = this->declare_parameter<int>("r1_removal_steps", 3);
+    // 原地等待一步的代价，默认取已被 yaml 覆盖后的 move_cost（故放在 move_cost 之后声明）。
+    wait_cost_ = this->declare_parameter<double>("wait_cost", cost_.move_cost);
+
     // 高度开关：true 时把升/降代价清零并强制可上 400，使路径规划完全忽略高度
     const bool ignore_height = this->declare_parameter<bool>("ignore_height", false);
     if (ignore_height) {
@@ -154,6 +162,9 @@ private:
     config.block_height_offset = block_height_offset_;
     config.grasp_prep_theta_offset = grasp_prep_theta_offset_;
     config.move_prep_theta_offset = move_prep_theta_offset_;
+    config.r1_timed_removal_enable = r1_timed_removal_enable_;
+    config.r1_removal_steps = r1_removal_steps_;
+    config.wait_cost = wait_cost_;
     // 抓取偏好：机器人物理左手列（+y 那一列）。红区 {3,6,9,12}，蓝区镜像 {1,4,7,10}。
     config.preferred_pick_nodes = zone_blue_
       ? std::unordered_set<int>{1, 4, 7, 10}
@@ -161,7 +172,13 @@ private:
 
     std::string line;
     for (int i = 0; i < 12; ++i) {
-      const r2_planner::BlockState s = state_from_code(msg->data[static_cast<size_t>(i)]);
+      const int32_t code = msg->data[static_cast<size_t>(i)];
+      r2_planner::BlockState s = state_from_code(code);
+      // 启用定时消失时，码1（R1 正在收取的目标）从"空地"改判为 R1_PENDING（定时消失障碍）。
+      // 关闭时保持 state_from_code 的历史映射（码1→EMPTY），行为逐位一致。
+      if (r1_timed_removal_enable_ && code == 1) {
+        s = r2_planner::BlockState::R1_PENDING;
+      }
       config.initial_items[i + 1] = s;
       line += " [" + std::to_string(i + 1) + "]" + state_name(s);
     }
@@ -210,6 +227,9 @@ private:
   double block_height_offset_ = 0.0;
   double grasp_prep_theta_offset_ = 0.0;
   double move_prep_theta_offset_ = 0.0;
+  bool r1_timed_removal_enable_ = false;
+  int r1_removal_steps_ = 3;
+  double wait_cost_ = 1.0;
   std::string blocks_path_;
   bool zone_blue_ = false;
   std::atomic<bool> planned_{false};

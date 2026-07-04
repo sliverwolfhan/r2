@@ -25,9 +25,10 @@ constexpr int KFS_TARGET_COUNT = 2; // R2 只需要收集 2 个 R2 KFS 即可 (�
 // 方块类型枚举
 enum class BlockState {
     EMPTY,       // 空的，可通行
-    R1_KFS,      // R1 秘籍 (R2的红色障碍)
+    R1_KFS,      // R1 秘籍 (R2的红色障碍，永久障碍：码4，R1不取)
     R2_KFS,      // R2 秘籍 (R2的绿色目标)
-    FAKE_KFS     // 假秘籍 (黑色障碍)
+    FAKE_KFS,    // 假秘籍 (黑色障碍)
+    R1_PENDING   // R1 正在收取的目标 (码1)：启用定时消失时按"会随时间让开的硬障碍"处理
 };
 
 // --- 环境模型 ---
@@ -87,6 +88,20 @@ struct ForestConfig {
     // 由调用方按红/蓝区填写（红区填机器人物理左手列 {3,6,9,12}，蓝区 {1,4,7,10}）；
     // 留空则关闭该偏好。仅影响 PICK 代价、不影响 MOVE/PUSH，前排强制抓取规则保持不变。
     std::unordered_set<int> preferred_pick_nodes;
+
+    // --- R1 块定时消失（把码1的 R1_PENDING 块建模为"会随时间让开的硬障碍"）---
+    // 关闭时（默认）R1_PENDING 当空地，行为与历史一致。
+    bool r1_timed_removal_enable = false;
+    // R2 每走几步 R1 消失一个（所有动作 MOVE/PICK/PUSH/WAIT 都算一步）。
+    int  r1_removal_steps = 3;
+    // 原地等待一步的代价（默认 = move_cost）。
+    double wait_cost = 1.0;
+    // R1 消失顺序表：节点 id → 第几个被清（1 起）。构造器按"高度降序、同高节点号升序"算好，
+    // 使 600 高度（6/8）最先；第 k 个块在 step >= k*r1_removal_steps 时视为已消失。
+    std::unordered_map<int, int> r1_removal_order;
+    // step 饱和上界 = N*r1_removal_steps（N=R1_PENDING 块数），超过后所有 R1 都已清除，
+    // 入哈希时 clamp 到此值，避免 A* 绕圈无限抬高 step 导致状态空间爆炸/不终止。
+    int  r1_max_relevant_step = 0;
 };
 
 // --- 状态表示 ---
@@ -96,6 +111,9 @@ struct SearchState {
     int kfs_held_count;        // 当前抓取的 KFS 数量 (0, 1, 2)
     uint16_t env_mask;         // 环境掩码，12 个位代表 1-12 号方块是否仍被占据 (True=不可通行)
     int heading;               // 车头朝向 0/1/2/3 = +x/+y/-x/-y；起点朝 +x（对着 1/2/3）
+    int step_count = 0;        // 已执行的动作步数（MOVE/PICK/PUSH/WAIT 各 +1），用于 R1 消失判定
+    int step_key = 0;          // 入哈希/判等用的步数键 = enable ? min(step_count, max_relevant) : 0
+                               // 关功能时恒 0，closed_set 行为与历史逐位一致
 
     // 用于优先级队列和路径回溯的属性
     double g_cost;             // 从起点到当前状态的实际累计代价
@@ -109,7 +127,8 @@ struct SearchState {
         return current_node_id == other.current_node_id &&
                kfs_held_count == other.kfs_held_count &&
                env_mask == other.env_mask &&
-               heading == other.heading;
+               heading == other.heading &&
+               step_key == other.step_key;
     }
 };
 
@@ -120,7 +139,8 @@ struct StateHasher {
         std::size_t h2 = std::hash<int>()(state.kfs_held_count);
         std::size_t h4 = std::hash<uint16_t>()(state.env_mask);
         std::size_t h5 = std::hash<int>()(state.heading);
-        return h1 ^ (h2 << 1) ^ (h4 << 3) ^ (h5 << 5);
+        std::size_t h6 = std::hash<int>()(state.step_key);
+        return h1 ^ (h2 << 1) ^ (h4 << 3) ^ (h5 << 5) ^ (h6 << 7);
     }
 };
 
@@ -165,6 +185,12 @@ private:
     int moveHeading(int from_node, int to_node) const;
     // 从 cur 朝向转到 next 朝向需要的 90° 档数（0/1/2），用于转弯代价。
     int turnQuarters(int from_heading, int to_heading) const;
+    // 启用时按"高度降序、同高节点号升序"算 R1 消失顺序表与 step 饱和上界，写入 config_。
+    void initR1Removal();
+    // R1 块在给定步数下是否仍挡路（未消失）。功能关时恒 false。
+    bool isR1Blocking(int node, int step) const;
+    // 计算入哈希/判等用的步数键：enable ? min(step, r1_max_relevant_step) : 0。
+    int computeStepKey(int step) const;
     // 抓块转向的 90° 档数：块相对车头在 前/左 → 0（免转向，夹爪在左手），
     // 右 → 1（转 90°），后 → 2（掉头）。block_heading 为块相对当前格的绝对方位。
     int pickTurnQuarters(int from_heading, int block_heading) const;

@@ -4,20 +4,72 @@
 #include <algorithm>
 #include <stdexcept>
 #include <cmath>
+#include <vector>
 
 namespace r2_planner {
 
-R2MeilinPlanner::R2MeilinPlanner(const ForestConfig& config) : config_(config) {}
+R2MeilinPlanner::R2MeilinPlanner(const ForestConfig& config) : config_(config) {
+    initR1Removal();
+}
 
 R2MeilinPlanner::R2MeilinPlanner(const ForestConfig& config, const BlockTable & blocks)
-: config_(config), blocks_(blocks), has_blocks_(true) {}
+: config_(config), blocks_(blocks), has_blocks_(true) {
+    initR1Removal();
+}
+
+void R2MeilinPlanner::initR1Removal() {
+    config_.r1_removal_order.clear();
+    config_.r1_max_relevant_step = 0;
+    if (!config_.r1_timed_removal_enable) return;
+
+    // 收集所有 R1_PENDING 节点，按"高度降序、同高节点号升序"排序：
+    // 600 高度（6/8）天然排最前，6 < 8 故 6 先消失。
+    std::vector<int> pending;
+    for (const auto & kv : config_.initial_items) {
+        if (kv.second == BlockState::R1_PENDING) pending.push_back(kv.first);
+    }
+    auto height_of = [&](int n) {
+        auto it = config_.node_heights.find(n);
+        return it != config_.node_heights.end() ? it->second : 0.0;
+    };
+    std::sort(pending.begin(), pending.end(), [&](int a, int b) {
+        const double ha = height_of(a), hb = height_of(b);
+        if (std::abs(ha - hb) > 1e-6) return ha > hb;  // 高度降序
+        return a < b;                                  // 同高节点号升序
+    });
+    for (size_t i = 0; i < pending.size(); ++i) {
+        config_.r1_removal_order[pending[i]] = static_cast<int>(i) + 1;  // 1 起
+    }
+    config_.r1_max_relevant_step =
+        static_cast<int>(pending.size()) * config_.r1_removal_steps;
+}
+
+bool R2MeilinPlanner::isR1Blocking(int node, int step) const {
+    if (!config_.r1_timed_removal_enable) return false;
+    if (node < 1 || node > NUM_FOREST_BLOCKS) return false;
+    auto it = config_.initial_items.find(node);
+    if (it == config_.initial_items.end() || it->second != BlockState::R1_PENDING) {
+        return false;
+    }
+    const int order = config_.r1_removal_order.at(node);  // 启用时 pending 节点必有序号
+    return step < order * config_.r1_removal_steps;       // 还没到消失步数 → 仍挡路
+}
+
+int R2MeilinPlanner::computeStepKey(int step) const {
+    if (!config_.r1_timed_removal_enable) return 0;
+    return std::min(step, config_.r1_max_relevant_step);
+}
 
 uint16_t R2MeilinPlanner::generateInitialMask() const {
     uint16_t mask = 0;
     for (int i = 1; i <= NUM_FOREST_BLOCKS; ++i) {
-        if (config_.initial_items.count(i) && config_.initial_items.at(i) != BlockState::EMPTY) {
-            mask |= (1 << (i - 1));
-        }
+        if (!config_.initial_items.count(i)) continue;
+        const BlockState s = config_.initial_items.at(i);
+        if (s == BlockState::EMPTY) continue;
+        // R1_PENDING 不进 env_mask：它是"会随时间让开"的动态障碍，挡路由 isR1Blocking
+        // 按 step_count 判定。若置位 env_mask，消失步数到了也无法通行（env_mask 无清位机制）。
+        if (s == BlockState::R1_PENDING) continue;
+        mask |= (1 << (i - 1));
     }
     return mask;
 }
@@ -127,6 +179,7 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
     start->current_node_id = ENTRY_NODE_ID; start->kfs_held_count = 0;
     start->env_mask = generateInitialMask(); start->g_cost = 0.0;
     start->heading = 0;  // 车头朝 +x，对着 1/2/3
+    start->step_count = 0; start->step_key = computeStepKey(0);
     start->f_cost = calculateHeuristic(*start); start->parent = nullptr; start->action_taken = "START";
     open_list.push(start);
 
@@ -148,18 +201,40 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
         const bool is_forced_pick = (front_row_has_target && current->kfs_held_count == 0);
 
         // 1. MOVE 动作（强制态下禁止移动，必须先抓前排）
+        //    R1_PENDING 块未消失前禁止踩上去（与静态占据并联判定）。
         for (int next : neighbors) {
             if (is_forced_pick) break;
-            if (!isNodeOccupied(current->env_mask, next)) {
+            if (!isNodeOccupied(current->env_mask, next)
+                && !isR1Blocking(next, current->step_count)) {
                 auto ns = std::make_shared<SearchState>(*current);
                 const int nh = moveHeading(current->current_node_id, next);
                 const int q = turnQuarters(current->heading, nh);
                 ns->current_node_id = next;
                 ns->heading = nh;
+                ns->step_count = current->step_count + 1;
+                ns->step_key = computeStepKey(ns->step_count);
                 ns->g_cost += calculateMoveCost(current->current_node_id, next)
                               + q * config_.cost.turn_cost;
                 ns->f_cost = ns->g_cost + calculateHeuristic(*ns); ns->parent = current;
                 ns->action_taken = "MOVE to " + std::to_string(next);
+                if (!closed_set.count(*ns)) open_list.push(ns);
+            }
+        }
+
+        // 1.5 WAIT 动作（仅当启用功能、非强制态、且有未消失的 R1 邻居挡路时）：
+        //     原地等一步让 R1 让开。等待本身有 wait_cost，A* 在"绕远路 vs 等"间权衡。
+        if (config_.r1_timed_removal_enable && !is_forced_pick) {
+            bool has_blocking_neighbor = false;
+            for (int n : neighbors) {
+                if (isR1Blocking(n, current->step_count)) { has_blocking_neighbor = true; break; }
+            }
+            if (has_blocking_neighbor) {
+                auto ns = std::make_shared<SearchState>(*current);
+                ns->step_count = current->step_count + 1;
+                ns->step_key = computeStepKey(ns->step_count);
+                ns->g_cost += config_.wait_cost;
+                ns->f_cost = ns->g_cost + calculateHeuristic(*ns); ns->parent = current;
+                ns->action_taken = "WAIT";
                 if (!closed_set.count(*ns)) open_list.push(ns);
             }
         }
@@ -200,6 +275,8 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                     }
                     pick_cost += turn_extra;
                     ns->heading = turned_heading;
+                    ns->step_count = current->step_count + 1;
+                    ns->step_key = computeStepKey(ns->step_count);
                     ns->g_cost += pick_cost; ns->f_cost = ns->g_cost + calculateHeuristic(*ns);
                     ns->parent = current; ns->action_taken = "PICK at " + std::to_string(adj);
                     if (!closed_set.count(*ns)) open_list.push(ns);
@@ -210,6 +287,8 @@ std::vector<std::string> R2MeilinPlanner::planPath() {
                     auto ns_push = std::make_shared<SearchState>(*current);
                     ns_push->env_mask = clearNodeOccupied(ns_push->env_mask, adj);
                     ns_push->heading = turned_heading;
+                    ns_push->step_count = current->step_count + 1;
+                    ns_push->step_key = computeStepKey(ns_push->step_count);
                     ns_push->g_cost += calculatePushCost() + turn_extra;
                     ns_push->f_cost = ns_push->g_cost + calculateHeuristic(*ns_push);
                     ns_push->parent = current; ns_push->action_taken = "PUSH " + std::to_string(adj);
@@ -230,7 +309,7 @@ double normalize_angle(double a) {
 
 // 字符串解析助手；返回 false 表示该步格式异常应跳过。
 struct ParsedAction {
-    enum Op { MOVE, PICK, PUSH, UNKNOWN } op = UNKNOWN;
+    enum Op { MOVE, PICK, PUSH, WAIT, UNKNOWN } op = UNKNOWN;
     int target = 0;
 };
 
@@ -245,6 +324,8 @@ ParsedAction parseAction(const std::string & s) {
     } else if (s.rfind("PUSH ", 0) == 0) {
         p.op = ParsedAction::PUSH;
         try { p.target = std::stoi(s.substr(5)); } catch (...) { p.op = ParsedAction::UNKNOWN; }
+    } else if (s.rfind("WAIT", 0) == 0) {
+        p.op = ParsedAction::WAIT;   // 原地等待，无 target
     }
     return p;
 }
@@ -318,7 +399,23 @@ std::vector<robot_interfaces::msg::PlanStep> R2MeilinPlanner::planPathStruct() {
 
         robot_interfaces::msg::PlanStep step;
 
-        if (a.op == ParsedAction::MOVE) {
+        if (a.op == ParsedAction::WAIT) {
+            // 原地等待一拍：from==target==当前节点，无坐标动作。机器人位置/朝向不变。
+            step.type = robot_interfaces::msg::PlanStep::TYPE_WAIT;
+            step.from_id = robot_node;
+            step.target_id = robot_node;
+            if (blocks_.has(robot_node)) {
+                const auto & cur = blocks_.at(robot_node);
+                step.prep_pose.x = cur.x;
+                step.prep_pose.y = cur.y;
+            }
+            // 朝向保持上一段行进朝向；turn_deg=0（不转底盘）。
+            step.prep_pose.theta = has_prev_heading ? prev_heading : 0.0;
+            step.turn_deg = 0.0;
+            step.abs_dh = 0.0;
+            step.stair_dir = robot_interfaces::msg::PlanStep::STAIR_NONE;
+            // robot_node / robot_heading / prev_heading 全部不变（原地）。
+        } else if (a.op == ParsedAction::MOVE) {
             step.type = robot_interfaces::msg::PlanStep::TYPE_MOVE;
             step.from_id = robot_node;
             step.target_id = a.target;
