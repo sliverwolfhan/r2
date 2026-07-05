@@ -18,11 +18,11 @@ Notes:
 """
 
 # ============== 在这里修改参数 ==============
-FILE   = "red4.pcd"   # 输入 PCD
-OUTPUT = "red5.pcd"   # 输出 PCD
+FILE   = "map_blue.pcd"   # 输入 PCD
+OUTPUT = "map_blue1.pcd"   # 输出 PCD
 
-X_MIN, X_MAX = -0.35, 14.5   # X 保留范围（米）
-Y_MIN, Y_MAX = -0.35, 6.3    # Y 保留范围
+X_MIN, X_MAX = -0.1, 12.5   # X 保留范围（米）
+Y_MIN, Y_MAX = -6.1, 0.1    # Y 保留范围
 Z_MIN, Z_MAX = -4.0,  4.0    # Z 保留范围
 # ============================================
 

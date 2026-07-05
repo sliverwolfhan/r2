@@ -1,0 +1,60 @@
+# ============================================================
+# 理想模型 GICP 对齐配置 —— 给 auto_align_gicp.py 用。
+# 把现场新建的雷达系 PCD 用 GICP 配到一张"画在 map 系里的理想点云模型"上,
+# 配准结果直接就是 T_map_lio,不用 CloudCompare 点锚点。
+#
+# 适用:任意场地(非矩形/无梅花桩也行),只要你能提供
+#   1) 一张画在目标 map 系、原点落在红/蓝角的理想模型 PCD;
+#   2) 一个大致起姿 init_pose_map(6D)给 GICP 当初值 + 破对称。
+#
+# 先构建一次 C++ shim(只需一次):
+#   cmake -S tools/auto/gicp -B tools/auto/gicp/build
+#   cmake --build tools/auto/gicp/build
+# ============================================================
+
+# --- 理想模型(GICP 目标 / 标准地图) --------------------------------------
+# 红区标准地图 PCD 路径(相对本配置文件目录)。必须已经画在红区 map 系里。
+prior_model: map_blue.pcd
+
+# 蓝区理想模型(可选)。红蓝 map 系关于 map x 轴镜像:
+#   - 若你单独画了蓝区模型,在这里填它的路径;
+#   - 若留空,--zone blue 时脚本自动把红区模型的 y 取反当蓝区目标。
+prior_model_blue:
+
+# --- 待配准点云(GICP 源 / 输入)与输出 -----------------------------------
+# 路径都相对本配置文件目录。命令行 --in / --out / --matrix-out 可覆盖。
+input_pcd:  scans.pcd            # 现场新建的 LIO 系 PCD(要对齐的那张)
+output_pcd: scans_map_blue.pcd        # 对齐后输出的 map 系 PCD(留空则只算变换不出图)
+matrix_out: T_map_lio.yaml       # 4x4 变换矩阵输出路径
+
+# 默认建图区(red / blue)。命令行 --zone 可覆盖。
+default_zone: blue
+
+# --- GICP 初始化位姿:机器人在 map 系的 6D 起姿 ---------------------------
+# [x, y, z, roll, pitch, yaw],平移米、角度弧度。
+# GICP 是局部优化,必须给初值:这个位姿构造"名义变换 T0"把雷达系点云先摆到
+# map 系附近,并在对称场地里破 90/180 度对称。误差 ≲ ±0.3m/±10 度即可。
+# 旋转约定与在线重定位节点 small_gicp_relocalization 的 init_pose 完全一致
+# (ZYX:R = Rz(yaw)·Ry(pitch)·Rx(roll))。Point-LIO 是重力对齐的,roll/pitch
+# 通常填 0,z 填地面在 map 系的高度(一般 0)。
+# 红蓝镜像:蓝区自动把 y、roll、yaw 取反(x/z/pitch 不变),只填红区这一套。
+init_pose_map: [0.5, 0.5, 0.5, 0.0, 0.0, 0.0]
+
+# --- GICP 参数(一般保持默认) ---------------------------------------------
+downsampling_resolution:     0.05   # 体素降采样分辨率(米),对齐重定位节点 registered_leaf_size
+max_correspondence_distance: 0.3    # 最大对应点距离(米);初值越差给越大
+max_iterations:              20
+num_threads:                 4
+
+
+passthrough:
+  enabled: true
+  x: [-0.3, 12.0]
+  y: [-6.5, 0.3]
+  z: [-0.6, 1.0]
+# --- 质量提示阈值(只打印 WARNING,不阻止出图) ---------------------------
+# 这些只是提示:small_gicp 一定会跑、结果一定会写。低于阈值只是提醒你这次
+# 配准可能不准(起姿差 / 选错区 / LIO 图比标准图大很多),不会拦着不出图。
+inlier_ratio_min: 0.5    # 内点/源点 低于此值 → 提示两云重叠少
+max_shift_m:      1.0    # 精修结果相对 T0 平移漂移超此值 → 提示可能翻面/落错吸引域
+max_yaw_deg:      20.0   # 精修结果相对 T0 朝向漂移超此值 → 同上

@@ -2,7 +2,7 @@
 
 把 Point-LIO 建出来的 PCD 通过若干已知锚点对齐到目标 `map` 坐标系，输出可以直接喂给 `small_gicp_relocalization` 的先验地图。
 
-> **比赛现场没时间手点锚点？** 如果场地是**矩形**且建图起姿大致可控，用 [auto/](auto/) 目录里的 `auto_align_walls.py`，一条命令出图，不用 CloudCompare。本节的锚点法保留给非矩形场地 / 高精度需求。
+> **比赛现场没时间手点锚点？** 如果有一张画在 map 系的理想点云模型，用 [auto/](auto/) 目录里的 `auto_align_gicp.py`，给个大致起姿就用 GICP 一条命令出图，不用 CloudCompare。本节的锚点法保留给没有理想模型 / 高精度需求。
 
 ## 解决什么问题
 
@@ -232,3 +232,6 @@ min_T  Σᵢ ‖ T · pᵢ_lio − pᵢ_map ‖²
 ---
 
 > 矩形场地的**无标定自动对齐**已挪到 [auto/](auto/) 目录，见 [auto/README.md](auto/README.md)。
+
+
+python3 mesh_to_pointcloud.py rc_2026.ply rc_2026_cloud.ply --scale 0.001 --density 2000   # 每平米2000点
