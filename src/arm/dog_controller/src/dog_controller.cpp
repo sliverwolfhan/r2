@@ -137,12 +137,31 @@ controller_interface::return_type DogController::update(const rclcpp::Time& time
         last_target_log_time_ = time;
     }
 
+    // [CMD_TorqeLog] 计算 -> 打印 -> 下发，三段用同一个数组，保证日志与实际下发值一致。
+    // 仿真与真机走的是同一段 update()，天然两边都能看到。每 200ms 刷屏一次，避免 500Hz 时日志爆炸。
+    double payload_effort[kJointCount];
     for (std::size_t i = 0; i < kJointCount; ++i) {
-        double effort = joint_kp_[i] * (static_cast<double>(joints_target_.motor[i].rad) - static_cast<double>(joints_state_.motor[i].rad)) +
-                        joint_kd_[i] * (static_cast<double>(joints_target_.motor[i].omega) - static_cast<double>(joints_state_.motor[i].omega)) +
-                        static_cast<double>(joints_target_.motor[i].torque);
-        effort = std::clamp(effort, -command_effort_limit_, command_effort_limit_);
-        command_interfaces_[i].set_value(effort);
+        payload_effort[i] = joint_kp_[i] * (static_cast<double>(joints_target_.motor[i].rad) - static_cast<double>(joints_state_.motor[i].rad)) +
+                            joint_kd_[i] * (static_cast<double>(joints_target_.motor[i].omega) - static_cast<double>(joints_state_.motor[i].omega)) +
+                            static_cast<double>(joints_target_.motor[i].torque);
+        payload_effort[i] = std::clamp(payload_effort[i], -command_effort_limit_, command_effort_limit_);
+    }
+
+    RCLCPP_INFO_THROTTLE(
+        get_node()->get_logger(), *get_node()->get_clock(), 200,
+        "下位机力矩 cmd_effort[Nm] j1=%.3f j2=%.3f j3=%.3f j4=%.3f j5=%.3f j6=%.3f | 前馈fb_torque[Nm] j1=%.3f j2=%.3f j3=%.3f j4=%.3f j5=%.3f j6=%.3f | limit=%.1f Nm",
+        payload_effort[0], payload_effort[1], payload_effort[2],
+        payload_effort[3], payload_effort[4], payload_effort[5],
+        static_cast<double>(joints_target_.motor[0].torque),
+        static_cast<double>(joints_target_.motor[1].torque),
+        static_cast<double>(joints_target_.motor[2].torque),
+        static_cast<double>(joints_target_.motor[3].torque),
+        static_cast<double>(joints_target_.motor[4].torque),
+        static_cast<double>(joints_target_.motor[5].torque),
+        command_effort_limit_);
+
+    for (std::size_t i = 0; i < kJointCount; ++i) {
+        command_interfaces_[i].set_value(payload_effort[i]);
     }
 
     return controller_interface::return_type::OK;

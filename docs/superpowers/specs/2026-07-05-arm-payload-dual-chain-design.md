@@ -210,3 +210,45 @@ C++ 原生 `main` 自包含（c++17）。不依赖 gtest：
 main 一致性约束：
 - 模型 `src/arm/arm/model_2/robotic_arm.urdf` 已经 untracked 存在于 main，不做改动
 - nomain arm/model 与 arm_calc 之外的用户代码不感知变化（`ArmCalc` 公开接口签名不变）
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

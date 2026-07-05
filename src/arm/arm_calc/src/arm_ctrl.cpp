@@ -125,23 +125,38 @@ void ArmCtrlNode::load_robot_description_and_build_solver() {
         throw std::runtime_error("failed to build KDL chain from " + base_link_ + " to " + tip_link_);
     }
 
-    // Load payload URDF from local file and build the payload KDL chain.
-    const std::string payload_urdf_path = this->get_parameter("payload_urdf_path").as_string();
+    // Build the payload KDL chain. When use_payload=false (the default) we never
+    // touch the filesystem: the nominal chain is reused as the payload chain so
+    // ArmCalc's payload-side KDL solvers are still constructed on a valid chain.
+    // Build the payload KDL chain.
+    // 即便当前 use_payload=false，也从文件里把 payload 链读进来，切换时才能立即生效。
+    // 这样 use_payload 的含义是"用哪条模型"，而不是"是否尝试加载文件"。
+    // 文件不存在时降级为名义链 + 一次性 warn，不会崩溃，但切换是 no-op。
     KDL::Chain payload_chain;
+    bool payload_loaded_from_file = false;
+    const std::string payload_urdf_path = this->get_parameter("payload_urdf_path").as_string();
     {
         std::ifstream input(payload_urdf_path);
-        if (!input.is_open()) {
-            throw std::runtime_error("unable to open payload URDF: " + payload_urdf_path);
+        if (input.is_open()) {
+            std::ostringstream buffer;
+            buffer << input.rdbuf();
+            KDL::Tree payload_tree;
+            if (kdl_parser::treeFromString(buffer.str(), payload_tree) &&
+                payload_tree.getChain(base_link_, tip_link_, payload_chain)) {
+                payload_loaded_from_file = true;
+            } else {
+                RCLCPP_WARN(this->get_logger(),
+                            "Payload URDF found but could not be parsed/built: %s. Falling back to nominal chain.",
+                            payload_urdf_path.c_str());
+            }
+        } else {
+            RCLCPP_WARN(this->get_logger(),
+                        "Payload URDF not found at: %s. Payload solvers fall back to nominal chain; use_payload switch will be a no-op.",
+                        payload_urdf_path.c_str());
         }
-        std::ostringstream buffer;
-        buffer << input.rdbuf();
-        KDL::Tree payload_tree;
-        if (!kdl_parser::treeFromString(buffer.str(), payload_tree)) {
-            throw std::runtime_error("failed to parse payload URDF into KDL tree: " + payload_urdf_path);
-        }
-        if (!payload_tree.getChain(base_link_, tip_link_, payload_chain)) {
-            throw std::runtime_error("failed to build payload KDL chain from " + base_link_ + " to " + tip_link_);
-        }
+    }
+    if (!payload_loaded_from_file) {
+        payload_chain = arm_chain_;
     }
 
     arm_calc_ = std::make_shared<ArmCalc>(arm_chain_, payload_chain);
