@@ -200,6 +200,17 @@ small_gicp_relocalization:
     # The prior_pcd_file does not need to be specified since it going to be set by defaults in launch.
     # prior_pcd_file: ""
 
+    # --- 激光测距定位模式 ---
+    # true: 假设机器人已垂直墙体，开机时用两个墙面测距激光算一次 map->odom 并持续广播固定值，不跑 GICP。
+    # false: 使用上面的 GICP 点云匹配定位。
+    laser_localization_enabled: false
+    laser_x_topic: "/AT_R2/distance_head"    # x 方向测距话题 (std_msgs/Float64)
+    laser_y_topic: "/AT_R2/distance_grasp"   # y 方向测距话题 (std_msgs/Float64)
+    laser_distance_scale: 0.001              # 原始距离单位换算, mm -> m
+    laser_x_offset: 0.0                      # x = distance_head * scale + laser_x_offset (米)
+    laser_y_offset: 0.0                      # y = distance_grasp * scale + laser_y_offset (米)
+    # 注意: 激光模式下朝向(yaw)沿用上面 init_pose 的第 6 个值。
+
 transformed_pcd_publisher:
   ros__parameters:
     use_sim_time: False

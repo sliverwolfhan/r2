@@ -61,6 +61,13 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("lidar_frame", "");
   this->declare_parameter("prior_pcd_file", "");
   this->declare_parameter("init_pose", std::vector<double>{0., 0., 0., 0., 0., 0.});
+  // Laser-ranging relocalization mode parameters.
+  this->declare_parameter("laser_localization_enabled", false);
+  this->declare_parameter("laser_x_topic", "/AT_R2/distance_head");
+  this->declare_parameter("laser_y_topic", "/AT_R2/distance_grasp");
+  this->declare_parameter("laser_distance_scale", 0.001);
+  this->declare_parameter("laser_x_offset", 0.0);
+  this->declare_parameter("laser_y_offset", 0.0);
 
   this->get_parameter("num_threads", num_threads_);
   this->get_parameter("num_neighbors", num_neighbors_);
@@ -90,6 +97,22 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("lidar_frame", lidar_frame_);
   this->get_parameter("prior_pcd_file", prior_pcd_file_);
   this->get_parameter("init_pose", init_pose_);
+  this->get_parameter("laser_localization_enabled", laser_localization_enabled_);
+  this->get_parameter("laser_x_topic", laser_x_topic_);
+  this->get_parameter("laser_y_topic", laser_y_topic_);
+  this->get_parameter("laser_distance_scale", laser_distance_scale_);
+  this->get_parameter("laser_x_offset", laser_x_offset_);
+  this->get_parameter("laser_y_offset", laser_y_offset_);
+
+  laser_x_received_ = false;
+  laser_y_received_ = false;
+  laser_pose_initialized_ = false;
+  laser_x_raw_ = 0.0;
+  laser_y_raw_ = 0.0;
+  // In laser mode the GICP point-cloud relocalization must not run/overwrite the pose.
+  if (laser_localization_enabled_) {
+    relocalization_enabled_ = false;
+  }
 
   if (sliding_window_filter_size_ < 1) {
     RCLCPP_WARN(
@@ -152,6 +175,13 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   initial_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "initialpose", 10,
     std::bind(&SmallGicpRelocalizationNode::initialPoseCallback, this, std::placeholders::_1));
+
+  laser_x_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+    laser_x_topic_, 10,
+    std::bind(&SmallGicpRelocalizationNode::laserDistanceXCallback, this, std::placeholders::_1));
+  laser_y_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+    laser_y_topic_, 10,
+    std::bind(&SmallGicpRelocalizationNode::laserDistanceYCallback, this, std::placeholders::_1));
 
   register_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(500),  // 2 Hz
@@ -255,6 +285,25 @@ rcl_interfaces::msg::SetParametersResult SmallGicpRelocalizationNode::parameters
         return result;
       }
       sliding_window_filter_reset_rotation_threshold_ = reset_rotation_threshold;
+    } else if (parameter.get_name() == "laser_localization_enabled") {
+      laser_localization_enabled_ = parameter.as_bool();
+      // Re-arm the one-shot laser pose computation on every mode change.
+      laser_x_received_ = false;
+      laser_y_received_ = false;
+      laser_pose_initialized_ = false;
+      if (laser_localization_enabled_) {
+        relocalization_enabled_ = false;
+        accumulated_cloud_->clear();
+      }
+      RCLCPP_INFO(
+        this->get_logger(), "Laser relocalization %s.",
+        laser_localization_enabled_ ? "enabled" : "disabled");
+    } else if (parameter.get_name() == "laser_distance_scale") {
+      laser_distance_scale_ = parameter.as_double();
+    } else if (parameter.get_name() == "laser_x_offset") {
+      laser_x_offset_ = parameter.as_double();
+    } else if (parameter.get_name() == "laser_y_offset") {
+      laser_y_offset_ = parameter.as_double();
     }
   }
 
@@ -474,6 +523,11 @@ void SmallGicpRelocalizationNode::registeredPcdCallback(
 
 void SmallGicpRelocalizationNode::performRegistration()
 {
+  if (laser_localization_enabled_) {
+    accumulated_cloud_->clear();
+    return;
+  }
+
   if (!relocalization_enabled_) {
     accumulated_cloud_->clear();
     return;
@@ -549,6 +603,16 @@ void SmallGicpRelocalizationNode::publishTransform()
     return;
   }
 
+  // In laser mode, wait until the one-shot laser pose has been computed before
+  // broadcasting, so we never publish the uncalibrated startup pose.
+  if (laser_localization_enabled_ && !laser_pose_initialized_) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000,
+      "Laser relocalization enabled but waiting for both distance lasers (%s, %s).",
+      laser_x_topic_.c_str(), laser_y_topic_.c_str());
+    return;
+  }
+
   geometry_msgs::msg::TransformStamped transform_stamped;
   // `+ 0.1` means transform into future. according to https://robotics.stackexchange.com/a/96615
   transform_stamped.header.stamp = this->now() + rclcpp::Duration::from_seconds(0.5);
@@ -603,6 +667,56 @@ void SmallGicpRelocalizationNode::initialPoseCallback(
       this->get_logger(), "Could not transform initial pose from %s to %s: %s",
       robot_base_frame_.c_str(), current_scan_frame_id_.c_str(), ex.what());
   }
+}
+
+void SmallGicpRelocalizationNode::laserDistanceXCallback(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  if (!laser_localization_enabled_ || laser_pose_initialized_) {
+    return;
+  }
+  laser_x_raw_ = msg->data;
+  laser_x_received_ = true;
+  tryInitializeLaserPose();
+}
+
+void SmallGicpRelocalizationNode::laserDistanceYCallback(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  if (!laser_localization_enabled_ || laser_pose_initialized_) {
+    return;
+  }
+  laser_y_raw_ = msg->data;
+  laser_y_received_ = true;
+  tryInitializeLaserPose();
+}
+
+void SmallGicpRelocalizationNode::tryInitializeLaserPose()
+{
+  // Only compute the map->odom transform once, after both wall-distance lasers
+  // have reported. Assumes the robot is already perpendicular to the wall, so the
+  // orientation (yaw) is taken from init_pose and only x/y translation come from
+  // the lasers.
+  if (laser_pose_initialized_ || !laser_x_received_ || !laser_y_received_) {
+    return;
+  }
+
+  const double x = laser_x_raw_ * laser_distance_scale_ + laser_x_offset_;
+  const double y = laser_y_raw_ * laser_distance_scale_ + laser_y_offset_;
+
+  // Keep z and the rotation (init_pose yaw) already stored in result_t_, only
+  // override the x/y translation with the laser-derived values.
+  Eigen::Isometry3d laser_pose = result_t_;
+  laser_pose.translation().x() = x;
+  laser_pose.translation().y() = y;
+
+  result_t_ = laser_pose;
+  previous_result_t_ = laser_pose;
+  laser_pose_initialized_ = true;
+
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Laser relocalization initialized: x = %.3f (raw %.1f), y = %.3f (raw %.1f). "
+    "Locking map->odom and broadcasting it continuously.",
+    x, laser_x_raw_, y, laser_y_raw_);
 }
 
 }  // namespace small_gicp_relocalization

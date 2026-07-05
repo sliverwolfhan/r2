@@ -50,6 +50,16 @@ def generate_launch_description():
                 "base_frame": "",
                 "lidar_frame": "",
                 "prior_pcd_file": "",
+                # --- Laser-ranging relocalization mode ---
+                # Set True to derive map->odom from two wall-distance lasers once at
+                # startup (robot must already be perpendicular to the wall) instead of
+                # running GICP point-cloud matching.
+                "laser_localization_enabled": False,
+                "laser_x_topic": "/AT_R2/distance_head",
+                "laser_y_topic": "/AT_R2/distance_grasp",
+                "laser_distance_scale": 0.001,  # mm -> m
+                "laser_x_offset": 0.0,
+                "laser_y_offset": 0.0,
             }
         ],
     )

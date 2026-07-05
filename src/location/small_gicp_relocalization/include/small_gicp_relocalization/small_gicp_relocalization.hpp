@@ -24,6 +24,7 @@
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "std_msgs/msg/float64.hpp"
 #include "small_gicp/ann/kdtree_omp.hpp"
 #include "small_gicp/factors/gicp_factor.hpp"
 #include "small_gicp/pcl/pcl_point.hpp"
@@ -53,11 +54,16 @@ private:
   void resetResultFilter();
   bool shouldResetResultFilter(const Eigen::Isometry3d & raw_result) const;
   void initialPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
+  void laserDistanceXCallback(const std_msgs::msg::Float64::SharedPtr msg);
+  void laserDistanceYCallback(const std_msgs::msg::Float64::SharedPtr msg);
+  void tryInitializeLaserPose();
   rcl_interfaces::msg::SetParametersResult parametersCallback(
     const std::vector<rclcpp::Parameter> & parameters);
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr laser_x_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr laser_y_sub_;
 
   int num_threads_;
   int num_neighbors_;
@@ -82,6 +88,20 @@ private:
   std::vector<double> init_pose_;
   Eigen::Vector3d map_bounds_min_;
   Eigen::Vector3d map_bounds_max_;
+
+  // Laser-ranging relocalization mode: derive map->odom from two wall-distance
+  // lasers once at startup, assuming the robot is already perpendicular to the wall.
+  bool laser_localization_enabled_;
+  std::string laser_x_topic_;
+  std::string laser_y_topic_;
+  double laser_distance_scale_;
+  double laser_x_offset_;
+  double laser_y_offset_;
+  bool laser_x_received_;
+  bool laser_y_received_;
+  bool laser_pose_initialized_;
+  double laser_x_raw_;
+  double laser_y_raw_;
 
   std::string map_frame_;
   std::string odom_frame_;
