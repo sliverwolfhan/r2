@@ -1,0 +1,7 @@
+[Unit]
+Description=AT_RC 开机自启动四件套 (虚拟串口 + 导航 + 机械臂 + 规划器)
+Wants=atrc-virtual-serial.service atrc-navigation.service atrc-arm.service atrc-planner.service
+After=graphical-session.target
+
+[Install]
+WantedBy=graphical-session.target

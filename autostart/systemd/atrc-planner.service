@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 路径规划器 (r2_meilin_planner, 蓝/红看 zone.conf, 发布 /r2_planner/plan)
+After=graphical-session.target atrc-navigation.service
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+Environment=DISPLAY=:0
+# 规划器无自己的硬件, 依赖导航提供的定位/代价地图; 等雷达网口通(与导航同一路信号)再起
+ExecStartPre=/home/pc1/AT_RC/autostart/preflight_check.sh --lidar
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/autostart/start_planner.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

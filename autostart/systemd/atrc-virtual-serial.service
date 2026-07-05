@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 虚拟串口 (virtual_serial_port, USB 0483:5740)
+After=graphical-session.target
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+# 启动前只等自己这一路 USB (虚拟串口)
+ExecStartPre=/home/pc1/AT_RC/autostart/preflight_check.sh --usb 0483:5740
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/run_virtual_serial.sh
+# 预检可能等待较久, 不限制启动时长; 失败则重试, 直到 USB 插上
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

@@ -1,0 +1,6 @@
+# AT_RC USB CDC 设备授权 —— 让普通用户 (plugdev 组) 可用 libusb 打开并 claim interface
+# 0483:5740 = 虚拟串口 (virtual_serial_port)
+# 0483:5741 = 机械臂   (robot_driver)
+# 安装到 /etc/udev/rules.d/ 后: sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5741", MODE="0666", GROUP="plugdev"

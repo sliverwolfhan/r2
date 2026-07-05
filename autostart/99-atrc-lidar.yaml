@@ -1,0 +1,9 @@
+# AT_RC 激光雷达网卡静态 IP —— 让 enp2s0 开机自动 UP 到 192.168.1.50
+# 与 livox_ros_driver2 config/MID360_config.json 里的 host_net_info 一致。
+# 安装到 /etc/netplan/ 后: sudo chmod 600 该文件 && sudo netplan apply
+network:
+  version: 2
+  ethernets:
+    enp2s0:
+      dhcp4: no
+      addresses: [192.168.1.50/24]

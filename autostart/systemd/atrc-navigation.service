@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 导航 (at_r2_nav_bringup, 蓝/红看 zone.conf, 雷达 192.168.1.154)
+After=graphical-session.target
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+Environment=DISPLAY=:0
+# 启动前只等雷达网口通; nav launch 会开 rviz, 需要 DISPLAY
+ExecStartPre=/home/pc1/AT_RC/autostart/preflight_check.sh --lidar
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/autostart/start_navigation.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

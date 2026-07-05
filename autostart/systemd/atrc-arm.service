@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 机械臂 (launch_pack arm_real, USB 0483:5741)
+After=graphical-session.target
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+Environment=DISPLAY=:0
+# 启动前只等自己这一路 USB (机械臂); arm launch 会开 rviz2, 需要 DISPLAY
+ExecStartPre=/home/pc1/AT_RC/autostart/preflight_check.sh --usb 0483:5741
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/run_arm_real.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target
