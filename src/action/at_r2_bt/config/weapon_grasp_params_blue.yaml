@@ -44,7 +44,7 @@ simple_bt_runner:
     weapon_3.laser_distance_tolerance: 0.005
 
     weapon_4.grasp_prep_x: 0.77864
-    weapon_4.grasp_prep_y: -5.30
+    weapon_4.grasp_prep_y: -5.35
     weapon_4.grasp_prep_yaw: 0.00
     weapon_4.grasp_prep_y_tolerance: 0.02
     weapon_4.grasp_prep_yaw_tolerance: 0.20
@@ -52,7 +52,7 @@ simple_bt_runner:
     weapon_4.laser_distance_tolerance: 0.005
 
     weapon_5.grasp_prep_x: 0.95664
-    weapon_5.grasp_prep_y: -5.30
+    weapon_5.grasp_prep_y: -5.35
     weapon_5.grasp_prep_yaw: 0.00
     weapon_5.grasp_prep_y_tolerance: 0.02
     weapon_5.grasp_prep_yaw_tolerance: 0.20
@@ -60,7 +60,7 @@ simple_bt_runner:
     weapon_5.laser_distance_tolerance: 0.005
 
     weapon_6.grasp_prep_x: 1.15664
-    weapon_6.grasp_prep_y: -5.30
+    weapon_6.grasp_prep_y: -5.35
     weapon_6.grasp_prep_yaw: 0.00
     weapon_6.grasp_prep_y_tolerance: 0.02
     weapon_6.grasp_prep_yaw_tolerance: 0.20

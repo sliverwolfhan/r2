@@ -20,6 +20,7 @@ DockToWallAction::DockToWallAction(
 : BT::StatefulActionNode(name, config),
   start_time_(0, 0, RCL_ROS_TIME),
   stall_start_time_(0, 0, RCL_ROS_TIME),
+  swing_last_flip_time_(0, 0, RCL_ROS_TIME),
   last_odom_time_(0, 0, RCL_ROS_TIME)
 {
 }
@@ -28,9 +29,15 @@ BT::PortsList DockToWallAction::providedPorts()
 {
   return {
     BT::InputPort<rclcpp::Node::SharedPtr>("node", "ROS node"),
-    BT::InputPort<double>("vy", 0.1, "Lateral velocity y (m/s), positive=left"),
-    BT::InputPort<double>("vx", 0.0, "Forward velocity x (m/s)"),
+    BT::InputPort<double>("vy", 0.1, "Base velocity y (m/s), body frame, constant press"),
+    BT::InputPort<double>("vx", 0.0, "Base velocity x (m/s), body frame, constant press"),
     BT::InputPort<double>("wz", 0.0, "Angular velocity z (rad/s)"),
+    BT::InputPort<double>("swing_vx", 0.0,
+      "Swing velocity x (m/s), body frame; set parallel to wall, sign flips every swing_period"),
+    BT::InputPort<double>("swing_vy", 0.0,
+      "Swing velocity y (m/s), body frame; set parallel to wall, sign flips every swing_period"),
+    BT::InputPort<double>("swing_period", 0.5,
+      "Interval (s) between swing direction reversals; <=0 disables swinging"),
     BT::InputPort<double>("stall_threshold", 0.005,
       "Position change threshold (m) below which we consider stalled"),
     BT::InputPort<double>("stall_duration", 0.5,
@@ -58,6 +65,9 @@ BT::NodeStatus DockToWallAction::onStart()
   vy_ = 0.1;
   vx_ = 0.0;
   wz_ = 0.0;
+  swing_vx_ = 0.0;
+  swing_vy_ = 0.0;
+  swing_period_ = 0.5;
   stall_threshold_ = 0.005;
   stall_duration_ = 0.5;
   timeout_ = 10.0;
@@ -68,6 +78,9 @@ BT::NodeStatus DockToWallAction::onStart()
   getInput("vy", vy_);
   getInput("vx", vx_);
   getInput("wz", wz_);
+  getInput("swing_vx", swing_vx_);
+  getInput("swing_vy", swing_vy_);
+  getInput("swing_period", swing_period_);
   getInput("stall_threshold", stall_threshold_);
   getInput("stall_duration", stall_duration_);
   getInput("timeout", timeout_);
@@ -82,6 +95,8 @@ BT::NodeStatus DockToWallAction::onStart()
   // 初始化状态
   is_stalling_ = false;
   odom_received_ = false;
+  swing_sign_ = 1;
+  swing_last_flip_time_ = node_->now();
 
   // 创建 publisher
   if (!cmd_vel_pub_ || active_cmd_vel_topic_ != cmd_vel_topic_) {
@@ -104,9 +119,10 @@ BT::NodeStatus DockToWallAction::onStart()
   start_time_ = node_->now();
 
   RCLCPP_INFO(node_->get_logger(),
-    "DockToWall started: vy=%.3f vx=%.3f wz=%.3f "
+    "DockToWall started: vx=%.3f vy=%.3f wz=%.3f swing=(%.3f,%.3f)/%.2fs "
     "stall_thresh=%.4fm stall_dur=%.2fs timeout=%.1fs topic=%s",
-    vy_, vx_, wz_, stall_threshold_, stall_duration_, timeout_, cmd_vel_topic_.c_str());
+    vx_, vy_, wz_, swing_vx_, swing_vy_, swing_period_,
+    stall_threshold_, stall_duration_, timeout_, cmd_vel_topic_.c_str());
 
   return BT::NodeStatus::RUNNING;
 }
@@ -177,7 +193,23 @@ void DockToWallAction::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg
 
   double dx = cur_x - last_x_;
   double dy = cur_y - last_y_;
-  double displacement = std::sqrt(dx * dx + dy * dy);
+
+  double displacement;
+  const bool swinging = swing_period_ > 0.0 && (swing_vx_ != 0.0 || swing_vy_ != 0.0);
+  const double press_norm = std::hypot(vx_, vy_);
+  if (swinging && press_norm > 1e-6) {
+    // 摇摆时，平行墙面的往复运动会使总位移一直偏大，导致无法判定贴住。
+    // 因此只统计沿压墙方向(垂直墙面)的位移分量：把车体系压墙方向(vx_,vy_)
+    // 旋转到里程计系后，将本次位移投影到该方向上。
+    const auto & q = msg->pose.pose.orientation;
+    double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+                            1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+    double ux = (vx_ * std::cos(yaw) - vy_ * std::sin(yaw)) / press_norm;
+    double uy = (vx_ * std::sin(yaw) + vy_ * std::cos(yaw)) / press_norm;
+    displacement = std::fabs(dx * ux + dy * uy);
+  } else {
+    displacement = std::sqrt(dx * dx + dy * dy);
+  }
 
   // 更新记录
   last_x_ = cur_x;
@@ -208,9 +240,22 @@ void DockToWallAction::publishCmdTimerCallback()
   if (!cmd_vel_pub_) {
     return;
   }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  // 到达周期则反转摇摆方向
+  if (swing_period_ > 0.0 && (swing_vx_ != 0.0 || swing_vy_ != 0.0)) {
+    auto now = node_->now();
+    if ((now - swing_last_flip_time_).seconds() >= swing_period_) {
+      swing_sign_ = -swing_sign_;
+      swing_last_flip_time_ = now;
+    }
+  }
+
   geometry_msgs::msg::Twist cmd;
-  cmd.linear.x = vx_;
-  cmd.linear.y = vy_;
+  // 恒定压墙速度 + 平行墙面的往复摇摆速度
+  cmd.linear.x = vx_ + swing_sign_ * swing_vx_;
+  cmd.linear.y = vy_ + swing_sign_ * swing_vy_;
   cmd.angular.z = wz_;
   cmd_vel_pub_->publish(cmd);
 }

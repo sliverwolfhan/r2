@@ -196,7 +196,7 @@
       <!-- C. 侧向贴靠柜台 -->
       <ForceSuccess>
         <DockToWall node="{node}"
-                    vy="-0.20"
+                    vy="-0.15"
                     vx="0.0"
                     wz="0.0"
                     stall_threshold="0.06"
@@ -344,7 +344,7 @@
                      pathalign_use_path_orientations="true"
                      wait_after_set="0.2"/>
             <FollowSpinPath node="{node}"
-                            goal_x="0.65"
+                            goal_x="0.55"
                             goal_y="-5.1"
                             goal_yaw="3.14"
                             rotation_start_distance="0.7"
@@ -405,10 +405,15 @@
                 frame_id="map"
                 goal="{nav_goal}"/> -->
       <ForceSuccess>
+        <!-- vx: 垂直墙面的恒定压墙速度; swing_vy: 平行墙面的往复摇摆速度,
+             每 swing_period 秒反转一次方向, 边压边左右摆动靠墙 -->
         <DockToWall node="{node}"
                     vy="0.0"
-                    vx="0.2"
+                    vx="0.1"
                     wz="0.0"
+                    swing_vx="0.0"
+                    swing_vy="0.1"
+                    swing_period="0.3"
                     stall_threshold="0.02"
                     stall_duration="0.4"
                     timeout="2.0"

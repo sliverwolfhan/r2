@@ -61,7 +61,7 @@ constexpr int   REFINE_EDGES  = 0;      // 关闭边缘细化，大幅提速
 constexpr int   FRAME_AVG_COUNT = 1;      // 设为 1 = 每帧检测，零延迟
 
 // ---- Tag 物理尺寸（米）----
-constexpr float TAG_SIZE = 0.035f;
+constexpr float TAG_SIZE = 0.08f;
 
 // ---- 坐标轴长度（米）----
 constexpr float AXIS_LENGTH = 0.02f;

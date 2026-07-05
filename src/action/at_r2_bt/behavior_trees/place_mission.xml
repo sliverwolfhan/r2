@@ -56,7 +56,7 @@
               clear_buffer="true"
               timeout="0.0"/>
       
-      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
       <!-- ===== B 段 (第 1 次): 放预装那个 KFS 到 slot_1 ===== -->
       <SelectPlaceSlot start="{place_start}"/>
 

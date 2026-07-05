@@ -70,7 +70,7 @@ def generate_launch_description():
 
     declare_world_cmd = DeclareLaunchArgument(
         "world",
-        default_value="rc_2026_blue",
+        default_value="rc_2026_red4",
         description="Select world: 'rmul_2024' or 'rmuc_2024' (map file share the same name as the this parameter)",
     )
 
@@ -103,7 +103,7 @@ def generate_launch_description():
     declare_params_file_cmd = DeclareLaunchArgument(
         "params_file",
         default_value=os.path.join(
-            bringup_dir, "config", "nav2_params_mppi.yaml"
+            bringup_dir, "config", "nav2_params_mppi_red.yaml"
         ),
         description="Full path to the ROS2 parameters file to use for all launched nodes",
     )
