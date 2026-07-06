@@ -35,6 +35,7 @@
 #include "nav2_bt_publish_goal/wait_arm_idle_action.hpp"
 #include "nav2_bt_publish_goal/is_prep_skippable_condition.hpp"
 #include "nav2_bt_publish_goal/grasp_ready_by_pose_distance_condition.hpp"
+#include "nav2_bt_publish_goal/grasp_pressed_by_distance_condition.hpp"
 #include "nav2_bt_publish_goal/distance_servo_align_action.hpp"
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
 #include "nav2_bt_publish_goal/dock_to_tag_action.hpp"
@@ -114,6 +115,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::SelectPlaceSlotAction>("SelectPlaceSlot");
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
   factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
+  factory.registerNodeType<nav2_bt_publish_goal::GraspPressedByDistanceCondition>("GraspPressedByDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DistanceServoAlignAction>("DistanceServoAlign");
   factory.registerNodeType<nav2_bt_publish_goal::DockToWallAction>("DockToWall");
   factory.registerNodeType<nav2_bt_publish_goal::DockToTagAction>("DockToTag");
@@ -144,6 +146,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ SelectPlaceSlot 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ IsPrepSkippable 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ GraspReadyByPoseDistance 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ GraspPressedByDistance 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DistanceServoAlign 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PublishHeadCmd 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PublishPumpCmd 节点已注册");

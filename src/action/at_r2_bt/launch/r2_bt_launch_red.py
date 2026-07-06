@@ -21,7 +21,7 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('at_r2_bt')
     # weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_blue.yaml')
     weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_red.yaml')
-    place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params.yaml')
+    place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params_red.yaml')
     block_yaml_file = os.path.join(pkg_dir, 'yaml', 'block_red.yaml')
 
     bt_xml = LaunchConfiguration('bt_xml')
@@ -29,7 +29,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'bt_xml',
-            default_value='r2_bt_red.xml',
+            default_value='place_mission_v2_red.xml',
             description='行为树 xml 文件名 (位于 at_r2_bt/behavior_trees/)',
         ),
         Node(

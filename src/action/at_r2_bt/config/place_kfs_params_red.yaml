@@ -4,7 +4,7 @@ simple_bt_runner:
     # place_count: 放几个(Repeat 循环次数)
     # place_start: 从第几个 KFS 开始(1-based, 对应 kfs_priority 第几个)
     # 例: start=1 count=2 -> 放 kfs_1、kfs_2
-    place_count: 1
+    place_count: 2
     place_start: 1
 
     # 笛卡尔抓取(C 段 ArmCartesianTask)发送 data 里的 z 固定值,
@@ -24,13 +24,13 @@ simple_bt_runner:
     kfs_1.prep_y: 2.785
     kfs_1.prep_yaw: 0.0
     kfs_1.place_x: 11.825
-    kfs_1.place_y: 2.575
+    kfs_1.place_y: 2.540
 
     kfs_2.prep_x: 11.09
     kfs_2.prep_y: 3.485
     kfs_2.prep_yaw: 0.0
     kfs_2.place_x: 11.825
-    kfs_2.place_y: 3.275
+    kfs_2.place_y: 3.240
 
     # ===== 放置目标点 (B 段用) =====
     # 数量 = place_count + 1 (地上块数 + 1 个预装 KFS)
@@ -45,14 +45,14 @@ simple_bt_runner:
       - slot_2
       - slot_1`
 
-    slot_1.x: 11.430
-    slot_1.y: -4.95
-    slot_1.yaw: -1.57
+    slot_1.x: 11.580
+    slot_1.y: 4.95
+    slot_1.yaw: 1.57
 
-    slot_2.x: 10.910
-    slot_2.y: -4.95
-    slot_2.yaw: -1.57
+    slot_2.x: 11.060
+    slot_2.y: 4.95
+    slot_2.yaw: 1.57
 
-    slot_3.x: 10.3700
-    slot_3.y: -4.95
-    slot_3.yaw: -1.57
+    slot_3.x: 10.5200
+    slot_3.y: 4.95
+    slot_3.yaw: 1.57

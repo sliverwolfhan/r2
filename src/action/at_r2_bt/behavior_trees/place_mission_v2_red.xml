@@ -27,16 +27,16 @@
     <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.45"
-        global_radius="0.45"
+        local_radius="0.35"
+        global_radius="0.35"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
         
     <SetMppiParams node="{node}"
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
-                  goal_angle_weight="5.0"
-                  goal_angle_threshold="1.0"
+                  goal_angle_weight="4.0"
+                  goal_angle_threshold="1.5"
                   vx_max="1.2"
                   vx_min="-1.2"
                   vy_max="1.2"
@@ -63,7 +63,7 @@
               clear_buffer="true"
               timeout="0.0"/>
       
-      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
       <!-- ===== B 段 (第 1 次): 放预装那个 KFS 到 slot_1 ===== -->
       <SelectPlaceSlot start="{place_start}"/>
 
@@ -94,7 +94,7 @@
               wz="0.0"
               stall_threshold="0.02"
               stall_duration="10.0"
-              timeout="3.5"
+              timeout="2.5"
               publish_rate_hz="50.0"
               cmd_vel_topic="/AT_R2/cmd_vel_bt"
               odom_topic="/AT_R2/odometry"/>

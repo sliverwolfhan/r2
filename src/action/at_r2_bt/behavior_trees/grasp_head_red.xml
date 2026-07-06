@@ -207,43 +207,29 @@
                     odom_topic="/AT_R2/odometry"/>
       </ForceSuccess>
 
-      <!-- C2. 贴靠后只检查 y 是否到位(yaw/距离容忍度放大 -> 忽略, 只看 y);
-           y 不对则再侧向贴靠, 最多尝试 3 次, 之后无论对不对都返回成功继续 -->
+      <!-- C2. 侧向贴靠压墙, 用爪子侧激光测距(滤波后)判"靠住":
+           DockToWall 内部逻辑(配了 distance_topic 即走激光判据, 取代 odom):
+             - 滤波后距离变化量持续 stall_duration 秒 < stall_threshold -> 压不动了 -> 贴住成功, 立即停车;
+             - 防误检门槛 distance_stall_max: 距离必须 < 该值才允许判贴住,
+               避免激光被挡/读数卡在大值不动时把"假不变"误判成贴住;
+             - timeout 秒仍到不了 -> 失败, 外层 ForceSuccess 兜底继续(D 段再精对齐)。 -->
       <ForceSuccess>
-        <RetryUntilSuccessful num_attempts="3">
-          <Fallback>
-            <!-- y 已到位 -> 成功, 结束重试 -->
-            <GraspReadyByPoseDistance node="{node}"
-                                      map_frame="map"
-                                      base_frame="base_footprint"
-                                      target_y="{grasp_prep_y}"
-                                      y_tolerance="{grasp_prep_y_tolerance}"
-                                      target_yaw="{grasp_prep_yaw}"
-                                      yaw_tolerance="100.0"
-                                      distance_topic="/AT_R2/distance_head"
-                                      distance_scale="0.001"
-                                      target_distance="{grasp_laser_target_distance}"
-                                      distance_tolerance="1000.0"
-                                      stable_count="3"
-                                      max_data_age="0.5"/>
-            <!-- y 不对 -> 再侧靠一次, 然后返回失败让 RetryUntilSuccessful 再试 -->
-            <Sequence>
-              <ForceSuccess>
-                <DockToWall node="{node}"
-                            vy="-0.2"
-                            vx="0.0"
-                            wz="0.0"
-                            stall_threshold="0.05"
-                            stall_duration="0.5"
-                            timeout="2.0"
-                            publish_rate_hz="50.0"
-                            cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                            odom_topic="/AT_R2/odometry"/>
-              </ForceSuccess>
-              <AlwaysFailure/>
-            </Sequence>
-          </Fallback>
-        </RetryUntilSuccessful>
+        <DockToWall node="{node}"
+                    vy="-0.15"
+                    vx="0.0"
+                    wz="0.0"
+                    stall_threshold="0.003"
+                    stall_duration="0.4"
+                    timeout="5.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"
+                    distance_topic="/AT_R2/distance_grasp"
+                    distance_scale="0.001"
+                    distance_stall_max="0.05"
+                    filter_enable="true"
+                    median_window="5"
+                    ema_tau="0.1"/>
       </ForceSuccess>
 
       <!-- D. 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 -->

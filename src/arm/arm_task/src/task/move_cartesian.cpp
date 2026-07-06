@@ -23,7 +23,7 @@ std::string MoveCartesian::process(const std::string last_task_name) {
 
     const auto goal_handle = context.goal_handle;
 
-    // data 维度仍按 xyz + 四元数（7）约定，但只读取 xyz，姿态强制朝向 z 轴负方向
+    // data 维度仍按 xyz + 四元数（7）约定，但只读取 xyz，姿态强制末端 z 轴正方向朝向 base_link 的 z 轴正方向
     if (context.data.size() != (3 + 4)) {
         RCLCPP_ERROR(
             robot->node_->get_logger(),
@@ -40,9 +40,9 @@ std::string MoveCartesian::process(const std::string last_task_name) {
     target_pose.pose.position.y = context.data[1];
     target_pose.pose.position.z = context.data[2];
 
-    // 强制末端姿态朝向 z 轴负方向
+    // 强制末端 z 轴负方向朝向 base_link 的 z 轴负方向（即末端 z 轴与 base_link z 轴同向，无旋转）
     tf2::Quaternion quat;
-    quat.setRPY(0, M_PI, 0);
+    quat.setRPY(0, 0, 0);
     quat.normalize();
     target_pose.pose.orientation.w = quat.getW();
     target_pose.pose.orientation.x = quat.getX();
@@ -51,7 +51,7 @@ std::string MoveCartesian::process(const std::string last_task_name) {
 
     RCLCPP_INFO(
         robot->node_->get_logger(),
-        "move_cartesian 目标位置: [%.3f, %.3f, %.3f]，姿态固定朝向 -z",
+        "move_cartesian 目标位置: [%.3f, %.3f, %.3f]，姿态固定：末端 -z 朝向 base_link -z",
         target_pose.pose.position.x,
         target_pose.pose.position.y,
         target_pose.pose.position.z);

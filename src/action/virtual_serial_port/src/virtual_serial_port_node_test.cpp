@@ -43,6 +43,7 @@ struct StatusPacket {
     uint16_t distance_tail;  // 距离
     uint8_t sign;            // 对接状态 (1表示对接完成)
     uint8_t MeiLin[12];      // 12 个方块的数据 (0:空, 1:R1, 2:R2, 3:Fake, 4:R1未取)
+    uint16_t distance_grasp;  //爪子侧激光
     uint8_t tail;            // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -159,6 +160,8 @@ public:
             "/AT_R2/distance_head", 10);
         distance_tail_pub_ = this->create_publisher<std_msgs::msg::Float64>(
             "/AT_R2/distance_tail", 10);
+        distance_grasp_pub_ = this->create_publisher<std_msgs::msg::Float64>(
+            "/AT_R2/distance_grasp", 10);
 
         // 创建梅林 12 方块数据发布器 (同 kfs_positions)
         kfs_pub_ = this->create_publisher<std_msgs::msg::Int32MultiArray>(
@@ -204,7 +207,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅底盘气泵使能话题: /AT_R2/chassis_pump_cmd (连续发送, 1=吸气 0=放气)");
         RCLCPP_INFO(this->get_logger(), "已订阅三区动作话题: /AT_R2/lift_cmd (单次发送, 1=抬升 2=降到架机 3=抬腿 4=伸腿 5=降下去)");
         RCLCPP_INFO(this->get_logger(), "已订阅气泵单次命令话题: /AT_R2/pump_cmd (单次发送, 0->pump=3, 1->pump=4)");
-        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail");
+        RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail, /AT_R2/distance_grasp");
         RCLCPP_INFO(this->get_logger(), "已创建梅林/对接发布器: /AT_R2/kfs_positions, /AT_R2/docking_status");
     }
 
@@ -468,10 +471,15 @@ private:
             dist_tail_msg.data = static_cast<double>(status.distance_tail);
             distance_tail_pub_->publish(dist_tail_msg);
 
+            auto dist_grasp_msg = std_msgs::msg::Float64();
+            dist_grasp_msg.data = static_cast<double>(status.distance_grasp);
+            distance_grasp_pub_->publish(dist_grasp_msg);
+
             RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                "收到距离 (车头): %.3f m, (车尾): %.3f m",
+                "收到距离 (车头): %.3f m, (车尾): %.3f m, (爪子): %.3f m",
                 status.distance_head / 1000.0,
-                status.distance_tail / 1000.0);
+                status.distance_tail / 1000.0,
+                status.distance_grasp / 1000.0);
 
             // 发布对接状态 (sign)
             auto dock_msg = std_msgs::msg::Int32();
@@ -560,6 +568,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_head_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_tail_pub_;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_grasp_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;

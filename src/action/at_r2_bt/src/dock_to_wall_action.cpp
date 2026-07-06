@@ -3,9 +3,11 @@
 
 #include "nav2_bt_publish_goal/dock_to_wall_action.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <vector>
 
 #include "behaviortree_cpp/bt_factory.h"
 
@@ -21,7 +23,9 @@ DockToWallAction::DockToWallAction(
   start_time_(0, 0, RCL_ROS_TIME),
   stall_start_time_(0, 0, RCL_ROS_TIME),
   swing_last_flip_time_(0, 0, RCL_ROS_TIME),
-  last_odom_time_(0, 0, RCL_ROS_TIME)
+  last_odom_time_(0, 0, RCL_ROS_TIME),
+  last_distance_time_(0, 0, RCL_ROS_TIME),
+  last_filter_time_(0, 0, RCL_ROS_TIME)
 {
 }
 
@@ -48,6 +52,20 @@ BT::PortsList DockToWallAction::providedPorts()
       "Velocity command topic"),
     BT::InputPort<std::string>("odom_topic", "/AT_R2/odometry",
       "Odometry topic for position feedback"),
+    BT::InputPort<std::string>("distance_topic", "",
+      "Laser distance topic (std_msgs/Float64); non-empty enables laser stall judging in "
+      "place of odometry"),
+    BT::InputPort<double>("distance_scale", 0.001,
+      "Scale applied to raw distance (raw mm -> m)"),
+    BT::InputPort<double>("distance_stall_max", 0.0,
+      "Filtered distance (m) must be below this to allow declaring docked; guards against "
+      "false stall when laser reading is stuck far away; <=0 disables the gate"),
+    BT::InputPort<bool>("filter_enable", true,
+      "Enable median+EMA distance filtering (laser mode only)"),
+    BT::InputPort<int>("median_window", 5,
+      "Median filter window size in samples (>=1); rejects laser spikes"),
+    BT::InputPort<double>("ema_tau", 0.1,
+      "EMA time constant (s); larger=smoother but more lag, <=0 disables EMA"),
   };
 }
 
@@ -74,6 +92,12 @@ BT::NodeStatus DockToWallAction::onStart()
   double publish_rate_hz = 50.0;
   cmd_vel_topic_ = "/AT_R2/cmd_vel_bt";
   odom_topic_ = "/AT_R2/odometry";
+  distance_topic_ = "";
+  distance_scale_ = 0.001;
+  distance_stall_max_ = 0.0;
+  filter_enable_ = true;
+  median_window_ = 5;
+  ema_tau_ = 0.1;
 
   getInput("vy", vy_);
   getInput("vx", vx_);
@@ -87,14 +111,36 @@ BT::NodeStatus DockToWallAction::onStart()
   getInput("publish_rate_hz", publish_rate_hz);
   getInput("cmd_vel_topic", cmd_vel_topic_);
   getInput("odom_topic", odom_topic_);
+  getInput("distance_topic", distance_topic_);
+  getInput("distance_scale", distance_scale_);
+  getInput("distance_stall_max", distance_stall_max_);
+  getInput("filter_enable", filter_enable_);
+  getInput("median_window", median_window_);
+  getInput("ema_tau", ema_tau_);
 
   if (publish_rate_hz < 1.0) {
     publish_rate_hz = 1.0;
   }
+  median_window_ = std::max(1, median_window_);
+  if (!std::isfinite(ema_tau_) || ema_tau_ < 0.0) {
+    ema_tau_ = 0.0;
+  }
+  if (!std::isfinite(distance_scale_) || distance_scale_ == 0.0) {
+    distance_scale_ = 0.001;
+  }
+  // 配了激光话题即启用激光判据(取代 odom)
+  use_distance_ = !distance_topic_.empty();
 
   // 初始化状态
   is_stalling_ = false;
   odom_received_ = false;
+  distance_received_ = false;
+  last_distance_ = 0.0;
+  median_buf_.clear();
+  ema_initialized_ = false;
+  ema_value_ = 0.0;
+  last_filter_time_ = node_->now();
+  last_distance_time_ = node_->now();
   swing_sign_ = 1;
   swing_last_flip_time_ = node_->now();
 
@@ -104,10 +150,17 @@ BT::NodeStatus DockToWallAction::onStart()
     active_cmd_vel_topic_ = cmd_vel_topic_;
   }
 
-  // 创建 odom 订阅
-  odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
-    odom_topic_, rclcpp::SensorDataQoS(),
-    std::bind(&DockToWallAction::odomCallback, this, std::placeholders::_1));
+  if (use_distance_) {
+    // 激光判据：只订激光, 不再依赖 odom
+    distance_sub_ = node_->create_subscription<std_msgs::msg::Float64>(
+      distance_topic_, 10,
+      std::bind(&DockToWallAction::distanceCallback, this, std::placeholders::_1));
+  } else {
+    // 里程计判据(默认)
+    odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
+      odom_topic_, rclcpp::SensorDataQoS(),
+      std::bind(&DockToWallAction::odomCallback, this, std::placeholders::_1));
+  }
 
   // 创建定时器发布速度
   const auto period = std::chrono::duration<double>(1.0 / publish_rate_hz);
@@ -120,9 +173,14 @@ BT::NodeStatus DockToWallAction::onStart()
 
   RCLCPP_INFO(node_->get_logger(),
     "DockToWall started: vx=%.3f vy=%.3f wz=%.3f swing=(%.3f,%.3f)/%.2fs "
-    "stall_thresh=%.4fm stall_dur=%.2fs timeout=%.1fs topic=%s",
+    "stall_thresh=%.4f%s stall_dur=%.2fs timeout=%.1fs topic=%s | mode=%s",
     vx_, vy_, wz_, swing_vx_, swing_vy_, swing_period_,
-    stall_threshold_, stall_duration_, timeout_, cmd_vel_topic_.c_str());
+    stall_threshold_, use_distance_ ? "m(dist)" : "m(odom)",
+    stall_duration_, timeout_, cmd_vel_topic_.c_str(),
+    use_distance_
+      ? ("LASER topic=" + distance_topic_ + " stall_max=" +
+         std::to_string(distance_stall_max_) + "m").c_str()
+      : "ODOM");
 
   return BT::NodeStatus::RUNNING;
 }
@@ -141,8 +199,8 @@ BT::NodeStatus DockToWallAction::onRunning()
     return BT::NodeStatus::FAILURE;
   }
 
-  // 还没收到odom，继续等待
-  if (!odom_received_) {
+  // 还没收到反馈数据，继续等待
+  if (use_distance_ ? !distance_received_ : !odom_received_) {
     return BT::NodeStatus::RUNNING;
   }
 
@@ -235,6 +293,100 @@ void DockToWallAction::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg
   }
 }
 
+void DockToWallAction::distanceCallback(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  const auto now = node_->now();
+  // 滤波后转米
+  const double filtered =
+    (filter_enable_ ? filterDistance(msg->data, now) : msg->data) * distance_scale_;
+
+  if (!distance_received_) {
+    // 第一帧，初始化
+    last_distance_ = filtered;
+    last_distance_time_ = now;
+    distance_received_ = true;
+    return;
+  }
+
+  // 至少 100ms 采样一次，避免噪声(与 odom 判据一致)
+  double dt = (now - last_distance_time_).seconds();
+  if (dt < 0.1) {
+    return;
+  }
+
+  const double ddist = std::fabs(filtered - last_distance_);
+  last_distance_ = filtered;
+  last_distance_time_ = now;
+
+  // 防误检门槛：距离必须足够近(< distance_stall_max_)才允许判贴住。
+  // 若激光被挡/读数卡在很大的值不动，ddist 也会很小，但此门槛把它挡住，避免误判。
+  const bool near_enough =
+    (distance_stall_max_ <= 0.0) ||
+    (std::isfinite(filtered) && filtered < distance_stall_max_);
+
+  // 距离变化小于阈值 且 已足够近 -> 压不动了 -> 贴住
+  if (std::isfinite(ddist) && ddist < stall_threshold_ && near_enough) {
+    if (!is_stalling_) {
+      is_stalling_ = true;
+      stall_start_time_ = now;
+      RCLCPP_DEBUG(node_->get_logger(),
+        "DockToWall: laser stall detected, ddist=%.4fm dist=%.4fm", ddist, filtered);
+    }
+    // 已经在stall中，继续等待stall_duration
+  } else {
+    if (is_stalling_) {
+      RCLCPP_DEBUG(node_->get_logger(),
+        "DockToWall: laser stall reset, ddist=%.4fm dist=%.4fm near=%d",
+        ddist, filtered, near_enough ? 1 : 0);
+    }
+    is_stalling_ = false;
+  }
+}
+
+double DockToWallAction::filterDistance(double raw, const rclcpp::Time & stamp)
+{
+  // 非有限值直接透传，交给判据的 isfinite 兜底处理，不污染滤波状态。
+  if (!std::isfinite(raw)) {
+    return raw;
+  }
+
+  // 1) 中值：去尖刺/丢点。
+  median_buf_.push_back(raw);
+  while (static_cast<int>(median_buf_.size()) > median_window_) {
+    median_buf_.pop_front();
+  }
+  std::vector<double> sorted(median_buf_.begin(), median_buf_.end());
+  std::sort(sorted.begin(), sorted.end());
+  const size_t n = sorted.size();
+  const double median = (n % 2 == 1)
+    ? sorted[n / 2]
+    : 0.5 * (sorted[n / 2 - 1] + sorted[n / 2]);
+
+  // 2) 时间常数 EMA：去高斯抖动。
+  if (ema_tau_ <= 0.0) {
+    ema_value_ = median;
+    ema_initialized_ = true;
+    last_filter_time_ = stamp;
+    return median;
+  }
+  if (!ema_initialized_) {
+    ema_value_ = median;
+    ema_initialized_ = true;
+    last_filter_time_ = stamp;
+    return median;
+  }
+  double dt = (stamp - last_filter_time_).seconds();
+  last_filter_time_ = stamp;
+  if (!(dt > 0.0)) {
+    return ema_value_;
+  }
+  const double alpha = 1.0 - std::exp(-dt / ema_tau_);
+  ema_value_ += alpha * (median - ema_value_);
+  return ema_value_;
+}
+
 void DockToWallAction::publishCmdTimerCallback()
 {
   if (!cmd_vel_pub_) {
@@ -278,6 +430,9 @@ void DockToWallAction::stopAll()
   publishZero();
   if (odom_sub_) {
     odom_sub_.reset();
+  }
+  if (distance_sub_) {
+    distance_sub_.reset();
   }
 }
 

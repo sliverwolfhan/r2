@@ -13,13 +13,17 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "std_msgs/msg/float64.hpp"
 
 namespace nav2_bt_publish_goal
 {
 
-/// @brief BT 动作节点：以固定速度侧向移动(y方向)，通过检测里程计位置变化量
-///        判断车体是否已经贴靠到墙/柜台上。
-///        当一段时间内位置变化量小于阈值时，认为已经贴住，停止发送速度。
+/// @brief BT 动作节点：以固定速度侧向移动(y方向)，判断车体是否已贴靠到墙/柜台。
+///        两种贴住判据(二选一)：
+///          1) 里程计位移(默认)：一段时间内位置变化量小于阈值 -> 贴住;
+///          2) 激光测距(配置 distance_topic 时启用)：对爪子侧激光测距滤波后，
+///             一段时间内距离变化量小于阈值 -> 压不动了 -> 贴住。
+///        判定贴住后停止发送速度并返回 SUCCESS。
 class DockToWallAction : public BT::StatefulActionNode
 {
 public:
@@ -38,6 +42,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr distance_sub_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // 参数
@@ -56,6 +61,18 @@ private:
   std::string active_cmd_vel_topic_;
   std::string odom_topic_;
 
+  // 激光测距贴住判据(可选)：distance_topic 非空时启用，取代 odom 判据
+  std::string distance_topic_;      // 爪子侧激光话题，空则用 odom
+  double distance_scale_{0.001};    // 原始值(mm)转米
+  bool filter_enable_{true};        // 是否中值+EMA滤波
+  int median_window_{5};            // 中值窗口
+  double ema_tau_{0.1};             // EMA 时间常数(s)
+  bool use_distance_{false};        // 本次运行是否走激光判据
+  // 距离下限门槛(激光防误检)：滤波后距离必须 < distance_stall_max 才允许把
+  // "距离不变"判为贴住。避免激光被挡/读数卡住时把大距离的假不变误判成贴住。
+  // <=0 表示不设门槛(仅靠"距离不变")。
+  double distance_stall_max_{0.0};
+
   // 状态
   rclcpp::Time start_time_;
   rclcpp::Time stall_start_time_;
@@ -71,9 +88,20 @@ private:
   double last_y_{0.0};
   rclcpp::Time last_odom_time_;
 
+  // 激光测距记录 + 滤波状态(持 mutex_ 访问)
+  bool distance_received_{false};
+  double last_distance_{0.0};          // 上次采样的滤波后距离(m)
+  rclcpp::Time last_distance_time_;    // 上次采样时刻
+  std::deque<double> median_buf_;      // 中值滤波窗口
+  bool ema_initialized_{false};
+  double ema_value_{0.0};
+  rclcpp::Time last_filter_time_;
+
   std::mutex mutex_;
 
   void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
+  void distanceCallback(const std_msgs::msg::Float64::SharedPtr msg);
+  double filterDistance(double raw, const rclcpp::Time & stamp);  // 持 mutex_ 调用
   void publishCmdTimerCallback();
   void publishZero();
   void stopAll();
