@@ -48,7 +48,7 @@ kfs_subscriber_node:
     # PICK / PUSH 发布的 block_height 偏移（米）：
     # block_height = (target.height - from.height) + block_height_offset
     # 仅影响发布给下游的字段，不参与 A* 代价计算。
-    block_height_offset: 0.0
+    block_height_offset: -0.08
 
     # PICK / PUSH 发布的 prep_pose.theta 偏移（弧度），左右两档共用：
     # 默认 0.0；前/左档 = 0 + offset，右档 = -pi/2 + offset。

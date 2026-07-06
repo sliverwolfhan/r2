@@ -282,12 +282,39 @@ bool ArmTaskAction::loadGoalDataFromTfOrFallback(
   // 仅用 map → base：lookupTransform(base, map) 将 map 系点变到 base，配合黑板上的 map 坐标。
   try {
     const tf2::Duration tf_timeout = tf2::durationFromSec(tf_timeout_sec);
+    std::string tf_err;
     if (!tf_buffer_->canTransform(
-        base_frame, map_frame, tf2::TimePointZero, tf_timeout))
+        base_frame, map_frame, tf2::TimePointZero, tf_timeout, &tf_err))
     {
       RCLCPP_ERROR(node_->get_logger(),
-        "TF unavailable: transform from %s to %s",
-        map_frame.c_str(), base_frame.c_str());
+        "TF unavailable: transform from %s to %s | tf2 reason: %s",
+        map_frame.c_str(), base_frame.c_str(),
+        tf_err.empty() ? "(no detail)" : tf_err.c_str());
+
+      // 逐段探测，指出到底是链条里哪一环断了（默认经 odom 中转）。
+      const char * odom_frame = "odom";
+      std::string seg_err;
+      const bool map_to_odom = tf_buffer_->canTransform(
+        odom_frame, map_frame, tf2::TimePointZero,
+        tf2::durationFromSec(0.0), &seg_err);
+      RCLCPP_ERROR(node_->get_logger(),
+        "  段 [%s -> %s]: %s%s%s",
+        map_frame.c_str(), odom_frame,
+        map_to_odom ? "OK" : "断",
+        map_to_odom ? "" : " | ",
+        map_to_odom ? "" : seg_err.c_str());
+
+      seg_err.clear();
+      const bool odom_to_base = tf_buffer_->canTransform(
+        base_frame, odom_frame, tf2::TimePointZero,
+        tf2::durationFromSec(0.0), &seg_err);
+      RCLCPP_ERROR(node_->get_logger(),
+        "  段 [%s -> %s]: %s%s%s",
+        odom_frame, base_frame.c_str(),
+        odom_to_base ? "OK" : "断",
+        odom_to_base ? "" : " | ",
+        odom_to_base ? "" : seg_err.c_str());
+
       return false;
     }
     const auto tf_mb = tf_buffer_->lookupTransform(

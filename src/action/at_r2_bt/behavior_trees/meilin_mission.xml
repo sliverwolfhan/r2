@@ -18,15 +18,20 @@
                 wait_after_set="0.3"
                 goal_angle_threshold="2.0"
                 pathalign_use_path_orientations="false"
+                pathalign_threshold="3.0"
+                pathalign_offset_from_furthest="15"
                 wz_std="0.45"
                 vx_std="0.45"
-                vy_std="0.35"/>
+                vy_std="0.30"/>
       <SetCostmapInflation node="{node}"
                 local_radius="0.1"
                 global_radius="0.15"
                 local_cost_scaling_factor="1.0"
                 global_cost_scaling_factor="4.0"/>
       <PublishHeadCmd node="{node}" command="8"
+                            topic="/AT_R2/head_gripper_cmd"
+                            wait_done="false"/>
+      <PublishHeadCmd node="{node}" command="9"
                             topic="/AT_R2/head_gripper_cmd"
                             wait_done="false"/>
 

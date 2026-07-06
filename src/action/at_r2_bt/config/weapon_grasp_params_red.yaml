@@ -19,28 +19,28 @@ simple_bt_runner:
 
     # 每个武器头只配置原始语义值：准备位姿、准备位姿容忍度、激光目标距离。
     # GraspReadyByPoseDistance 节点内部会根据 target + tolerance 计算范围。
-    weapon_1.grasp_prep_x: 0.760
+    weapon_1.grasp_prep_x: 0.740
     weapon_1.grasp_prep_y: 5.35
     weapon_1.grasp_prep_yaw: 3.14
     weapon_1.grasp_prep_y_tolerance: 0.08
     weapon_1.grasp_prep_yaw_tolerance: 0.10
-    weapon_1.laser_target_distance: 0.660
+    weapon_1.laser_target_distance: 0.360
     weapon_1.laser_distance_tolerance: 0.005
 
-    weapon_2.grasp_prep_x: 0.960
+    weapon_2.grasp_prep_x: 0.940
     weapon_2.grasp_prep_y: 5.35
     weapon_2.grasp_prep_yaw: 3.14
     weapon_2.grasp_prep_y_tolerance: 0.08
     weapon_2.grasp_prep_yaw_tolerance: 0.1
-    weapon_2.laser_target_distance: 0.990
+    weapon_2.laser_target_distance: 0.560
     weapon_2.laser_distance_tolerance: 0.005
 
-    weapon_3.grasp_prep_x: 1.161
+    weapon_3.grasp_prep_x: 1.141
     weapon_3.grasp_prep_y: 5.35
     weapon_3.grasp_prep_yaw: 3.14
     weapon_3.grasp_prep_y_tolerance: 0.08
     weapon_3.grasp_prep_yaw_tolerance: 0.1
-    weapon_3.laser_target_distance: 1.310
+    weapon_3.laser_target_distance: 0.760
     weapon_3.laser_distance_tolerance: 0.005
 
     weapon_4.grasp_prep_x: 0.00

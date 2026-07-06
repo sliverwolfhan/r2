@@ -104,8 +104,8 @@
                             vx_min="-1.2"
                             vy_max="1.2"
                             wz_max="4.0"
-                            vx_std="0.4"
-                            vy_std="0.4"
+                            vx_std="0.35"
+                            vy_std="0.35"
                             wz_std="0.35"
                             goal_x_tolerance="0.03"
                             goal_y_tolerance="0.05"
@@ -193,7 +193,7 @@
            只发命令, 张爪时间靠并行的导航 + 前面 400ms 延时消化。 -->
 
 
-      <!-- C. 侧向贴靠柜台 -->
+      <!-- C. 侧向贴靠柜台
       <ForceSuccess>
         <DockToWall node="{node}"
                     vy="-0.2"
@@ -205,7 +205,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess> -->
 
       <!-- C2. 侧向贴靠压墙, 用爪子侧激光测距(滤波后)判"靠住":
            DockToWall 内部逻辑(配了 distance_topic 即走激光判据, 取代 odom):
@@ -218,7 +218,7 @@
                     vy="-0.15"
                     vx="0.0"
                     wz="0.0"
-                    stall_threshold="0.003"
+                    stall_threshold="0.05"
                     stall_duration="0.4"
                     timeout="5.0"
                     publish_rate_hz="50.0"
@@ -226,7 +226,7 @@
                     odom_topic="/AT_R2/odometry"
                     distance_topic="/AT_R2/distance_grasp"
                     distance_scale="0.001"
-                    distance_stall_max="0.05"
+                    distance_stall_max="0.035"
                     filter_enable="true"
                     median_window="5"
                     ema_tau="0.1"/>
@@ -262,7 +262,7 @@
                             publish_rate_hz="50.0"
                             cmd_axis="x"
                             positive_error_direction="-1.0"
-                            side_speed_scale="1.0"
+                            side_speed_scale="0.7"
                             side_speed_direction="-1.0"
                             filter_enable="true"
                             median_window="3"
@@ -330,9 +330,9 @@
                      pathalign_use_path_orientations="true"
                      wait_after_set="0.2"/>
             <FollowSpinPath node="{node}"
-                            goal_x="0.45"
-                            goal_y="5.1"
-                            goal_yaw="-0.0"
+                            goal_x="0.87"
+                            goal_y="4.6"
+                            goal_yaw="0.0"
                             rotation_start_distance="0.8"
                             rotation_end_distance="0.8"
                             rotation_direction="ccw"
@@ -390,7 +390,7 @@
                 x="0.40" y="5.1" yaw="0.0"
                 frame_id="map"
                 goal="{nav_goal}"/> -->
-      <ForceSuccess>
+   <!-- <ForceSuccess>
         <DockToWall node="{node}"
                     vy="0.0"
                     vx="-0.1"
@@ -401,7 +401,7 @@
                     publish_rate_hz="50.0"
                     cmd_vel_topic="/AT_R2/cmd_vel_bt"
                     odom_topic="/AT_R2/odometry"/>
-      </ForceSuccess>
+      </ForceSuccess>    -->
       <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status == 本轮目标值,
            任一满足即松爪(只松一次)。本轮目标值随循环递增: 第1轮=1, 第2轮=2, 第3轮=3。
            Parallel: success_count=1 任一分支成功即整体成功并 halt 另一分支;

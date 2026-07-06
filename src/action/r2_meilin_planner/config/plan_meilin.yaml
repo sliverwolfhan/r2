@@ -5,26 +5,26 @@ notes: "meilin plan from yaml"
 steps:
   - type: MOVE
     from_id: 0
-    target_id: 3
-    prep_pose: {x: 2.75, y: -4.2, theta: 0.0}
-    abs_dh: 0.4
-    stair_dir: UP
+    target_id: 2
+    prep_pose: {x: 2.75, y: 3.0, theta: 0.0}
+    abs_dh: 0.0
+    stair_dir: NONE
 
   - type: PICK
-    from_id: 3
-    target_id: 6
-    prep_pose: {x: 3.9, y: -4.2, theta: 0.0}
+    from_id: 0
+    target_id: 2
+    prep_pose: {x: 2.78, y: 3.0, theta: 0.0}
     grasp_yaw: 0.0
-    cube_x: 5.0
-    cube_y: -4.2
+    cube_x: 3.8
+    cube_y: 3.0
     block_height: 0.12
 
-  - type: MOVE
-    from_id: 3
-    target_id: 6  
-    prep_pose: {x: 3.9, y: -4.2, theta: 0.0}
-    abs_dh: 0.2
-    stair_dir: UP
+  # - type: MOVE
+  #   from_id: 3
+  #   target_id: 6  
+  #   prep_pose: {x: 3.9, y: -4.2, theta: 0.0}
+  #   abs_dh: 0.2
+  #   stair_dir: UP
 
 
 
@@ -37,35 +37,35 @@ steps:
   #   cube_y: 3.0
   #   block_height: 0.12
   
-  - type: MOVE
-    from_id: 6
-    target_id: 9
-    prep_pose: {x: 5.1, y: -4.2, theta: 0.0}
-    abs_dh: 0.2
-    stair_dir: DOWN
+  # - type: MOVE
+  #   from_id: 6
+  #   target_id: 9
+  #   prep_pose: {x: 5.1, y: -4.2, theta: 0.0}
+  #   abs_dh: 0.2
+  #   stair_dir: DOWN
 
-  - type: PICK
-    from_id: 9
-    target_id: 8
-    prep_pose: {x: 6.3, y: -4.2, theta: 0.0}
-    grasp_yaw: 0.0
-    cube_x: 6.2
-    cube_y: -3.0
-    block_height: 0.12
+  # - type: PICK
+  #   from_id: 9
+  #   target_id: 8
+  #   prep_pose: {x: 6.3, y: -4.2, theta: 0.0}
+  #   grasp_yaw: 0.0
+  #   cube_x: 6.2
+  #   cube_y: -3.0
+  #   block_height: 0.12
 
-  - type: MOVE
-    from_id: 9
-    target_id: 12
-    prep_pose: {x: 6.3, y: -4.2, theta: 0.0}
-    abs_dh: 0.2
-    stair_dir: DOWN
+  # - type: MOVE
+  #   from_id: 9
+  #   target_id: 12
+  #   prep_pose: {x: 6.3, y: -4.2, theta: 0.0}
+  #   abs_dh: 0.2
+  #   stair_dir: DOWN
 
-  - type: MOVE
-    from_id: 10
-    target_id: 13
-    prep_pose: {x: 7.5, y: -4.2, theta: 0.0}
-    abs_dh: 0.2
-    stair_dir: DOWN
+  # - type: MOVE
+  #   from_id: 10
+  #   target_id: 13
+  #   prep_pose: {x: 7.5, y: -4.2, theta: 0.0}
+  #   abs_dh: 0.2
+  #   stair_dir: DOWN
 
   # - type: PICK
   #   from_id: 5

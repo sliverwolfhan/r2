@@ -59,20 +59,26 @@
                     task_id="1"
                     duration="1.5"/> -->
       <PublishPumpCmd node="{node}" command="1"/>
-      <ArmTask node="{node}"
-               task_id="2"
-               server_name="robotic_task"
-               base_frame="base_link"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="1.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="{block_h}"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
+      <!-- TF 时断时续（爬台阶后定位偶发短暂断档）：每次 ArmTask 给 tf_timeout=1s 窗口，
+           查不到就在节点内打印是哪一段断了(map->odom / odom->base_link)并返回 FAILURE，
+           RetryUntilSuccessful 再 tick 重试。10 次 ≈ 10s，够等定位自愈；
+           想无限重试改 num_attempts="-1"。 -->
+      <RetryUntilSuccessful num_attempts="10">
+        <ArmTask node="{node}"
+                 task_id="2"
+                 server_name="robotic_task"
+                 base_frame="base_link"
+                 target_frame="target_object"
+                 map_frame="map"
+                 tf_timeout="1.0"
+                 cube_x="{cube_x}"
+                 cube_y="{cube_y}"
+                 block_height="{block_h}"
+                 grasp_height="{block_h}"
+                 goal_data="{arm_goal_data}"
+                 err_code="{arm_err_code}"
+                 reason="{arm_reason}"/>
+      </RetryUntilSuccessful>
 
       <!-- 抓取成功，标记下一个 MOVE 需要做收尾（放块/举着）。
            若 ArmTask 失败，Sequence 在此之前已返回 FAILURE，不会置位。 -->

@@ -92,6 +92,8 @@ public:
         RCLCPP_INFO(this->get_logger(), "   5 - 对接准备动作");
         RCLCPP_INFO(this->get_logger(), "   6 - 下降");
         RCLCPP_INFO(this->get_logger(), "   T - 松开");
+        RCLCPP_INFO(this->get_logger(), "   N - 指令8");
+        RCLCPP_INFO(this->get_logger(), "   M - 指令9");
         RCLCPP_INFO(this->get_logger(), "");
         RCLCPP_INFO(this->get_logger(), "【区模式 /zone_mode】");
         RCLCPP_INFO(this->get_logger(), "   7 - 一区 (抓武器头/对接)");
@@ -246,6 +248,12 @@ private:
             case 't': case 'T':
                 publishHeadGripper(7);  // 抓取武器头
                 break;
+            case 'n': case 'N':
+                publishHeadGripper(8);  // 指令8
+                break;
+            case 'm': case 'M':
+                publishHeadGripper(9);  // 指令9
+                break;
             // ========== 区模式切换 ==========
             case '7':
                 publishZoneMode(1);  // 一区
@@ -341,7 +349,9 @@ private:
                          : command == 4 ? "对接准备动作"
                          : command == 5 ? "下降"
                          : command == 6 ? "松开"
-                         : command == 7 ? "抓取武器头":"未知";
+                         : command == 7 ? "抓取武器头"
+                         : command == 8 ? "指令8"
+                         : command == 9 ? "指令9":"未知";
         RCLCPP_INFO(this->get_logger(), "武器头爪子指令: %d (%s)", command, desc);
         auto msg = std_msgs::msg::Int32();
         msg.data = command;
