@@ -293,10 +293,13 @@
       <PublishLiftCmd node="{node}" command="1"/>
 
       <WaitForEnter node="{node}"
-          prompt="按下回车按jian，开始方块"
+          prompt="按下回车按jian，开始上台阶"
           require_tty="true"
           clear_buffer="true"
           timeout="0.0"/>
+      <PublishLiftCmd node="{node}" command="2"/>
+      <PublishLiftCmd node="{node}" command="3"/>
+
       <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
 
       <!-- <DockToTag node="{node}"

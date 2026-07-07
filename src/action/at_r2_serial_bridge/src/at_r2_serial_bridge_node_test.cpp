@@ -31,15 +31,16 @@ struct KfsPacket {
 };
 #pragma pack(pop)
 
-// 从下位机接收的对接状态数据包结构
+// 从下位机接收的 R2 任务数据包结构
 #pragma pack(push, 1)
-struct DockingPacket {
+struct R2MissionPacket {
     uint8_t header;        // 包头 0x5A
-    uint8_t length;        // 包长度 11 (即 0x0B)
+    uint8_t length;        // 包长度 12 (即 0x0C)
     uint8_t cmd;           // 命令字 0x06
     uint32_t packet_id;    // 包ID
     uint8_t data_header;   // 数据域头 0xAA
     uint8_t dock_status;   // 对接状态 (1表示对接完成)
+    uint8_t can_board;     // 可以上车 (1表示可以上车)
     uint8_t data_tail;     // 数据域尾 0xBB
     uint8_t sum;           // 校验和
 };
@@ -84,6 +85,10 @@ public:
         // 创建对接状态发布器
         docking_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/meilin_mission_start", 10);
+
+        // 创建可以上车状态发布器
+        can_board_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/can_board", 10);
 
         // 定时持续发布最新状态（10Hz）
         // 平时发0；收到下位机1时持续发1；收到下位机2时发一次2，之后恢复发0
@@ -187,30 +192,36 @@ private:
                             break; // 长度不够，等待新数据
                         }
                     }
-                    else if (pkt_cmd == 0x06 && pkt_len == sizeof(DockingPacket)) {
-                        // 对接完成状态包
-                        if (rx_buffer_.size() >= sizeof(DockingPacket)) {
-                            DockingPacket dock_packet;
-                            std::memcpy(&dock_packet, rx_buffer_.data(), sizeof(DockingPacket));
+                    else if (pkt_cmd == 0x06 && pkt_len == sizeof(R2MissionPacket)) {
+                        // R2 任务状态包
+                        if (rx_buffer_.size() >= sizeof(R2MissionPacket)) {
+                            R2MissionPacket mission_packet;
+                            std::memcpy(&mission_packet, rx_buffer_.data(), sizeof(R2MissionPacket));
 
                             uint8_t sum = 0;
-                            for (size_t i = 0; i < sizeof(DockingPacket) - 1; i++) {
+                            for (size_t i = 0; i < sizeof(R2MissionPacket) - 1; i++) {
                                 sum += rx_buffer_[i];
                             }
-                            if (sum == dock_packet.sum &&
-                                dock_packet.data_header == 0xAA &&
-                                dock_packet.data_tail == 0xBB) {
-                                auto msg = std_msgs::msg::Int32();
-                                msg.data = dock_packet.dock_status;
-                                docking_status_pub_->publish(msg);
+                            if (sum == mission_packet.sum &&
+                                mission_packet.data_header == 0xAA &&
+                                mission_packet.data_tail == 0xBB) {
+                                auto dock_msg = std_msgs::msg::Int32();
+                                dock_msg.data = mission_packet.dock_status;
+                                docking_status_pub_->publish(dock_msg);
+
+                                auto board_msg = std_msgs::msg::Int32();
+                                board_msg.data = mission_packet.can_board;
+                                can_board_pub_->publish(board_msg);
+
                                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                                    "成功接收并发布 对接状态: %d (Packet ID: %u)", msg.data, dock_packet.packet_id);
+                                    "成功接收并发布 对接状态: %d, 可以上车: %d (Packet ID: %u)",
+                                    dock_msg.data, board_msg.data, mission_packet.packet_id);
                             } else {
                                 RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                                    "对接包校验失败: 计算得 0x%02X, 收到 0x%02X, 数据域头尾 0x%02X 0x%02X",
-                                    sum, dock_packet.sum, dock_packet.data_header, dock_packet.data_tail);
+                                    "R2任务包校验失败: 计算得 0x%02X, 收到 0x%02X, 数据域头尾 0x%02X 0x%02X",
+                                    sum, mission_packet.sum, mission_packet.data_header, mission_packet.data_tail);
                             }
-                            rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + sizeof(DockingPacket));
+                            rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + sizeof(R2MissionPacket));
                         } else {
                             break; // 长度不够，等待新数据
                         }
@@ -264,6 +275,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr can_board_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread usb_thread_;
