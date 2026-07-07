@@ -23,6 +23,25 @@ class QSpinBox;
 class QDoubleSpinBox;
 class QCheckBox;
 
+/// planner_params.yaml 读来的规划基线（代价 + 偏移 + R1 消失 + 高度开关）。
+/// 由 main() 从包内 config/planner_params.yaml 解析后传入窗口，作为「yaml 打底」，
+/// 界面控件在其之上覆盖对应项。字段默认值与 r2_planner::CostConfig / ForestConfig 一致，
+/// 保证未读到 yaml 时行为与历史默认相同。
+struct PlannerParams
+{
+  r2_planner::CostConfig cost;            // 全部 A* 代价（move/pick/push/turn/climb/descend/preferred_bonus...）
+  double move_prep_offset  = 0.15;
+  double grasp_prep_offset = 0.12;
+  double block_height_offset = -0.08;
+  double grasp_prep_theta_offset = 0.0;
+  double move_prep_theta_offset = 0.0;
+  double wait_cost = 1.0;
+  bool   r1_timed_removal_enable = false;
+  int    r1_removal_steps = 3;
+  bool   ignore_height = false;           // true → 升/降代价清零、强制可上 400
+  bool   loaded = false;                  // 成功解析到 yaml 时为 true（仅用于日志）
+};
+
 class PlannerWindow : public QMainWindow
 {
   Q_OBJECT
@@ -32,6 +51,7 @@ public:
     rclcpp::Node::SharedPtr node,
     r2_planner::BlockTable blocks,
     rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub,
+    PlannerParams params,
     QWidget * parent = nullptr);
 
 private slots:
@@ -50,6 +70,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   r2_planner::BlockTable blocks_;
   rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub_;
+  PlannerParams params_base_;   // planner_params.yaml 读来的代价基线（build_config_from_ui 先套用，UI 再覆盖）
   std::vector<QPushButton *> cells_;
   std::vector<int> cell_phase_;
   std::unordered_map<int, double> node_heights_;  // 与算法同源的各方块高度（node id -> 米）

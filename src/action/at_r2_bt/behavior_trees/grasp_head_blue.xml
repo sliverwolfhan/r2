@@ -158,7 +158,7 @@
                                 goal_yaw_tolerance="0.08"
                                 goal_stable_duration="0.3"
                                 pathalign_threshold="0.3"
-                                pathalign_offset_from_furthest="5"
+                                pathalign_offset_from_furthest="10"
                                 pathalign_use_path_orientations="true"
                                 wait_after_set="0.2"/>
                 <FollowSpinPath node="{node}"
@@ -180,7 +180,7 @@
                         goal="{spin_goal}"/>
             </Sequence>
             <Sequence>
-            <DelayMs delay_msec="1000">
+            <DelayMs delay_msec="2000">
                 <AlwaysSuccess/>
             </DelayMs>
             <PublishHeadCmd node="{node}" command="1"
@@ -337,7 +337,7 @@
                      wait_after_set="0.2"/>
             <FollowSpinPath node="{node}"
                             goal_x="0.87"
-                            goal_y="-4.6"
+                            goal_y="-4.0"
                             goal_yaw="3.14"
                             rotation_start_distance="0.7"
                             rotation_end_distance="0.5"
@@ -422,7 +422,7 @@
                             release_cmd="7"
                             timeout="1000.0"/>
       </Parallel>
-      <DelayMs delay_msec="2000">
+      <DelayMs delay_msec="1200">
         <AlwaysSuccess/>
       </DelayMs>
 

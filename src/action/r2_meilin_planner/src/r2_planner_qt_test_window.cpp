@@ -37,11 +37,13 @@ PlannerWindow::PlannerWindow(
   rclcpp::Node::SharedPtr node,
   r2_planner::BlockTable blocks,
   rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub,
+  PlannerParams params,
   QWidget * parent)
 : QMainWindow(parent),
   node_(std::move(node)),
   blocks_(std::move(blocks)),
   plan_pub_(std::move(plan_pub)),
+  params_base_(std::move(params)),
   scene_(nullptr),
   view_(nullptr),
   log_(nullptr),
@@ -200,6 +202,24 @@ PlannerWindow::PlannerWindow(
   plan_monitor_sub_ = node_->create_subscription<robot_interfaces::msg::Plan>(
     "/r2_planner/plan", rclcpp::QoS(1).transient_local().reliable(),
     std::bind(&PlannerWindow::on_plan_msg, this, std::placeholders::_1));
+
+  // 界面初值与 yaml 基线同步：这些控件会覆盖 yaml 对应项，故初始状态须反映 yaml，
+  // 否则默认勾选/默认数值会在首次规划时默默覆盖 planner_params.yaml。
+  if (ignore_height_chk_) {
+    ignore_height_chk_->setChecked(params_base_.ignore_height);
+  }
+  if (can_climb_400_chk_) {
+    can_climb_400_chk_->setChecked(params_base_.cost.can_climb_400);
+  }
+  if (r1_timed_removal_chk_) {
+    r1_timed_removal_chk_->setChecked(params_base_.r1_timed_removal_enable);
+  }
+  if (r1_removal_steps_spin_) {
+    r1_removal_steps_spin_->setValue(params_base_.r1_removal_steps);
+  }
+  if (wait_cost_spin_) {
+    wait_cost_spin_->setValue(params_base_.wait_cost);
+  }
 
   redraw_scene();
 }
@@ -385,6 +405,27 @@ void PlannerWindow::reload_zone_blocks()
 void PlannerWindow::build_config_from_ui(r2_planner::ForestConfig & config) const
 {
   r2_planner::fill_default_forest_topology(config);
+
+  // yaml 打底：套用 planner_params.yaml 读来的代价/偏移/等待/R1 消失基线，
+  // 覆盖 fill_default_forest_topology 的写死默认（拓扑与高度仍来自 topology）。
+  // 之后的界面控件在此基线之上覆盖对应项（yaml 打底 + UI 覆盖）。
+  config.cost = params_base_.cost;
+  config.move_prep_offset       = params_base_.move_prep_offset;
+  config.grasp_prep_offset      = params_base_.grasp_prep_offset;
+  config.block_height_offset    = params_base_.block_height_offset;
+  config.grasp_prep_theta_offset = params_base_.grasp_prep_theta_offset;
+  config.move_prep_theta_offset  = params_base_.move_prep_theta_offset;
+  config.wait_cost              = params_base_.wait_cost;
+  config.r1_timed_removal_enable = params_base_.r1_timed_removal_enable;
+  config.r1_removal_steps        = params_base_.r1_removal_steps;
+  // yaml 里的 ignore_height 先在基线上生效（界面「忽略台阶高度」勾选后会再次清零，等价）。
+  if (params_base_.ignore_height) {
+    config.cost.climb_200_cost   = 0.0;
+    config.cost.climb_400_cost   = 0.0;
+    config.cost.descend_200_cost = 0.0;
+    config.cost.descend_400_cost = 0.0;
+    config.cost.can_climb_400    = true;
+  }
 
   // 忽略高度：升/降代价清零、强制可上 400（与 kfs_subscriber_node 的 ignore_height 一致）。
   if (ignore_height_chk_ && ignore_height_chk_->isChecked()) {

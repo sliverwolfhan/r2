@@ -21,7 +21,7 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('at_r2_bt')
     # weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_blue.yaml')
     weapon_params_file = os.path.join(pkg_dir, 'config', 'weapon_grasp_params_blue.yaml')
-    place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params.yaml')
+    place_kfs_params_file = os.path.join(pkg_dir, 'config', 'place_kfs_params_blue.yaml')
     block_yaml_file = os.path.join(pkg_dir, 'yaml', 'block_blue.yaml')
 
     bt_xml = LaunchConfiguration('bt_xml')

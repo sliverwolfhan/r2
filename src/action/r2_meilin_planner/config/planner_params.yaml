@@ -14,10 +14,10 @@ kfs_subscriber_node:
 
     # 爬高代价
     climb_200_cost: 1.5   # 高度差 (0, 0.2] m
-    climb_400_cost: 3.5   # 高度差 (0.2, 0.4] m，仅当 can_climb_400=true 生效
+    climb_400_cost: 1.0  # 高度差 (0.2, 0.4] m，仅当 can_climb_400=true 生效
 
     # 转弯代价：每转 90° 加一次，掉头 180°=2×。
-    turn_cost: 0.5
+    turn_cost: 0.7
 
     # 400 台阶开关：
     can_climb_400: true
@@ -34,21 +34,21 @@ kfs_subscriber_node:
     # 把下位机码1的 R1 块（R1 正在收取的目标）建模为"会随时间让开的硬障碍"：
     # 未消失前 R2 不能踩，可原地等待(WAIT)；消失后正常通行。
     # false（默认）时码1仍当空地，规划行为与历史一致。
-    r1_timed_removal_enable: false
+    r1_timed_removal_enable: true
     # R2 每走几步 R1 消失一个（所有动作 MOVE/PICK/PUSH/WAIT 都算一步）。
     # 600 高度（节点6、8）最先消失，其余按高度降序假设顺序。
     r1_removal_steps: 3
     # 原地等待一步(WAIT)的代价。默认 = move_cost(1.0)；调大→更倾向绕路而非干等。
-    wait_cost: 1.0
+    wait_cost: 4.0
 
     # 准备位姿偏移量（米）：准备点 = 目标中心沿单轴退此距离，越小越靠近目标。
-    move_prep_offset: 0.1   # MOVE 准备点
-    grasp_prep_offset: 0.1  # PICK / PUSH 准备点
+    move_prep_offset: 0.15   # MOVE 准备点
+    grasp_prep_offset: 0.17  # PICK / PUSH 准备点
 
     # PICK / PUSH 发布的 block_height 偏移（米）：
     # block_height = (target.height - from.height) + block_height_offset
     # 仅影响发布给下游的字段，不参与 A* 代价计算。
-    block_height_offset: -0.08
+    block_height_offset: -0.09
 
     # PICK / PUSH 发布的 prep_pose.theta 偏移（弧度），左右两档共用：
     # 默认 0.0；前/左档 = 0 + offset，右档 = -pi/2 + offset。

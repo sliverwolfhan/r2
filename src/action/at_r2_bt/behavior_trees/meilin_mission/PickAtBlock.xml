@@ -63,14 +63,14 @@
            查不到就在节点内打印是哪一段断了(map->odom / odom->base_link)并返回 FAILURE，
            RetryUntilSuccessful 再 tick 重试。10 次 ≈ 10s，够等定位自愈；
            想无限重试改 num_attempts="-1"。 -->
-      <RetryUntilSuccessful num_attempts="10">
+      <RetryUntilSuccessful num_attempts="100">
         <ArmTask node="{node}"
                  task_id="2"
                  server_name="robotic_task"
                  base_frame="base_link"
                  target_frame="target_object"
                  map_frame="map"
-                 tf_timeout="1.0"
+                 tf_timeout="1.6"
                  cube_x="{cube_x}"
                  cube_y="{cube_y}"
                  block_height="{block_h}"

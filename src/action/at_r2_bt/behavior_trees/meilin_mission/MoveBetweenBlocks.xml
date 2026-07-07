@@ -29,6 +29,9 @@
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
             <Switch2 variable="{pick_count}" case_1="1" case_2="2">
               <Sequence>
+                <PublishHeadCmd node="{node}" command="10"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"/>
                 <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="-1.0"/>
                 <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="1.2"/>
                 <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
