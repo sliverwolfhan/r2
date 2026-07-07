@@ -39,6 +39,16 @@ set_target_properties(at_r2_serial_bridge_node PROPERTIES
   INSTALL_RPATH "$ORIGIN/.."
 )
 
+# AT R2 串口桥接节点 (test 版)
+add_executable(at_r2_serial_bridge_node_test
+  src/at_r2_serial_bridge_node_test.cpp
+)
+target_link_libraries(at_r2_serial_bridge_node_test at_r2_serial_bridge_cdc_trans)
+ament_target_dependencies(at_r2_serial_bridge_node_test rclcpp std_msgs geometry_msgs tf2_ros tf2 tf2_msgs)
+set_target_properties(at_r2_serial_bridge_node_test PROPERTIES
+  INSTALL_RPATH "$ORIGIN/.."
+)
+
 # 安装
 install(TARGETS
   at_r2_serial_bridge_cdc_trans
@@ -49,6 +59,7 @@ install(TARGETS
 
 install(TARGETS
   at_r2_serial_bridge_node
+  at_r2_serial_bridge_node_test
   DESTINATION lib/${PROJECT_NAME}
 )
 

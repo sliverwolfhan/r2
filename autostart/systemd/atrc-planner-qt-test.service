@@ -1,0 +1,18 @@
+[Unit]
+Description=AT_RC 规划器 Qt 测试 (r2_meilin_planner r2_planner_qt_test, 开机即启, 无红蓝之分)
+After=graphical-session.target
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+Environment=DISPLAY=:0
+# 无硬件依赖, 无需预检; 开机就起, 带 Qt 界面需要 DISPLAY
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/run_planner_qt_test.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

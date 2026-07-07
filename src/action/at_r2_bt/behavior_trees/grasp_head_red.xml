@@ -48,14 +48,20 @@
                goal_x_tolerance="0.03"
                goal_y_tolerance="0.05"
                goal_yaw_tolerance="0.05"
+               pathalign_threshold="3.0"
+               pathalign_offset_from_furthest="15"
                goal_stable_duration="0.3"
                wait_after_set="0.2"/>
 
-      <!-- 一键启动门控: 参数已设置完成, 按 Enter 开始 -->
-      <!-- require_tty="false": ros2 launch 下无 TTY 时自动跳过, ros2 run 直接从终端启动时仍会等待 Enter。 -->
-      <WaitForEnter node="{node}"
-                    prompt="参数已设置完成，按 Enter 开始连续抓取武器头"
-                    require_tty="true"
+      <!-- 一键启动门控: 参数已设置完成, 按 Enter 或收到启动话题任一即开始。
+           WaitForStart 同时监听 stdin(Enter) 与 start_topic(/AT_R2/start_cmd, Int32),
+           收到 start_value(=1) 或操作员按 Enter 任一即放行; 无 TTY 时(ros2 launch)
+           自动只保留话题一路。 -->
+      <WaitForStart node="{node}"
+                    prompt="参数已设置完成，按 Enter 或发布 /AT_R2/start_cmd 开始连续抓取武器头"
+                    start_topic="/AT_R2/red_start_cmd"
+                    start_value="1"
+                    enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/>
 
@@ -111,6 +117,8 @@
                             goal_y_tolerance="0.05"
                             goal_yaw_tolerance="0.05"
                             goal_stable_duration="0.3"
+                            pathalign_threshold="3.0"
+                            pathalign_offset_from_furthest="15"
                             pathalign_use_path_orientations="false"
                             wait_after_set="0.2"/>
                     <PublishGoal node="{node}"
@@ -153,6 +161,8 @@
                                 goal_y_tolerance="0.05"
                                 goal_yaw_tolerance="0.08"
                                 goal_stable_duration="0.3"
+                                pathalign_threshold="0.3"
+                                pathalign_offset_from_furthest="10"
                                 pathalign_use_path_orientations="true"
                                 wait_after_set="0.2"/>
                 <FollowSpinPath node="{node}"
@@ -174,7 +184,7 @@
                         goal="{spin_goal}"/>
             </Sequence>
             <Sequence>
-            <DelayMs delay_msec="1000">
+            <DelayMs delay_msec="2000">
                 <AlwaysSuccess/>
             </DelayMs>
             <PublishHeadCmd node="{node}" command="1"
@@ -226,7 +236,7 @@
                     odom_topic="/AT_R2/odometry"
                     distance_topic="/AT_R2/distance_grasp"
                     distance_scale="0.001"
-                    distance_stall_max="0.035"
+                    distance_stall_max="0.030"
                     filter_enable="true"
                     median_window="5"
                     ema_tau="0.1"/>
@@ -331,7 +341,7 @@
                      wait_after_set="0.2"/>
             <FollowSpinPath node="{node}"
                             goal_x="0.87"
-                            goal_y="4.6"
+                            goal_y="4.0"
                             goal_yaw="0.0"
                             rotation_start_distance="0.8"
                             rotation_end_distance="0.8"
@@ -427,7 +437,7 @@
                             release_cmd="7"
                             timeout="1000.0"/>
       </Parallel>
-      <DelayMs delay_msec="2000">
+      <DelayMs delay_msec="1300">
         <AlwaysSuccess/>
       </DelayMs>
 

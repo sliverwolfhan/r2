@@ -29,7 +29,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'bt_xml',
-            default_value='r2_bt_red.xml',
+            default_value='place_mission_v2_red.xml',
             description='行为树 xml 文件名 (位于 at_r2_bt/behavior_trees/)',
         ),
         Node(

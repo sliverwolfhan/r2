@@ -46,6 +46,7 @@
 #include "nav2_bt_publish_goal/set_zone_mode_action.hpp"
 #include "nav2_bt_publish_goal/wait_docking_release_action.hpp"
 #include "nav2_bt_publish_goal/wait_for_enter_action.hpp"
+#include "nav2_bt_publish_goal/wait_for_start_action.hpp"
 
 int main(int argc, char** argv)
 {
@@ -126,6 +127,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::SetZoneModeAction>("SetZoneMode");
   factory.registerNodeType<nav2_bt_publish_goal::WaitDockingReleaseAction>("WaitDockingRelease");
   factory.registerNodeType<nav2_bt_publish_goal::WaitForEnterAction>("WaitForEnter");
+  factory.registerNodeType<nav2_bt_publish_goal::WaitForStartAction>("WaitForStart");
   RCLCPP_INFO(node->get_logger(), "✓ PublishGoal 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ ClimbStair 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ DescendStair 节点已注册");
@@ -154,6 +156,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ SetZoneMode 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitDockingRelease 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ WaitForEnter 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ WaitForStart 节点已注册");
 
   // ===== 共享 ArmJobRunner：后台串行队列下发命名臂动作 =====
   // 同一份 runner 给 ArmMoveNamedAsync / WaitArmIdle 复用，

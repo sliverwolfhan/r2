@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键中断开机自启动四件套 (虚拟串口 + 导航 + 机械臂 + 规划器)。
+# 一键中断开机自启动 (虚拟串口 + 导航 + 机械臂 + 规划器 + 行为树)。
 # 用法:
 #   ./stop_all.sh                    # 停掉全部 (本次停, 下次登录仍会自启)
 #   ./stop_all.sh serial nav         # 只停指定程序 (可写多个, 空格分隔)
@@ -13,6 +13,9 @@
 #   nav      -> atrc-navigation.service       导航
 #   arm      -> atrc-arm.service              机械臂
 #   planner  -> atrc-planner.service          规划器
+#   qt       -> atrc-planner-qt-test.service  规划器Qt测试
+#   bridge   -> atrc-serial-bridge-test.service 串口桥接test
+#   bt       -> atrc-bt-runner.service        行为树
 #   all      -> 全部 (等价于不带程序名)
 
 set -u
@@ -23,6 +26,9 @@ declare -A ALIASES=(
   [nav]=atrc-navigation.service
   [arm]=atrc-arm.service
   [planner]=atrc-planner.service
+  [qt]=atrc-planner-qt-test.service
+  [bridge]=atrc-serial-bridge-test.service
+  [bt]=atrc-bt-runner.service
 )
 # 别名 -> 中文说明 (仅用于 --list 展示)
 declare -A DESCS=(
@@ -30,16 +36,19 @@ declare -A DESCS=(
   [nav]="导航"
   [arm]="机械臂"
   [planner]="规划器"
+  [qt]="规划器Qt测试"
+  [bridge]="串口桥接test"
+  [bt]="行为树"
 )
 
-ALL_UNITS=(atrc-virtual-serial.service atrc-navigation.service atrc-arm.service atrc-planner.service)
+ALL_UNITS=(atrc-virtual-serial.service atrc-navigation.service atrc-arm.service atrc-planner.service atrc-planner-qt-test.service atrc-serial-bridge-test.service atrc-bt-runner.service)
 DISABLE=0
 SHOW_STATUS=0
 SELECTED=()   # 用户指定的服务单元; 为空则表示全部
 
 list_programs() {
   echo "可选程序名:"
-  for a in serial nav arm planner; do
+  for a in serial nav arm planner qt bridge bt; do
     printf "  %-8s -> %-28s %s\n" "$a" "${ALIASES[$a]}" "${DESCS[$a]}"
   done
   echo "  all      -> 全部"

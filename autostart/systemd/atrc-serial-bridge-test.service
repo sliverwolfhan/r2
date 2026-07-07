@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 串口桥接 test (at_r2_serial_bridge_node_test, 默认 /dev/ttyUSB0 115200)
+After=graphical-session.target
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+# 无界面(纯串口解析节点), 不需要 DISPLAY。
+# 默认口 /dev/ttyUSB0; 若下位机枚举成 ttyACM0, 改 ExecStart 加 -p port_name:=/dev/ttyACM0。
+# 串口没就绪时节点会打不开端口而退出, Restart=always 会不断重试直到插上。
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/run_serial_bridge_test.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

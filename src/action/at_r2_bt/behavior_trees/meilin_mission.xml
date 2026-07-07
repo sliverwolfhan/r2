@@ -35,12 +35,13 @@
                             topic="/AT_R2/head_gripper_cmd"
                             wait_done="false"/>
 
-      <WaitForEnter node="{node}"
-                      prompt="参数已设置完成，按 Enter 开始导航"
-                      require_tty="false"
-                      clear_buffer="true"
-                      timeout="0.0"/>
-
+      <WaitForStart node="{node}"
+                    prompt="参数已设置完成，按 Enter 或发布 /AT_R2/start_cmd 开始连续抓取武器头"
+                    start_topic="/AT_R2/meilin_mission_start"
+                    start_value="1"
+                    enable_topic="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
 
 
       <!-- <PublishGoal node="{node}" x="2.3" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->

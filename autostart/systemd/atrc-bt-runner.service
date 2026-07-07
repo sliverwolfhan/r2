@@ -1,0 +1,19 @@
+[Unit]
+Description=AT_RC 行为树 bt_runner (at_r2_bt, 蓝/红看 zone.conf, 可选自启看 ENABLE_BT_RUNNER)
+After=graphical-session.target atrc-navigation.service atrc-planner.service
+PartOf=atrc.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pc1/AT_RC
+Environment=ROS_DISTRO=humble
+Environment=DISPLAY=:0
+# bt_runner 无自己的硬件, 依赖导航/规划器提供定位与路径; 不做硬件预检, 靠 After 排在其后。
+# 启动前再等 BT_START_DELAY 秒(默认5)让导航稳定, 等待逻辑在 start_bt_runner.sh 里读 autostart.env。
+ExecStart=/usr/bin/bash /home/pc1/AT_RC/autostart/start_bt_runner.sh
+TimeoutStartSec=0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=atrc.target

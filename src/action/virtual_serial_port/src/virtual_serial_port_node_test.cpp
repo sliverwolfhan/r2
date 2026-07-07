@@ -44,6 +44,8 @@ struct StatusPacket {
     uint8_t sign;            // 对接状态 (1表示对接完成)
     uint8_t MeiLin[12];      // 12 个方块的数据 (0:空, 1:R1, 2:R2, 3:Fake, 4:R1未取)
     uint16_t distance_grasp;  //爪子侧激光
+    uint8_t red_start_cmd;   // 启动命令 (下位机透传, 发布到 /AT_R2/red_start_cmd)
+    uint8_t blue_start_cmd;  // 启动命令 (下位机透传, 发布到 /AT_R2/blue_start_cmd)
     uint8_t tail;            // 包尾 0xBA
 };
 #pragma pack(pop)
@@ -171,6 +173,12 @@ public:
         docking_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/docking_status", 10);
 
+        // 创建启动命令发布器 (red_start_cmd / blue_start_cmd)
+        red_start_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/red_start_cmd", 10);
+        blue_start_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/blue_start_cmd", 10);
+
         // 定时持续发布最新状态（10Hz）
         status_timer_ = this->create_wall_timer(
             std::chrono::milliseconds(100),
@@ -209,6 +217,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "已订阅气泵单次命令话题: /AT_R2/pump_cmd (单次发送, 0->pump=3, 1->pump=4)");
         RCLCPP_INFO(this->get_logger(), "已创建状态发布器: /AT_R2/climber_status, /AT_R2/grasp_status, 距离发布器: /AT_R2/distance_head, /AT_R2/distance_tail, /AT_R2/distance_grasp");
         RCLCPP_INFO(this->get_logger(), "已创建梅林/对接发布器: /AT_R2/kfs_positions, /AT_R2/docking_status");
+        RCLCPP_INFO(this->get_logger(), "已创建启动命令发布器: /AT_R2/red_start_cmd, /AT_R2/blue_start_cmd");
     }
 
     ~VirtualSerialPortNode()
@@ -486,6 +495,15 @@ private:
             dock_msg.data = static_cast<int32_t>(status.sign);
             docking_status_pub_->publish(dock_msg);
 
+            // 发布启动命令 (red_start_cmd / blue_start_cmd)
+            auto red_start_cmd_msg = std_msgs::msg::Int32();
+            red_start_cmd_msg.data = static_cast<int32_t>(status.red_start_cmd);
+            red_start_cmd_pub_->publish(red_start_cmd_msg);
+
+            auto blue_start_cmd_msg = std_msgs::msg::Int32();
+            blue_start_cmd_msg.data = static_cast<int32_t>(status.blue_start_cmd);
+            blue_start_cmd_pub_->publish(blue_start_cmd_msg);
+
             // 发布梅林 12 方块数据
             auto meilin_msg = std_msgs::msg::Int32MultiArray();
             for (int i = 0; i < 12; i++) {
@@ -571,6 +589,8 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_grasp_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr red_start_cmd_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr blue_start_cmd_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread send_thread_;

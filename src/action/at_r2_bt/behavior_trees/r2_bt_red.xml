@@ -13,11 +13,9 @@
   <BehaviorTree ID="MainTree">
     <Sequence>
       <SubTree ID="GraspHeadRed"    _autoremap="true"/>
-      <WaitForEnter node="{node}"
-                prompt="按下开始2区任务"
-                require_tty="false"
-                clear_buffer="true"
-                timeout="0.0"/>
+      <DelayMs delay_msec="2000">
+          <AlwaysSuccess/>
+      </DelayMs>
       <SubTree ID="MeilinMission" _autoremap="true"/>
     </Sequence>
   </BehaviorTree>

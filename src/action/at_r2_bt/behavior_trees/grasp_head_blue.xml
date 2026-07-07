@@ -53,11 +53,15 @@
                goal_stable_duration="0.3"
                wait_after_set="0.2"/>
 
-      <!-- 一键启动门控: 参数已设置完成, 按 Enter 开始 -->
-      <!-- require_tty="false": ros2 launch 下无 TTY 时自动跳过, ros2 run 直接从终端启动时仍会等待 Enter。 -->
-      <WaitForEnter node="{node}"
-                    prompt="参数已设置完成，按 Enter 开始连续抓取武器头"
-                    require_tty="true"
+      <!-- 一键启动门控: 参数已设置完成, 按 Enter 或收到启动话题任一即开始。
+           WaitForStart 同时监听 stdin(Enter) 与 start_topic(/AT_R2/start_cmd, Int32),
+           收到 start_value(=1) 或操作员按 Enter 任一即放行; 无 TTY 时(ros2 launch)
+           自动只保留话题一路。 -->
+      <WaitForStart node="{node}"
+                    prompt="参数已设置完成，按 Enter 或发布 /AT_R2/start_cmd 开始连续抓取武器头"
+                    start_topic="/AT_R2/blue_start_cmd"
+                    start_value="1"
+                    enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/>
 

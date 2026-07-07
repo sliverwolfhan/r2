@@ -67,6 +67,7 @@ add_library(${PROJECT_NAME} SHARED
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
+  src/wait_for_start_action.cpp
 )
 
 # Set dependencies
@@ -129,6 +130,7 @@ add_executable(simple_bt_runner
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
   src/wait_for_enter_action.cpp
+  src/wait_for_start_action.cpp
   src/delay_decorator.cpp
 )
 ament_target_dependencies(simple_bt_runner

@@ -83,7 +83,7 @@ public:
 
         // 创建对接状态发布器
         docking_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
-            "/AT_R2/docking_status", 10);
+            "/AT_R2/meilin_mission_start", 10);
 
         // 定时持续发布最新状态（10Hz）
         // 平时发0；收到下位机1时持续发1；收到下位机2时发一次2，之后恢复发0

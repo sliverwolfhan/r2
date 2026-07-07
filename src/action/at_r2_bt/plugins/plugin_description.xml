@@ -151,4 +151,14 @@
       release navigation immediately from the terminal.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::WaitForStartAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      Start gate that releases the behavior tree on either the operator pressing
+      Enter or a std_msgs/Int32 arriving on start_topic (default /AT_R2/start_cmd)
+      whose value equals start_value (default 1). Whichever fires first continues
+      the tree. When stdin is not a TTY the Enter branch is skipped and only the
+      topic branch is active. Set enable_topic=false to disable the topic branch
+      entirely (Enter-only, equivalent to WaitForEnter).
+    </description>
+  </class>
 </library>

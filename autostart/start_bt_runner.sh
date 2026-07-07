@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# 根据 zone.conf 选择蓝区/红区行为树 bt_runner 并启动。
+# 切区只需编辑 autostart/zone.conf 写 blue 或 red。
+# 不指定 xml, 用各自 launch 里的默认行为树 (蓝 r2_bt_blue.xml / 红 r2_bt_red.xml)。
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ZONE_FILE="${SCRIPT_DIR}/zone.conf"
+ENV_FILE="${SCRIPT_DIR}/autostart.env"
+
+# 读取 zone (去除空白/注释)，默认 blue
+ZONE="blue"
+if [ -f "${ZONE_FILE}" ]; then
+  ZONE="$(grep -vE '^\s*#' "${ZONE_FILE}" | tr -d '[:space:]' | head -c 16)"
+  ZONE="${ZONE:-blue}"
+fi
+
+# 读取启动前等待秒数 (导航稳定用), 默认 5
+BT_START_DELAY=5
+[ -f "${ENV_FILE}" ] && source "${ENV_FILE}"
+# 非法值(非纯数字)回退到 0, 避免 sleep 报错卡住
+[[ "${BT_START_DELAY}" =~ ^[0-9]+$ ]] || BT_START_DELAY=0
+
+if [ "${BT_START_DELAY}" -gt 0 ]; then
+  echo "==> 等待导航稳定 ${BT_START_DELAY}s ..."
+  sleep "${BT_START_DELAY}"
+fi
+
+case "${ZONE}" in
+  blue) RUN="${WORKSPACE_DIR}/run_bt_runner_blue.sh" ;;
+  red)  RUN="${WORKSPACE_DIR}/run_bt_runner_red.sh" ;;
+  *)
+    echo "[ERROR] zone.conf 非法值: '${ZONE}' (只能是 blue 或 red)" >&2
+    exit 1 ;;
+esac
+
+if [ ! -x "${RUN}" ] && [ ! -f "${RUN}" ]; then
+  echo "[ERROR] 未找到行为树脚本: ${RUN}" >&2
+  exit 1
+fi
+
+echo "==> zone=${ZONE}, 启动 ${RUN}"
+exec bash "${RUN}" "$@"
