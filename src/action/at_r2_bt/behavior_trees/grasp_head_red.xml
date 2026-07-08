@@ -154,8 +154,8 @@
                                 vx_min="-1.2"
                                 vy_max="1.2"
                                 wz_max="4.0"
-                                vx_std="0.25"
-                                vy_std="0.25"
+                                vx_std="0.30"
+                                vy_std="0.30"
                                 wz_std="0.5"
                                 goal_x_tolerance="0.05"
                                 goal_y_tolerance="0.05"
@@ -169,8 +169,8 @@
                         goal_x="{grasp_prep_x}"
                         goal_y="{grasp_prep_y}"
                         goal_yaw="{grasp_prep_yaw}"
-                        rotation_start_distance="0.5"
-                        rotation_end_distance="0.5"
+                        rotation_start_distance="0.45"
+                        rotation_end_distance="0.45"
                         rotation_direction="cw"
                         num_points="150"
                         frame_id="map"
@@ -184,7 +184,7 @@
                         goal="{spin_goal}"/>
             </Sequence>
             <Sequence>
-            <DelayMs delay_msec="2000">
+            <DelayMs delay_msec="3000">
                 <AlwaysSuccess/>
             </DelayMs>
             <PublishHeadCmd node="{node}" command="1"
@@ -330,8 +330,8 @@
                      vx_min="-1.2"
                      vy_max="1.2"
                      wz_max="4.0"
-                     vx_std="0.2"
-                     vy_std="0.2"
+                     vx_std="0.3"
+                     vy_std="0.3"
                      wz_std="0.5"
                      goal_x_tolerance="0.05"
                      goal_y_tolerance="0.05"
@@ -340,11 +340,11 @@
                      pathalign_use_path_orientations="true"
                      wait_after_set="0.2"/>
             <FollowSpinPath node="{node}"
-                            goal_x="0.87"
+                            goal_x="1.3"
                             goal_y="4.0"
                             goal_yaw="0.0"
-                            rotation_start_distance="0.8"
-                            rotation_end_distance="0.8"
+                            rotation_start_distance="0.45"
+                            rotation_end_distance="0.45"
                             rotation_direction="ccw"
                             num_points="150"
                             frame_id="map"

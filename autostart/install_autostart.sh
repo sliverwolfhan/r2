@@ -16,6 +16,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USER_UNIT_DIR="${HOME}/.config/systemd/user"
+AUTOSTART_DIR="${HOME}/.config/autostart"
+# 登录桌面后自动弹终端跟随日志的服务 (格式: "unit名|中文名")。
+# 由 tail_log.sh 跟随; 每项生成一个 ~/.config/autostart/atrc-log-<unit>.desktop。
+LOG_UNITS=(
+  "atrc-virtual-serial|虚拟串口"
+  "atrc-navigation|导航"
+  "atrc-arm|机械臂"
+  "atrc-planner|规划器"
+  "atrc-serial-bridge-test|串口桥接test"
+)
 # 核心件 (总是安装+启用) + target
 UNITS=(atrc-virtual-serial.service atrc-navigation.service atrc-arm.service atrc-planner.service atrc-planner-qt-test.service atrc-serial-bridge-test.service atrc.target)
 # 行为树 (可选, 由 ENABLE_BT_RUNNER / --with-bt / --no-bt 决定是否 enable)
@@ -48,6 +58,8 @@ if [ "${UNINSTALL}" -eq 1 ]; then
   systemctl --user disable --now atrc.target "${UNITS[@]}" "${BT_UNIT}" 2>/dev/null || true
   for u in "${UNITS[@]}" "${BT_UNIT}"; do rm -f "${USER_UNIT_DIR}/${u}"; done
   systemctl --user daemon-reload
+  echo "==> 删除日志窗口自启动"
+  for entry in "${LOG_UNITS[@]}"; do u="${entry%%|*}"; rm -f "${AUTOSTART_DIR}/atrc-log-${u#atrc-}.desktop"; done
   echo "==> 删除 udev / netplan (需 sudo)"
   sudo rm -f /etc/udev/rules.d/99-atrc-usb.rules
   sudo udevadm control --reload 2>/dev/null || true
@@ -80,6 +92,27 @@ fi
 
 # 让用户服务能在登录时随图形会话拉起 (开机免登录场景可选开 linger)
 loginctl enable-linger "$(whoami)" 2>/dev/null || true
+
+# ---------- 1b. 日志窗口 (登录桌面自动弹终端跟随日志) ----------
+echo "==> 安装日志窗口自启动到 ${AUTOSTART_DIR}"
+mkdir -p "${AUTOSTART_DIR}"
+for entry in "${LOG_UNITS[@]}"; do
+  unit="${entry%%|*}"
+  cname="${entry##*|}"
+  short="${unit#atrc-}"
+  cat > "${AUTOSTART_DIR}/atrc-log-${short}.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AT_RC 日志 - ${cname}
+Comment=开机后弹出终端实时跟随 ${unit} 日志
+Exec=gnome-terminal --title="AT_RC ${cname}日志" -- ${SCRIPT_DIR}/tail_log.sh ${unit}
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=10
+EOF
+done
+echo "    已装 ${#LOG_UNITS[@]} 个日志窗口, 下次登录桌面自动弹出。"
 
 # ---------- 2. udev 规则 (USB 授权) ----------
 echo "==> 安装 udev 规则 (USB 0483:5740 / 0483:5741 授权, 需 sudo)"

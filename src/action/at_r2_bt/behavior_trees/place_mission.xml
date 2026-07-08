@@ -20,8 +20,8 @@
         clear_buffer="true"
         timeout="0.0"/>
     <SetCostmapInflation node="{node}"
-        local_radius="0.45"
-        global_radius="0.45"
+        local_radius="0.40"
+        global_radius="0.40"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
         
@@ -56,7 +56,27 @@
               clear_buffer="true"
               timeout="0.0"/>
       
-      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+
+
+        
+      <SetMppiParams node="{node}"
+                  controller_node="/AT_R2/controller_server"
+                  plugin_prefix="FollowPath"
+                  goal_angle_weight="5.0"
+                  goal_angle_threshold="1.5"
+                  vx_max="1.2"
+                  vx_min="-1.2"
+                  vy_max="1.2"
+                  wz_max="4.0"
+                  vx_std="0.4"
+                  vy_std="0.4"
+                  wz_std="0.3"
+                  goal_x_tolerance="0.03"
+                  goal_y_tolerance="0.05"
+                  goal_yaw_tolerance="0.05"
+                  goal_stable_duration="0.3"
+                  wait_after_set="0.2"/>
       <!-- ===== B 段 (第 1 次): 放预装那个 KFS 到 slot_1 ===== -->
       <SelectPlaceSlot start="{place_start}"/>
 
@@ -67,10 +87,10 @@
             <AlwaysSuccess/>
           </DelayMs>
           <ArmMoveNamed node="{node}"
-                        pose_name="place_grid_2"
+                        pose_name="place_grid_3"
                         server_name="robotic_task"
                         task_id="1"
-                        duration="5.0"/>
+                        duration="3.0"/>
         </Sequence>
         <PublishGoal node="{node}"
                      x="{slot_x}"
@@ -82,12 +102,12 @@
       </ParallelAll>
       <ForceSuccess>
         <DockToWall node="{node}"
-              vy="0.1"
-              vx="0.0"
+              vy="0.0"
+              vx="0.15"
               wz="0.0"
               stall_threshold="0.02"
               stall_duration="10.0"
-              timeout="3.5"
+              timeout="2.7"
               publish_rate_hz="50.0"
               cmd_vel_topic="/AT_R2/cmd_vel_bt"
               odom_topic="/AT_R2/odometry"/>
@@ -101,16 +121,26 @@
       <DelayMs delay_msec="1000">
         <AlwaysSuccess/>
       </DelayMs>
+      <SetCostmapInflation node="{node}"
+          local_radius="0.01"
+          global_radius="0.01"
+          local_cost_scaling_factor="1.0"
+          global_cost_scaling_factor="4.0"/>
+        
 
       <!-- 4. 回过渡姿态 (脱离格子) -->
 
       <!-- ===== 主循环: 取地上 KFS + 放它, 重复 place_count 次 ===== -->
+      <!-- loop_i: 循环计数器, 第 1 次 tick 后 =1, 第 2 次 =2 ... 用于条件动作 -->
+      <Script code="loop_i := 0"/>
       <Repeat num_cycles="{place_count}">
         <Sequence>
+          <!-- 每进一次循环自增, 放在最前面 -->
+          <Script code="loop_i := loop_i + 1"/>
           <ForceSuccess>
             <DockToWall node="{node}"
-                  vy="-0.1"
-                  vx="0.0"
+                  vy="0.0"
+                  vx="-0.15"
                   wz="0.0"
                   stall_threshold="0.02"
                   stall_duration="10.0"
@@ -139,10 +169,10 @@
                         action_name="/AT_R2/navigate_to_pose"
                         goal="{grab_prep_goal}"/>
             <ArmMoveNamed node="{node}"
-                              pose_name="place_interim_pos"
+                              pose_name="place_interim_pos_2"
                               server_name="robotic_task"
                               task_id="1"
-                              duration="2.0"/>
+                              duration="3.0"/>
           </ParallelAll>
           <!-- C2. 笛卡尔精准抓: 块 (map) -> lookupTransform(base_link, map) -> 末端目标 -->
           <!-- 发送 data = [x, y, z, qx, qy, qz, qw] 7 维, task_id=4。
@@ -166,7 +196,7 @@
 
           <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
           <ArmMoveNamed node="{node}"
-                        pose_name="place_interim_pos"
+                        pose_name="place_interim_pos_2"
                         server_name="robotic_task"
                         task_id="1"
                         duration="1.0"/>
@@ -178,7 +208,7 @@
           <!-- B1+B2. 摆 place_grid + 导航 slot 预备点 (并行) -->
           <ParallelAll max_failures="1">
             <ArmMoveNamed node="{node}"
-                          pose_name="place_grid"
+                          pose_name="place_grid_3"
                           server_name="robotic_task"
                           task_id="1"
                           duration="2.0"/>
@@ -190,6 +220,17 @@
                          action_name="/AT_R2/navigate_to_pose"
                          goal="{place_goal}"/>
           </ParallelAll>
+
+          <!-- ===== 只在第 2 次循环执行的额外动作 (loop_i == 2) ===== -->
+          <!-- _skipIf: 条件为真则整块跳过; loop_i!=2 时跳过, 即仅第 2 次进入 -->
+          <Sequence _skipIf="loop_i != 2">
+            <WaitForEnter node="{node}"
+                          prompt="第2次循环, 按回车继续"
+                          require_tty="true"
+                          clear_buffer="true"
+                          timeout="0.0"/>
+            
+          </Sequence>
 
           <ForceSuccess>
             <DockToWall node="{node}"
@@ -215,7 +256,7 @@
 
           <!-- B4. 回过渡姿态 -->
           <!-- <ArmMoveNamed node="{node}"
-                        pose_name="place_interim_pos_0"
+                        pose_name="place_interim_pos_2"
                         server_name="robotic_task"
                         task_id="1"
                         duration="2.0"/> -->

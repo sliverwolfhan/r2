@@ -70,7 +70,7 @@
                  base_frame="base_link"
                  target_frame="target_object"
                  map_frame="map"
-                 tf_timeout="1.6"
+                 tf_timeout="2.0"
                  cube_x="{cube_x}"
                  cube_y="{cube_y}"
                  block_height="{block_h}"

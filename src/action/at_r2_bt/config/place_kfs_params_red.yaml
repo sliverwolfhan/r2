@@ -20,15 +20,15 @@ simple_bt_runner:
     #   prep_x / prep_y / prep_yaw    -> 机器人预备点位姿 (map 系, m / rad)
     #   place_x / place_y             -> KFS 放置点的格子位置 (map 系, m)
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
-    kfs_1.prep_x: 11.15
-    kfs_1.prep_y: 2.505
-    kfs_1.prep_yaw: 0.0
+    kfs_1.prep_x: 11.09
+    kfs_1.prep_y: 3.895
+    kfs_1.prep_yaw: 3.14
     kfs_1.place_x: 11.825
-    kfs_1.place_y: 2.715
+    kfs_1.place_y: 4.115
 
-    kfs_2.prep_x: 11.15
-    kfs_2.prep_y: 3.205
-    kfs_2.prep_yaw: 0.0
+    kfs_2.prep_x: 11.09
+    kfs_2.prep_y: 3.195
+    kfs_2.prep_yaw: 3.14
     kfs_2.place_x: 11.825
     kfs_2.place_y: 3.415
 
@@ -42,17 +42,17 @@ simple_bt_runner:
     # 机械臂关节姿态 (place_grid) 和过渡姿态 (place_interim_pos_0) 在 XML 写死。
     place_slot_priority:
       - slot_2
+      - slot_1
       - slot_3
-      - slot_1`
 
-    slot_1.x: 11.370
+    slot_1.x: 11.580
     slot_1.y: 4.95
-    slot_1.yaw: 0.0
+    slot_1.yaw: 1.57
 
-    slot_2.x: 10.850
+    slot_2.x: 11.070
     slot_2.y: 4.95
-    slot_2.yaw: 0.0
+    slot_2.yaw: 1.57
 
-    slot_3.x: 10.3100
+    slot_3.x: 10.85
     slot_3.y: 4.95
     slot_3.yaw: 0.0
