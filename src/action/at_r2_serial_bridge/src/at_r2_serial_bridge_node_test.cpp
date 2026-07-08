@@ -40,8 +40,24 @@ struct R2MissionPacket {
     uint32_t packet_id;    // 包ID
     uint8_t data_header;   // 数据域头 0xAA
     uint8_t dock_status;   // 对接状态 (1表示对接完成)
-    uint8_t can_board;     // 可以上车 (1表示可以上车)
+    uint8_t zone3_cmd;     // 3区cmd
     uint8_t data_tail;     // 数据域尾 0xBB
+    uint8_t sum;           // 校验和
+};
+#pragma pack(pop)
+
+// 从下位机接收的 放格子选择 数据包结构 (packet_id 之后直接是 9 字节数据域, 无 0xAA/0xBB 头尾)
+//   data[0..2]: 忽略不用
+//   data[3..5]: 放格子选择位 (哪个为 1 -> 发 slot 1/2/3, 优先级 2>1>3)
+//   data[6..8]: 大胜位 (任一为 1 -> 发 4, 优先级高于放格子)
+// 整包 = 1+1+1+4+9+1 = 17 字节 (length 字段应为 0x11)
+#pragma pack(push, 1)
+struct R2SlotSelectPacket {
+    uint8_t header;        // 包头 0x5A
+    uint8_t length;        // 包长度 17 (即 0x11)
+    uint8_t cmd;           // 命令字 0x07
+    uint32_t packet_id;    // 包ID
+    uint8_t data[9];       // 数据域: 9 字节 (紧跟 packet_id)
     uint8_t sum;           // 校验和
 };
 #pragma pack(pop)
@@ -86,9 +102,13 @@ public:
         docking_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/meilin_mission_start", 10);
 
-        // 创建可以上车状态发布器
-        can_board_pub_ = this->create_publisher<std_msgs::msg::Int32>(
-            "/AT_R2/can_board", 10);
+        // 创建 3区cmd 发布器
+        zone3_cmd_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/zone3_cmd", 10);
+
+        // 创建 放格子选择 发布器 (1/2/3=格子, 4=大胜)
+        place_slot_select_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/place_slot_select", 10);
 
         // 定时持续发布最新状态（10Hz）
         // 平时发0；收到下位机1时持续发1；收到下位机2时发一次2，之后恢复发0
@@ -209,19 +229,73 @@ private:
                                 dock_msg.data = mission_packet.dock_status;
                                 docking_status_pub_->publish(dock_msg);
 
-                                auto board_msg = std_msgs::msg::Int32();
-                                board_msg.data = mission_packet.can_board;
-                                can_board_pub_->publish(board_msg);
+                                auto zone3_msg = std_msgs::msg::Int32();
+                                zone3_msg.data = mission_packet.zone3_cmd;
+                                zone3_cmd_pub_->publish(zone3_msg);
 
                                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                                    "成功接收并发布 对接状态: %d, 可以上车: %d (Packet ID: %u)",
-                                    dock_msg.data, board_msg.data, mission_packet.packet_id);
+                                    "成功接收并发布 对接状态: %d, 3区cmd: %d (Packet ID: %u)",
+                                    dock_msg.data, zone3_msg.data, mission_packet.packet_id);
                             } else {
                                 RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                     "R2任务包校验失败: 计算得 0x%02X, 收到 0x%02X, 数据域头尾 0x%02X 0x%02X",
                                     sum, mission_packet.sum, mission_packet.data_header, mission_packet.data_tail);
                             }
                             rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + sizeof(R2MissionPacket));
+                        } else {
+                            break; // 长度不够，等待新数据
+                        }
+                    }
+                    else if (pkt_cmd == 0x07 && pkt_len == sizeof(R2SlotSelectPacket)) {
+                        // 放格子选择包 (data[9])
+                        if (rx_buffer_.size() >= sizeof(R2SlotSelectPacket)) {
+                            R2SlotSelectPacket slot_packet;
+                            std::memcpy(&slot_packet, rx_buffer_.data(), sizeof(R2SlotSelectPacket));
+
+                            uint8_t sum = 0;
+                            for (size_t i = 0; i < sizeof(R2SlotSelectPacket) - 1; i++) {
+                                sum += rx_buffer_[i];
+                            }
+                            if (sum == slot_packet.sum) {
+                                // data[0..2] 忽略; data[3..5]=放格子位; data[6..8]=大胜位
+                                // 优先级: 先判大胜(7-9位任一=1 -> 4); 否则放格子(4-6位, 2>1>3)
+                                int32_t sel = 0;
+                                if (slot_packet.data[6] == 1 ||
+                                    slot_packet.data[7] == 1 ||
+                                    slot_packet.data[8] == 1) {
+                                    sel = 4;                              // 大胜
+                                } else if (slot_packet.data[4] == 1) {
+                                    sel = 2;                              // 2 优先
+                                } else if (slot_packet.data[3] == 1) {
+                                    sel = 1;
+                                } else if (slot_packet.data[5] == 1) {
+                                    sel = 3;
+                                }
+
+                                // 每包都打印 data[9] + 算出的 sel, 方便现场核对下位机发的实际数据
+                                RCLCPP_INFO(this->get_logger(),
+                                    "放格子包 data[9]=[%d %d %d | %d %d %d | %d %d %d] -> sel=%d (Packet ID: %u)",
+                                    slot_packet.data[0], slot_packet.data[1], slot_packet.data[2],
+                                    slot_packet.data[3], slot_packet.data[4], slot_packet.data[5],
+                                    slot_packet.data[6], slot_packet.data[7], slot_packet.data[8],
+                                    sel, slot_packet.packet_id);
+
+                                if (sel != 0) {
+                                    auto sel_msg = std_msgs::msg::Int32();
+                                    sel_msg.data = sel;
+                                    place_slot_select_pub_->publish(sel_msg);
+                                    RCLCPP_INFO(this->get_logger(),
+                                        "  -> 发布 place_slot_select: %d", sel);
+                                } else {
+                                    RCLCPP_INFO(this->get_logger(),
+                                        "  -> 9 位全 0/未命中, 不发布 (等于未选)");
+                                }
+                            } else {
+                                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                    "放格子选择包校验失败: 计算得 0x%02X, 收到 0x%02X",
+                                    sum, slot_packet.sum);
+                            }
+                            rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + sizeof(R2SlotSelectPacket));
                         } else {
                             break; // 长度不够，等待新数据
                         }
@@ -275,7 +349,8 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
-    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr can_board_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr zone3_cmd_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr place_slot_select_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread usb_thread_;

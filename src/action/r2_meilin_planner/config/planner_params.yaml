@@ -17,7 +17,7 @@ kfs_subscriber_node:
     climb_400_cost: 1.0  # 高度差 (0.2, 0.4] m，仅当 can_climb_400=true 生效
 
     # 转弯代价：每转 90° 加一次，掉头 180°=2×。
-    turn_cost: 0.7
+    turn_cost: 2.0
 
     # 400 台阶开关：
     can_climb_400: true
@@ -39,7 +39,7 @@ kfs_subscriber_node:
     # 600 高度（节点6、8）最先消失，其余按高度降序假设顺序。
     r1_removal_steps: 3
     # 原地等待一步(WAIT)的代价。默认 = move_cost(1.0)；调大→更倾向绕路而非干等。
-    wait_cost: 4.0
+    wait_cost: 3.0
 
     # 准备位姿偏移量（米）：准备点 = 目标中心沿单轴退此距离，越小越靠近目标。
     move_prep_offset: 0.15   # MOVE 准备点

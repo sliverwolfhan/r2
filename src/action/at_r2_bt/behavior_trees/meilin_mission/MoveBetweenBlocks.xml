@@ -61,8 +61,24 @@
       <!-- ===== 段 B：楼梯（不再等臂）|| 把"晚期"塞进臂队列 ===== -->
       <ParallelAll max_failures="1">
         <Switch2 variable="{stair_dir}" case_1="UP" case_2="DOWN">
-          <ClimbStair   node="{node}" height="{abs_dh}"/>
-          <DescendStair node="{node}" height="{abs_dh}"/>
+          <!-- 上下台阶期间用"台阶前的准备朝向 {prep_yaw}"做角度纠偏（只发 angular.z）。
+               yaw_correct_enable=false 即可关闭；其余为可调参数。 -->
+          <ClimbStair   node="{node}" height="{abs_dh}"
+                        yaw_correct_enable="true"
+                        target_yaw="{prep_yaw}"
+                        yaw_kp="1.5"
+                        yaw_wz_max="0.4"
+                        yaw_engage_threshold="0.1"
+                        yaw_deadband="0.02"
+                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"/>
+          <DescendStair node="{node}" height="{abs_dh}"
+                        yaw_correct_enable="true"
+                        target_yaw="{prep_yaw}"
+                        yaw_kp="1.5"
+                        yaw_wz_max="0.4"
+                        yaw_engage_threshold="0.1"
+                        yaw_deadband="0.02"
+                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"/>
           <AlwaysSuccess/>
         </Switch2>
         <ForceSuccess>

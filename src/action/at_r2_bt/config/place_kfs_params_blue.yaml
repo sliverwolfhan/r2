@@ -4,33 +4,33 @@ simple_bt_runner:
     # place_count: 放几个(Repeat 循环次数)
     # place_start: 从第几个 KFS 开始(1-based, 对应 kfs_priority 第几个)
     # 例: start=1 count=2 -> 放 kfs_1、kfs_2
-    place_count: 1
+    place_count: 2
     place_start: 1
 
     # 笛卡尔抓取(C 段 ArmCartesianTask)发送 data 里的 z 固定值,
     # 单位 m, 不做 TF 变换。机械臂端按需要解读 (例如末端在底盘系下的目标高度)。
-    kfs_grab_z: 0.15
+    kfs_grab_z: 0.10
 
     # KFS 放置顺序
     kfs_priority:
-      - kfs_2
       - kfs_1
+      - kfs_2
 
     # 每个 KFS 的参数：
     #   prep_x / prep_y / prep_yaw    -> 机器人预备点位姿 (map 系, m / rad)
     #   place_x / place_y             -> KFS 放置点的格子位置 (map 系, m)
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
     kfs_1.prep_x: 11.09
-    kfs_1.prep_y: -2.785
-    kfs_1.prep_yaw: 0.0
+    kfs_1.prep_y: -3.895
+    kfs_1.prep_yaw: 3.14
     kfs_1.place_x: 11.825
-    kfs_1.place_y: -2.575
+    kfs_1.place_y: -4.115
 
     kfs_2.prep_x: 11.09
-    kfs_2.prep_y: -3.485
-    kfs_2.prep_yaw: 0.0
+    kfs_2.prep_y: -3.195
+    kfs_2.prep_yaw: 3.14
     kfs_2.place_x: 11.825
-    kfs_2.place_y: -3.275
+    kfs_2.place_y: -3.415
 
     # ===== 放置目标点 (B 段用) =====
     # 数量 = place_count + 1 (地上块数 + 1 个预装 KFS)
@@ -41,18 +41,18 @@ simple_bt_runner:
     # 每个 slot 一组机器人导航预备点位姿 (map 系, m / rad)。
     # 机械臂关节姿态 (place_grid) 和过渡姿态 (place_interim_pos_0) 在 XML 写死。
     place_slot_priority:
-      - slot_3
       - slot_2
-      - slot_1`
+      - slot_1
+      - slot_3
 
-    slot_1.x: 11.030
+    slot_1.x: 11.580
     slot_1.y: -4.95
     slot_1.yaw: -1.57
 
-    slot_2.x: 10.490
+    slot_2.x: 11.070
     slot_2.y: -4.95
     slot_2.yaw: -1.57
 
-    slot_3.x: 9.950
+    slot_3.x: 11.570
     slot_3.y: -4.95
     slot_3.yaw: -1.57

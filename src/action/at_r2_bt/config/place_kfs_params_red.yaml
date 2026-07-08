@@ -22,13 +22,13 @@ simple_bt_runner:
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
     kfs_1.prep_x: 11.09
     kfs_1.prep_y: 3.895
-    kfs_1.prep_yaw: 3.14
+    kfs_1.prep_yaw: 0.0
     kfs_1.place_x: 11.825
     kfs_1.place_y: 4.115
 
     kfs_2.prep_x: 11.09
     kfs_2.prep_y: 3.195
-    kfs_2.prep_yaw: 3.14
+    kfs_2.prep_yaw: 0.0
     kfs_2.place_x: 11.825
     kfs_2.place_y: 3.415
 
@@ -53,6 +53,6 @@ simple_bt_runner:
     slot_2.y: 4.95
     slot_2.yaw: 1.57
 
-    slot_3.x: 10.85
+    slot_3.x: 11.570
     slot_3.y: 4.95
-    slot_3.yaw: 0.0
+    slot_3.yaw: 1.57
