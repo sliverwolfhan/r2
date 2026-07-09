@@ -45,7 +45,7 @@ simple_bt_runner:
       - slot_1
       - slot_3
 
-    slot_1.x: 11.580
+    slot_1.x: 11.610
     slot_1.y: 4.95
     slot_1.yaw: 1.57
 
@@ -53,6 +53,6 @@ simple_bt_runner:
     slot_2.y: 4.95
     slot_2.yaw: 1.57
 
-    slot_3.x: 11.570
+    slot_3.x: 11.530
     slot_3.y: 4.95
     slot_3.yaw: 1.57

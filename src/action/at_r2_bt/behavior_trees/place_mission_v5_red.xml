@@ -244,7 +244,7 @@
             </DelayMs>
 
             <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
-            <ParallelAll max_failures="0">
+            <ParallelAll max_failures="1">
               <ForceSuccess>
                 <DockToWall node="{node}"
                       vy="0.0"

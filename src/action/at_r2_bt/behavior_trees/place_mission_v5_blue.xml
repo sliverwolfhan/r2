@@ -23,8 +23,8 @@
                     timeout="0.0"/> -->
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.40"
-        global_radius="0.40"
+        local_radius="0.35"
+        global_radius="0.35"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
         
@@ -32,14 +32,17 @@
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
                   goal_angle_weight="5.0"
-                  goal_angle_threshold="0.5"
+                  goal_angle_threshold="0.3"
                   vx_max="1.2"
                   vx_min="-1.2"
                   vy_max="1.2"
                   wz_max="4.0"
-                  vx_std="0.4"
-                  vy_std="0.4"
-                  wz_std="0.25"
+                  vx_std="0.35"
+                  vy_std="0.35"
+                  wz_std="0.35"
+                  pathalign_use_path_orientations="false"
+                  pathalign_threshold="3.0"
+                  pathalign_offset_from_furthest="15"
                   goal_x_tolerance="0.03"
                   goal_y_tolerance="0.05"
                   goal_yaw_tolerance="0.05"
@@ -50,7 +53,7 @@
                     pose_name="hold_block_blue"
                     server_name="robotic_task"
                     task_id="1"
-                    duration="2.0"/>
+                    duration="5.0"/>
       <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
 
       <WaitForStart node="{node}"
@@ -61,33 +64,50 @@
                     clear_buffer="true"
                     timeout="0.0"/>
       
-      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="3.14" frame_id="map" goal="{goal}"/>
 
-
+      <WaitForStart node="{node}"
+                          prompt="按 Enter 或接受 /AT_R2/blue_start_cmd 开始放置 KFS"
+                          start_topic="/AT_R2/blue_start_cmd"
+                          start_value="1"
+                          enable_topic="true"
+                          clear_buffer="true"
+                          timeout="0.0"/>
         
       <SetMppiParams node="{node}"
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
                   goal_angle_weight="5.0"
-                  goal_angle_threshold="1.5"
+                  goal_angle_threshold="1.0"
                   vx_max="1.2"
                   vx_min="-1.2"
                   vy_max="1.2"
                   wz_max="4.0"
                   vx_std="0.4"
                   vy_std="0.4"
-                  wz_std="0.3"
+                  wz_std="0.35"
+                  pathalign_use_path_orientations="false"
+                  pathalign_threshold="3.0"
+                  pathalign_offset_from_furthest="15"
                   goal_x_tolerance="0.03"
                   goal_y_tolerance="0.05"
                   goal_yaw_tolerance="0.05"
                   goal_stable_duration="0.3"
                   wait_after_set="0.2"/>
+                  
+      <PublishGoal node="{node}"
+                     x="10.97"
+                     y="-2.2"
+                     yaw="1.57"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
       <!-- ===== 导航到【第一次准备位 P1】(固定写死) || 摆臂, 两者都必须成功 ===== -->
       <ParallelAll max_failures="1">
         <PublishGoal node="{node}"
                      x="11.07"
-                     y="-4.95"
-                     yaw="-1.57"
+                     y="-4.75"
+                     yaw="1.57"
                      frame_id="map"
                      action_name="/AT_R2/navigate_to_pose"
                      goal="{place_goal}"/>
@@ -99,12 +119,15 @@
                       duration="2.0"/>
       </ParallelAll>
 
-      <!-- ===== 主循环: 等话题选格子 -> 放 -> 抓下一块 -> 去P2, 最多 place_count 次 =====
-           slot_sel 话题值: 1/2/3 = 放 slot_1/2/3 后抓下一块; 4 = 大胜爬三层结束。
+      <!-- ===== 主循环: 等话题选格子 -> 放 -> 抓下一块 -> 去P2, 共 place_count+1 次 =====
+           前 place_count 轮: 放块后抓下一块 (放预装/kfs_1/.../kfs_(n-1), 抓 kfs_1/.../kfs_n)。
+           末轮 (第 place_count+1 轮): 只放最后一块 kfs_n, 不再抓、不再去 P2, 放完停住。
+           slot_sel 话题值: 1/2/3 = 放 slot_1/2/3; 4 = 大胜爬三层结束。
            race_done: 大胜后置 1, 后续轮次整轮 _skipIf 跳过 (BT 无 break, 用标志空转)。 -->
       <Script code="loop_i := 0"/>
       <Script code="race_done := 0"/>
-      <Repeat num_cycles="{place_count}">
+      <Script code="total_rounds := place_count + 1"/>
+      <Repeat num_cycles="{total_rounds}">
         <!-- 大胜已发生则整轮跳过 -->
         <Sequence _skipIf="race_done == 1">
           <!-- 每进一次循环自增, 放在最前面 -->
@@ -201,7 +224,12 @@
 
           <!-- ===== case 1/2/3: 放块到 slot_<值> 再抓下一块 ===== -->
           <Sequence _skipIf="slot_sel == 4">
-
+            
+          <SetCostmapInflation node="{node}"
+            local_radius="0.25"
+            global_radius="0.25"
+            local_cost_scaling_factor="1.0"
+            global_cost_scaling_factor="4.0"/>
             <!-- B1+B2. 摆放置姿态 + 导航到所选 slot (slot_x/y/yaw 已由 WaitSlotSelect 按值填好) -->
             <ParallelAll max_failures="1">
               <Sequence>
@@ -244,7 +272,7 @@
             </DelayMs>
 
             <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
-            <ParallelAll max_failures="0">
+            <ParallelAll max_failures="1">
               <ForceSuccess>
                 <DockToWall node="{node}"
                       vy="0.0"
@@ -252,7 +280,7 @@
                       wz="0.0"
                       stall_threshold="0.02"
                       stall_duration="10.0"
-                      timeout="1.7"
+                      timeout="3.0"
                       publish_rate_hz="50.0"
                       cmd_vel_topic="/AT_R2/cmd_vel_bt"
                       odom_topic="/AT_R2/odometry"/>
@@ -271,63 +299,67 @@
               </ForceSuccess>
             </ParallelAll>
 
-            <!-- ===== C 段: 抓下一个地上 KFS ===== -->
-            <!-- 选当前 KFS 的取块参数 -> 工作键 kfs_prep_x/y/yaw/kfs_place_x/y -->
-            <SelectKfsParams start="{place_start}"/>
+            <!-- ===== C 段: 抓下一个地上 KFS (仅前 place_count 轮; 末轮已放完最后一块, 只放不抓) =====
+                 末轮 loop_i == total_rounds: 整段 (取块参数+导航取块+笛卡尔抓+回过渡+去P2) 跳过,
+                 放完最后一块后直接结束该轮 -> Repeat 结束 -> 机器人停住。 -->
+            <Sequence _skipIf="loop_i >= total_rounds">
+              <!-- 选当前 KFS 的取块参数 -> 工作键 kfs_prep_x/y/yaw/kfs_place_x/y -->
+              <SelectKfsParams start="{place_start}"/>
 
-            <!-- C1. 导航到取块预备点 (与摆过渡臂姿并行) -->
-            <ParallelAll max_failures="1">
-              <PublishGoal node="{node}"
-                          x="{kfs_prep_x}"
-                          y="{kfs_prep_y}"
-                          yaw="{kfs_prep_yaw}"
-                          frame_id="map"
-                          action_name="/AT_R2/navigate_to_pose"
-                          goal="{grab_prep_goal}"/>
-              <ArmMoveNamed node="{node}"
-                                pose_name="place_interim_pos_blue"
+              <!-- C1. 导航到取块预备点 (与摆过渡臂姿并行) -->
+              <ParallelAll max_failures="1">
+                <PublishGoal node="{node}"
+                            x="{kfs_prep_x}"
+                            y="{kfs_prep_y}"
+                            yaw="{kfs_prep_yaw}"
+                            frame_id="map"
+                            action_name="/AT_R2/navigate_to_pose"
+                            goal="{grab_prep_goal}"/>
+                <ArmMoveNamed node="{node}"
+                                  pose_name="place_interim_pos_blue"
+                                  server_name="robotic_task"
+                                  task_id="1"
+                                  duration="3.0"/>
+              </ParallelAll>
+
+              <!-- C2. 开气泵 + 笛卡尔精准抓 -->
+              <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+              <ArmCartesianTask node="{node}"
+                                task_id="4"
                                 server_name="robotic_task"
-                                task_id="1"
-                                duration="3.0"/>
-            </ParallelAll>
+                                base_frame="base_link"
+                                map_frame="map"
+                                tf_namespace="AT_R2"
+                                cube_x="{kfs_place_x}"
+                                cube_y="{kfs_place_y}"
+                                cube_z="{kfs_grab_z}"
+                                tf_timeout="5.0"/>
 
-            <!-- C2. 开气泵 + 笛卡尔精准抓 -->
-            <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
-            <ArmCartesianTask node="{node}"
-                              task_id="4"
-                              server_name="robotic_task"
-                              base_frame="base_link"
-                              map_frame="map"
-                              tf_namespace="AT_R2"
-                              cube_x="{kfs_place_x}"
-                              cube_y="{kfs_place_y}"
-                              cube_z="{kfs_grab_z}"
-                              tf_timeout="1.0"/>
-
-            <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
-            <ArmMoveNamed node="{node}"
-                          pose_name="place_interim_pos_blue"
-                          server_name="robotic_task"
-                          task_id="1"
-                          duration="1.0"/>
-
-            <!-- ===== 抓完块后, 导航到【之后准备位 P2】(固定写死) || 摆臂, 下一轮开头再等话题 =====
-                 两者都必须成功。此时手里举着刚抓的 KFS, 勿摆成松开姿态。 -->
-            <ParallelAll max_failures="1">
-              <PublishGoal node="{node}"
-                           x="11.07"
-                           y="-4.11"
-                           yaw="0.0"
-                           frame_id="map"
-                           action_name="/AT_R2/navigate_to_pose"
-                           goal="{place_goal}"/>
-              <!-- TODO: 填并行臂姿态名 -->
+              <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
               <ArmMoveNamed node="{node}"
-                            pose_name="TODO_arm_pose_P2"
+                            pose_name="place_interim_pos_blue"
                             server_name="robotic_task"
                             task_id="1"
-                            duration="2.0"/>
-            </ParallelAll>
+                            duration="1.0"/>
+
+              <!-- ===== 抓完块后, 导航到【之后准备位 P2】(固定写死) || 摆臂, 下一轮开头再等话题 =====
+                   两者都必须成功。此时手里举着刚抓的 KFS, 勿摆成松开姿态。 -->
+              <ParallelAll max_failures="1">
+                <PublishGoal node="{node}"
+                             x="11.07"
+                             y="-4.11"
+                             yaw="3.14"
+                             frame_id="map"
+                             action_name="/AT_R2/navigate_to_pose"
+                             goal="{place_goal}"/>
+                <!-- TODO: 填并行臂姿态名 -->
+                <ArmMoveNamed node="{node}"
+                              pose_name="hold_block_blue"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="2.0"/>
+              </ParallelAll>
+            </Sequence>
 
           </Sequence>
 

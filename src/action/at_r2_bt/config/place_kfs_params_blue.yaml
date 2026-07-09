@@ -9,7 +9,7 @@ simple_bt_runner:
 
     # 笛卡尔抓取(C 段 ArmCartesianTask)发送 data 里的 z 固定值,
     # 单位 m, 不做 TF 变换。机械臂端按需要解读 (例如末端在底盘系下的目标高度)。
-    kfs_grab_z: 0.10
+    kfs_grab_z: 0.09
 
     # KFS 放置顺序
     kfs_priority:
@@ -41,18 +41,18 @@ simple_bt_runner:
     # 每个 slot 一组机器人导航预备点位姿 (map 系, m / rad)。
     # 机械臂关节姿态 (place_grid) 和过渡姿态 (place_interim_pos_0) 在 XML 写死。
     place_slot_priority:
-      - slot_2
       - slot_1
+      - slot_2
       - slot_3
 
-    slot_1.x: 11.580
-    slot_1.y: -4.95
-    slot_1.yaw: -1.57
+    slot_1.x: 10.52
+    slot_1.y: -4.85
+    slot_1.yaw: 1.57
 
-    slot_2.x: 11.070
-    slot_2.y: -4.95
-    slot_2.yaw: -1.57
+    slot_2.x: 11.060
+    slot_2.y: -4.85
+    slot_2.yaw: 1.57
 
-    slot_3.x: 11.570
-    slot_3.y: -4.95
-    slot_3.yaw: -1.57
+    slot_3.x: 11.600
+    slot_3.y: -4.85
+    slot_3.yaw: 1.57

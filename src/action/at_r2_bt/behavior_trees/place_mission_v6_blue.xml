@@ -1,0 +1,359 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="PlaceMission">
+  <!--
+    PlaceMission v6 (蓝) — 精简直达版:
+      开局: 机械臂夹住 1 块 (pump_cmd=1), 底盘上另有 1 块 (chassis_pump_cmd=1)。
+      流程:
+        A 段: 预装锁块 (臂 pump=1 + 底盘 chassis_pump=1)。
+        导航到三区。
+        B 段: 臂上的块 -> 放【第二层】(松 pump_cmd)。
+        C 段: 臂从底盘抓块 (pump_cmd=1 + 松 chassis_pump_cmd) -> 放【第三层】。
+        大胜: three_layer_arm + PublishLiftCmd 1/2/3 爬三层, 结束。
+
+    气泵映射:
+      /AT_R2/pump_cmd         -> 机械臂末端气泵 (臂上的块)
+      /AT_R2/chassis_pump_cmd -> 底盘气泵 (底盘上的块)
+  -->
+  <BehaviorTree ID="PlaceMission">
+    <Sequence name="PlaceKFS">
+
+      <SetCostmapInflation node="{node}"
+          local_radius="0.40"
+          global_radius="0.40"
+          local_cost_scaling_factor="1.0"
+          global_cost_scaling_factor="4.0"/>
+
+      <SetMppiParams node="{node}"
+                    controller_node="/AT_R2/controller_server"
+                    plugin_prefix="FollowPath"
+                    goal_angle_weight="5.0"
+                    goal_angle_threshold="0.3"
+                    vx_max="1.2"
+                    vx_min="-1.2"
+                    vy_max="1.2"
+                    wz_max="4.0"
+                    vx_std="0.35"
+                    vy_std="0.35"
+                    wz_std="0.35"
+                    pathalign_use_path_orientations="false"
+                    pathalign_threshold="3.0"
+                    pathalign_offset_from_furthest="15"
+                    goal_x_tolerance="0.03"
+                    goal_y_tolerance="0.05"
+                    goal_yaw_tolerance="0.05"
+                    goal_stable_duration="0.3"
+                    wait_after_set="0.2"/>
+
+      <!-- ===== A 段: 预装 (臂夹块 + 底盘夹块) ===== -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="hold_block_blue"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="5.0"/>
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/chassis_pump_cmd"/>
+
+      <WaitForStart node="{node}"
+                    prompt="按 Enter 或接受 /AT_R2/blue_start_cmd 开始启动"
+                    start_topic="/AT_R2/blue_start_cmd"
+                    start_value="1"
+                    enable_topic="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="3.14" frame_id="map" goal="{goal}"/>
+
+      <WaitForStart node="{node}"
+                    prompt="按 Enter 或接受 /AT_R2/blue_start_cmd 前往三区"
+                    start_topic="/AT_R2/blue_start_cmd"
+                    start_value="1"
+                    enable_topic="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+
+      <SetMppiParams node="{node}"
+                    controller_node="/AT_R2/controller_server"
+                    plugin_prefix="FollowPath"
+                    goal_angle_weight="5.0"
+                    goal_angle_threshold="0.3"
+                    vx_max="1.2"
+                    vx_min="-1.2"
+                    vy_max="1.2"
+                    wz_max="4.0"
+                    vx_std="0.4"
+                    vy_std="0.4"
+                    wz_std="0.25"
+                    pathalign_use_path_orientations="false"
+                    pathalign_threshold="3.0"
+                    pathalign_offset_from_furthest="15"
+                    goal_x_tolerance="0.03"
+                    goal_y_tolerance="0.05"
+                    goal_yaw_tolerance="0.05"
+                    goal_stable_duration="0.3"
+                    wait_after_set="0.2"/>
+
+      <!-- 途经点 -->
+      <PublishGoal node="{node}"
+                   x="10.97"
+                   y="-2.2"
+                   yaw="1.57"
+                   frame_id="map"
+                   action_name="/AT_R2/navigate_to_pose"
+                   goal="{place_goal}"/>
+
+      <!-- ===== 导航到三区放块准备位 || 摆放置臂姿, 两者都必须成功 =====
+           此时臂里预装着 KFS, 勿摆成松开姿态。 -->
+      <ParallelAll max_failures="1">
+        <PublishGoal node="{node}"
+                     x="11.07"
+                     y="-4.75"
+                     yaw="1.57"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+        <ArmMoveNamed node="{node}"
+                      pose_name="place_grid_blue_1"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
+
+      <!-- ============================================================ -->
+      <!-- ===== B 段: 臂上的块 -> 放【第二层】 ===== -->
+      <!-- ============================================================ -->
+
+      <!-- B1. 摆放置姿态 + 导航到二层放置位 (TODO: 填二层格子坐标) -->
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="100">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <ArmMoveNamed node="{node}"
+                        pose_name="place_grid_blue_1"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        </Sequence>
+        <PublishGoal node="{node}"
+                     x="11.07"
+                     y="-4.75"
+                     yaw="1.57"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+      </ParallelAll>
+
+      <!-- B2. 往格子里怼 (顶墙) -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="-0.1"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="10.0"
+                    timeout="3.5"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <!-- B3. 松臂气泵, 放下第二层的块 -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- B4. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
+      <ParallelAll max_failures="1">
+        <ForceSuccess>
+          <DockToWall node="{node}"
+                vy="0.0"
+                vx="0.1"
+                wz="0.0"
+                stall_threshold="0.02"
+                stall_duration="10.0"
+                timeout="3.0"
+                publish_rate_hz="50.0"
+                cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                odom_topic="/AT_R2/odometry"/>
+        </ForceSuccess>
+        <ForceSuccess>
+          <Sequence>
+            <DelayMs delay_msec="300">
+              <AlwaysSuccess/>
+            </DelayMs>
+            <ArmMoveNamed node="{node}"
+                  pose_name="place_grid_finish_blue"
+                  server_name="robotic_task"
+                  task_id="1"
+                  duration="1.0"/>
+          </Sequence>
+        </ForceSuccess>
+      </ParallelAll>
+
+      <!-- ============================================================ -->
+      <!-- ===== C 段: 臂从底盘抓块 -> 放【第三层】 ===== -->
+      <!-- ============================================================ -->
+
+      <!-- C1. 臂摆到从底盘抓块的预备姿态 (TODO: 确认从底盘取块的臂姿名) -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="place_interim_pos_blue"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="3.0"/>
+
+      <!-- C2. 臂开气泵抓块 + 松底盘气泵 (交接: 块从底盘转到臂上) -->
+      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+      <DelayMs delay_msec="500">
+        <AlwaysSuccess/>
+      </DelayMs>
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
+      <DelayMs delay_msec="500">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- C3. 臂抬起把块举到过渡姿态 (TODO: 确认举块臂姿名) -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="hold_block_blue"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
+
+      <!-- C4. 摆第三层放置姿态 + 导航到三层放置位 (TODO: 填三层格子坐标/臂姿) -->
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="100">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <ArmMoveNamed node="{node}"
+                        pose_name="place_grid_blue_1"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        </Sequence>
+        <PublishGoal node="{node}"
+                     x="11.07"
+                     y="-4.75"
+                     yaw="1.57"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+      </ParallelAll>
+
+      <!-- C5. 往格子里怼 (顶墙) -->
+      <ForceSuccess>
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="-0.1"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="10.0"
+                    timeout="3.5"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+
+      <!-- C6. 松臂气泵, 放下第三层的块 -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- C7. 倒车退出格子 与 收臂 并行 -->
+      <ParallelAll max_failures="1">
+        <ForceSuccess>
+          <DockToWall node="{node}"
+                vy="0.0"
+                vx="0.1"
+                wz="0.0"
+                stall_threshold="0.02"
+                stall_duration="10.0"
+                timeout="3.0"
+                publish_rate_hz="50.0"
+                cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                odom_topic="/AT_R2/odometry"/>
+        </ForceSuccess>
+        <ForceSuccess>
+          <Sequence>
+            <DelayMs delay_msec="300">
+              <AlwaysSuccess/>
+            </DelayMs>
+            <ArmMoveNamed node="{node}"
+                  pose_name="place_grid_finish_blue"
+                  server_name="robotic_task"
+                  task_id="1"
+                  duration="1.0"/>
+          </Sequence>
+        </ForceSuccess>
+      </ParallelAll>
+
+      <!-- ============================================================ -->
+      <!-- ===== 大胜: three_layer_arm + lift 1/2/3 爬三层 ===== -->
+      <!-- ============================================================ -->
+
+      <!-- 到大胜准备位 (导航 || 摆臂, 两者都必须成功) -->
+      <ParallelAll max_failures="1">
+        <PublishGoal node="{node}"
+                     x="10.7"
+                     y="-4.5"
+                     yaw="3.14"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
+        <ArmMoveNamed node="{node}"
+                      pose_name="three_layer_arm_1"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
+
+      <!-- 发 lift command=1 (发指令 || 摆臂, 两者都必须成功) -->
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <PublishLiftCmd node="{node}" command="1"/>
+        </Sequence>
+        <ArmMoveNamed node="{node}"
+                      pose_name="three_layer_arm_2"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
+
+      <!-- 按回车或等话题: 降下底盘 (抬腿) -->
+      <WaitForStart node="{node}"
+                    prompt="大胜: 按 Enter 或发布 /AT_R2/zone3_cmd 继续 (抬腿)"
+                    start_topic="/AT_R2/zone3_cmd"
+                    start_value="1"
+                    enable_topic="true"
+                    clear_buffer="true"
+                    timeout="0.0"/>
+      <PublishLiftCmd node="{node}" command="2"/>
+      <DelayMs delay_msec="1000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+      <!-- 发 lift command=3 (发指令 || 摆臂, 两者都必须成功) -->
+      <ParallelAll max_failures="1">
+        <Sequence>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <PublishLiftCmd node="{node}" command="3"/>
+        </Sequence>
+        <ArmMoveNamed node="{node}"
+                      pose_name="three_layer_arm_3"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
+      <DelayMs delay_msec="2000">
+        <AlwaysSuccess/>
+      </DelayMs>
+
+    </Sequence>
+  </BehaviorTree>
+</root>
