@@ -1,4 +1,4 @@
-# R2 梅林规划器调参文件
+# R2 梅林规划器调参文件【蓝区】
 # 被 kfs_subscriber_node 读取，驱动 A* 路径规划的代价与红蓝区选择。
 kfs_subscriber_node:
   ros__parameters:

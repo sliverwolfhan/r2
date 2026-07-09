@@ -89,6 +89,12 @@ struct ForestConfig {
     // 留空则关闭该偏好。仅影响 PICK 代价、不影响 MOVE/PUSH，前排强制抓取规则保持不变。
     std::unordered_set<int> preferred_pick_nodes;
 
+    // 蓝区标志：红蓝场地关于 x 轴镜像，节点编号→物理左右方向相反。
+    // 红区（false）：节点编号增大方向 = +y = 物理左侧。
+    // 蓝区（true）：节点编号减小方向 = 物理左侧，故 moveHeading 需把 ±y(左右)对调。
+    // 夹爪固定在车物理左手侧，pickTurnQuarters 的“左手免转”假设两区通用，只翻左右编码即可。
+    bool zone_blue = false;
+
     // --- R1 块定时消失（把码1的 R1_PENDING 块建模为"会随时间让开的硬障碍"）---
     // 关闭时（默认）R1_PENDING 当空地，行为与历史一致。
     bool r1_timed_removal_enable = false;

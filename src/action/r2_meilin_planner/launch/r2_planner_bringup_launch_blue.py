@@ -15,7 +15,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("r2_meilin_planner")
-    default_params = os.path.join(pkg_share, "config", "planner_params.yaml")
+    default_params = os.path.join(pkg_share, "config", "planner_params_blue.yaml")
 
     zone = LaunchConfiguration("zone")
     ignore_height = LaunchConfiguration("ignore_height")

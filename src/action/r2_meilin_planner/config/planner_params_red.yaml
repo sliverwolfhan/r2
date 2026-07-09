@@ -1,9 +1,9 @@
-# R2 梅林规划器调参文件
+# R2 梅林规划器调参文件【红区】
 # 被 kfs_subscriber_node 读取，驱动 A* 路径规划的代价与红蓝区选择。
 kfs_subscriber_node:
   ros__parameters:
     # 赛区选择：red / blue
-    zone: "blue"
+    zone: "red"
 
     # 基础动作代价
     move_cost: 1.0        # 平移一格的基础代价

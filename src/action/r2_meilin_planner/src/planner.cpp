@@ -122,8 +122,10 @@ int R2MeilinPlanner::moveHeading(int from_node, int to_node) const {
     const int diff = to_node - from_node;
     if (diff == 3)  return 0;   // 同列上一行 → +x 前进
     if (diff == -3) return 2;   // -x 后退
-    if (diff == 1)  return 1;   // 同行下一列 → +y 左
-    if (diff == -1) return 3;   // -y 右
+    // 同行相邻列的左右：红区编号增大=+y=物理左；蓝区场地镜像，编号增大=物理右，
+    // 故蓝区把左右(1↔3)对调，使 pickTurnQuarters 的“左手免转”假设两区都成立。
+    if (diff == 1)  return config_.zone_blue ? 3 : 1;   // 同行下一列
+    if (diff == -1) return config_.zone_blue ? 1 : 3;   // 同行上一列
     return 0;                   // 理论不会到这（相邻必差 ±1/±3）
 }
 

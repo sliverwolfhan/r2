@@ -451,6 +451,8 @@ void PlannerWindow::build_config_from_ui(r2_planner::ForestConfig & config) cons
     config.initial_items[nid] = block_from_phase(cell_phase_[static_cast<size_t>(idx)]);
   }
 
+  // 蓝区场地关于 x 轴镜像，节点编号→物理左右相反，moveHeading 需据此翻转左右编码。
+  config.zone_blue = zone_blue_;
   // 抓取偏好：机器人物理左手列（+y）。红区 {3,6,9,12}，蓝区 {1,4,7,10}。
   config.preferred_pick_nodes = zone_blue_
     ? std::unordered_set<int>{1, 4, 7, 10}
