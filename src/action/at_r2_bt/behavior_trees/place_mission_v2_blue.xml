@@ -288,7 +288,7 @@
       <PublishLiftCmd node="{node}" command="2"/>
       <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
       <!-- <PublishLiftCmd node="{node}" command="3"/> -->
-      <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs>
+      <!-- <DelayMs delay_msec="3000"><AlwaysSuccess/></DelayMs> -->
       <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
 
       <!-- <PublishLiftCmd node="{node}" command="4"/> -->
@@ -315,7 +315,11 @@
       <PublishLiftCmd node="{node}" command="3"/>
 
       <ArmMoveNamed node="{node}"
+<<<<<<< Updated upstream
               pose_name="place_grid_3"
+=======
+              pose_name="place_grid_4"
+>>>>>>> Stashed changes
               server_name="robotic_task"
               task_id="1"
               duration="1.0"/>

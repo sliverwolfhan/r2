@@ -174,8 +174,8 @@ small_gicp_relocalization:
     use_sim_time: False
     num_threads: 8
     num_neighbors: 19
-    global_leaf_size: 0.12
-    registered_leaf_size: 0.12
+    global_leaf_size: 0.2
+    registered_leaf_size: 0.2
     max_dist_sq: 0.01
     map_bounds_filter_enabled: true
     map_bounds_filter_margin: 0.1
@@ -186,7 +186,7 @@ small_gicp_relocalization:
     sliding_window_filter_reset_rotation_threshold: 0.3
     relocalization_enabled: true
     auto_disable_relocalization: true
-    stable_required_count: 10
+    stable_required_count: 4
     stable_translation_threshold: 0.015
     stable_rotation_threshold: 0.015
     transform_global_map: false   # 先验地图已经预处理到 odom 系，无需再做 base->lidar 变换
