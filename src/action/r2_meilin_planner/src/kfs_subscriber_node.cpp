@@ -1,6 +1,6 @@
 #include <array>
-#include <atomic>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
@@ -148,8 +148,9 @@ private:
       return;
     }
 
-    // 数据只发一次：规划成功后就不再重复处理
-    if (planned_.load()) {
+    // 布局变化时才重规划：与上次成功规划的 KFS 布局逐位相同则跳过，
+    // 内容一变（KFS 更新）立即重新规划并发布，避免同一布局被 10Hz 重复刷路径。
+    if (msg->data == last_kfs_) {
       return;
     }
 
@@ -212,7 +213,7 @@ private:
     plan.notes = "plan from /AT_R2/kfs_positions";
     plan.steps = std::move(steps);
     plan_pub_->publish(plan);
-    planned_.store(true);
+    last_kfs_ = msg->data;  // 记录本次成功规划的布局，下次相同则跳过
 
     RCLCPP_INFO(
       this->get_logger(), "已规划 %zu 步并发布到 /r2_planner/plan", plan.steps.size());
@@ -232,7 +233,7 @@ private:
   double wait_cost_ = 1.0;
   std::string blocks_path_;
   bool zone_blue_ = false;
-  std::atomic<bool> planned_{false};
+  std::vector<int32_t> last_kfs_;  // 上次成功规划的 KFS 布局（12 元），用于布局去重
 };
 
 int main(int argc, char ** argv)
