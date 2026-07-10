@@ -29,8 +29,8 @@
       <SetZoneMode node="{node}" mode="1" topic="/AT_R2/zone_mode"/>
 
       <SetCostmapInflation node="{node}"
-                    local_radius="0.001"
-                    global_radius="0.001"
+                    local_radius="0.01"
+                    global_radius="0.01"
                     local_cost_scaling_factor="5.0"
                     global_cost_scaling_factor="5.0"/>
       <SetMppiParams node="{node}"
@@ -99,9 +99,39 @@
       <Fallback>
         <ScriptCondition code="first_grasp == 0"/>
         <Sequence>
-            <ParallelAll max_failures="1">
-                <Sequence>
-                    <SetMppiParams node="{node}"
+            <SetMppiParams node="{node}"
+                    controller_node="/AT_R2/controller_server"
+                    plugin_prefix="FollowPath"
+                    goal_angle_weight="6.0"
+                    goal_angle_threshold="2.0"
+                    vx_max="1.2"
+                    vx_min="-1.2"
+                    vy_max="1.2"
+                    wz_max="4.0"
+                    vx_std="0.4"
+                    vy_std="0.4"
+                    wz_std="0.35"
+                    goal_x_tolerance="0.03"
+                    goal_y_tolerance="0.05"
+                    goal_yaw_tolerance="0.05"
+                    goal_stable_duration="0.3"
+                    pathalign_threshold="3.0"
+                    pathalign_offset_from_furthest="15"
+                    pathalign_use_path_orientations="false"
+                    wait_after_set="0.2"/>
+            <PublishGoal node="{node}"
+                    x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/>
+        </Sequence>
+      </Fallback>
+
+      
+      <!-- 后续轮 MPPI 参数(占位, 待调整数值) -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 1"/>
+        <Sequence>
+            <SetMppiParams node="{node}"
                             controller_node="/AT_R2/controller_server"
                             plugin_prefix="FollowPath"
                             goal_angle_weight="6.0"
@@ -110,88 +140,22 @@
                             vx_min="-1.2"
                             vy_max="1.2"
                             wz_max="4.0"
-                            vx_std="0.35"
-                            vy_std="0.35"
-                            wz_std="0.35"
-                            goal_x_tolerance="0.03"
+                            vx_std="0.3"
+                            vy_std="0.3"
+                            wz_std="0.5"
+                            goal_x_tolerance="0.05"
                             goal_y_tolerance="0.05"
-                            goal_yaw_tolerance="0.05"
+                            goal_yaw_tolerance="0.08"
                             goal_stable_duration="0.3"
                             pathalign_threshold="3.0"
                             pathalign_offset_from_furthest="15"
                             pathalign_use_path_orientations="false"
                             wait_after_set="0.2"/>
-                    <PublishGoal node="{node}"
-                            x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
-                            frame_id="map"
-                            goal="{nav_goal}"/>
-
-                </Sequence>
-                <Sequence>
-                <DelayMs delay_msec="1000">
-                    <AlwaysSuccess/>
-                </DelayMs>
-                <PublishHeadCmd node="{node}" command="1"
-                                topic="/AT_R2/head_gripper_cmd"
-                                wait_done="false"/>
-                </Sequence>
-            </ParallelAll>    
+            <PublishGoal node="{node}"
+                    x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                    frame_id="map"
+                    goal="{nav_goal}"/>
         </Sequence>
-      </Fallback>
-
-      
-      <!-- 后续轮 MPPI 参数(占位, 待调整数值) -->
-      <Fallback>
-        <ScriptCondition code="first_grasp == 1"/>
-        <ParallelAll max_failures="1">
-            <Sequence>
-                <SetMppiParams node="{node}"
-                                controller_node="/AT_R2/controller_server"
-                                plugin_prefix="FollowPath"
-                                goal_angle_weight="4.0"
-                                goal_angle_threshold="1.0"
-                                vx_max="1.2"
-                                vx_min="-1.2"
-                                vy_max="1.2"
-                                wz_max="4.0"
-                                vx_std="0.30"
-                                vy_std="0.30"
-                                wz_std="0.5"
-                                goal_x_tolerance="0.05"
-                                goal_y_tolerance="0.05"
-                                goal_yaw_tolerance="0.08"
-                                goal_stable_duration="0.3"
-                                pathalign_threshold="0.3"
-                                pathalign_offset_from_furthest="10"
-                                pathalign_use_path_orientations="true"
-                                wait_after_set="0.2"/>
-                <FollowSpinPath node="{node}"
-                        goal_x="{grasp_prep_x}"
-                        goal_y="{grasp_prep_y}"
-                        goal_yaw="{grasp_prep_yaw}"
-                        rotation_start_distance="0.45"
-                        rotation_end_distance="0.45"
-                        rotation_direction="cw"
-                        num_points="150"
-                        frame_id="map"
-                        map_frame="map"
-                        base_frame="base_footprint"
-                        tf_timeout="0.5"
-                        tf_namespace="AT_R2"
-                        action_name="/AT_R2/follow_path"
-                        controller_id="FollowPath"
-                        goal_checker_id="general_goal_checker"
-                        goal="{spin_goal}"/>
-            </Sequence>
-            <Sequence>
-            <DelayMs delay_msec="3000">
-                <AlwaysSuccess/>
-            </DelayMs>
-            <PublishHeadCmd node="{node}" command="1"
-                            topic="/AT_R2/head_gripper_cmd"
-                            wait_done="false"/>
-            </Sequence>
-        </ParallelAll>
       </Fallback>
 
 
@@ -223,24 +187,34 @@
              - 防误检门槛 distance_stall_max: 距离必须 < 该值才允许判贴住,
                避免激光被挡/读数卡在大值不动时把"假不变"误判成贴住;
              - timeout 秒仍到不了 -> 失败, 外层 ForceSuccess 兜底继续(D 段再精对齐)。 -->
-      <ForceSuccess>
-        <DockToWall node="{node}"
-                    vy="-0.15"
-                    vx="0.0"
-                    wz="0.0"
-                    stall_threshold="0.05"
-                    stall_duration="0.4"
-                    timeout="5.0"
-                    publish_rate_hz="50.0"
-                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                    odom_topic="/AT_R2/odometry"
-                    distance_topic="/AT_R2/distance_grasp"
-                    distance_scale="0.001"
-                    distance_stall_max="0.030"
-                    filter_enable="true"
-                    median_window="5"
-                    ema_tau="0.1"/>
-      </ForceSuccess>
+      <ParallelAll max_failures="1">
+        <PublishHeadCmd node="{node}" command="1"
+                        topic="/AT_R2/head_gripper_cmd"
+                        wait_done="false"/>
+        <Sequence>
+          <DelayMs delay_msec="200">
+              <AlwaysSuccess/>
+          </DelayMs>
+          <ForceSuccess>
+            <DockToWall node="{node}"
+                        vy="-0.15"
+                        vx="0.0"
+                        wz="0.0"
+                        stall_threshold="0.05"
+                        stall_duration="0.4"
+                        timeout="5.0"
+                        publish_rate_hz="50.0"
+                        cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                        odom_topic="/AT_R2/odometry"
+                        distance_topic="/AT_R2/distance_grasp"
+                        distance_scale="0.001"
+                        distance_stall_max="0.030"
+                        filter_enable="true"
+                        median_window="5"
+                        ema_tau="0.1"/>
+          </ForceSuccess>
+        </Sequence>
+      </ParallelAll>
 
       <!-- D. 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 -->
       <Fallback>
@@ -324,8 +298,8 @@
             <SetMppiParams node="{node}"
                      controller_node="/AT_R2/controller_server"
                      plugin_prefix="FollowPath"
-                     goal_angle_weight="6.0"
-                     goal_angle_threshold="2.0"
+                     goal_angle_weight="5.0"
+                     goal_angle_threshold="0.5"
                      vx_max="1.2"
                      vx_min="-1.2"
                      vy_max="1.2"
@@ -337,25 +311,12 @@
                      goal_y_tolerance="0.05"
                      goal_yaw_tolerance="0.08"
                      goal_stable_duration="0.3"
-                     pathalign_use_path_orientations="true"
+                     pathalign_use_path_orientations="false"
                      wait_after_set="0.2"/>
-            <FollowSpinPath node="{node}"
-                            goal_x="1.3"
-                            goal_y="4.0"
-                            goal_yaw="0.0"
-                            rotation_start_distance="0.45"
-                            rotation_end_distance="0.45"
-                            rotation_direction="ccw"
-                            num_points="150"
-                            frame_id="map"
-                            map_frame="map"
-                            base_frame="base_footprint"
-                            tf_timeout="0.5"
-                            tf_namespace="AT_R2"
-                            action_name="/AT_R2/follow_path"
-                            controller_id="FollowPath"
-                            goal_checker_id="general_goal_checker"
-                            goal="{spin_goal}"/>
+            <PublishGoal node="{node}"
+                      x="1.3" y="4.0" yaw="0.0"
+                      frame_id="map"
+                      goal="{nav_goal}"/>
         </Sequence>
       </ParallelAll>
 
