@@ -270,8 +270,8 @@
         </Sequence>
       </ParallelAll>
 
-      <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status == 1,
-           任一满足即松爪(只松一次)。竞技赛只抓一个, 目标状态固定为 1。 -->
+      <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status 为 1/2/3 任一,
+           任一满足即松爪(只松一次)。竞技赛只抓一个, 收到即结束, 无需 finished_all。 -->
       <Parallel success_count="1" failure_count="2">
         <Sequence>
           <WaitForEnter node="{node}"
@@ -286,7 +286,6 @@
         <WaitDockingRelease node="{node}"
                             status_topic="/AT_R2/docking_status"
                             gripper_topic="/AT_R2/head_gripper_cmd"
-                            target_status="1"
                             release_cmd="7"
                             timeout="1000.0"/>
       </Parallel>

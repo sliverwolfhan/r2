@@ -69,16 +69,25 @@
       <Script code="first_grasp := 1"/>
       <!-- 对接状态计数器: 每轮 +1, 作为本轮等待的 docking_status 目标值(第1轮=1, 第2轮=2, ...) -->
       <Script code="dock_idx := 0"/>
+      <!-- 结束标志: 子树内 WaitDockingRelease 收到 docking_status==3 时置 1,
+           下一轮开头的 ScriptCondition 判为假 -> 本轮 Sequence 失败 -> 提前跳出 Repeat, 不再抓取 -->
+      <Script code="finished_all := 0"/>
 
-      <!-- ===== 循环抓取 grasp_count 个武器, 从 grasp_start 开始 ===== -->
-      <Repeat num_cycles="{grasp_count}">
-        <Sequence>
-          <!-- 选定本轮武器, 把 w{n}_* 拷到工作键 grasp_* -->
-          <SelectWeaponParams start="{grasp_start}"/>
-          <!-- 完整抓取流程; 子树内直接读工作键 grasp_* -->
-          <SubTree ID="GraspOneWeapon" _autoremap="true"/>
-        </Sequence>
-      </Repeat>
+      <!-- ===== 循环抓取 grasp_count 个武器, 从 grasp_start 开始 =====
+           收到结束信号(docking_status==3)后, 靠 ScriptCondition 让本轮 Sequence 失败,
+           Repeat 遇 FAILURE 会立即返回 FAILURE, 故外套 ForceSuccess 把"提前跳出"当成功。 -->
+      <ForceSuccess>
+        <Repeat num_cycles="{grasp_count}">
+          <Sequence>
+            <!-- 已收到结束信号(finished_all==1)则本轮直接失败, 跳出 Repeat -->
+            <ScriptCondition code="finished_all == 0"/>
+            <!-- 选定本轮武器, 把 w{n}_* 拷到工作键 grasp_* -->
+            <SelectWeaponParams start="{grasp_start}"/>
+            <!-- 完整抓取流程; 子树内直接读工作键 grasp_* -->
+            <SubTree ID="GraspOneWeapon" _autoremap="true"/>
+          </Sequence>
+        </Repeat>
+      </ForceSuccess>
 
     </Sequence>
   </BehaviorTree>
@@ -426,7 +435,7 @@
                      failure_count=2 需两分支都失败才失败(无 TTY 时 WaitForEnter 直接失败, 退化为只看话题)。 -->
       <Script code="dock_idx := dock_idx + 1"/>
       <Parallel success_count="1" failure_count="2">
-        <!-- 分支A: 操作员按 Enter -> 自行发松爪 cmd=7 -->
+        <!-- 分支A: 操作员按 Enter -> 自行发松爪 cmd=7 (Enter 松爪不代表结束, finished_all 保持 0) -->
         <Sequence>
           <WaitForEnter node="{node}"
                         prompt="对接完成后按 Enter 松爪 (cmd=7), 或等下位机发布 docking_status"
@@ -436,13 +445,15 @@
           <PublishHeadCmd node="{node}" command="7"
                           topic="/AT_R2/head_gripper_cmd"
                           wait_done="false"/>
+          <Script code="finished_all := 0"/>
         </Sequence>
-        <!-- 分支B: 收到 docking_status == dock_idx -> 节点内部自行发松爪 release_cmd=7 -->
+        <!-- 分支B: 收到 docking_status 为 1/2/3 任一 -> 节点内部发松爪 release_cmd=7;
+             收到 3 -> finished_all 置 1, 外层 Repeat 提前结束, 不再抓取。 -->
         <WaitDockingRelease node="{node}"
                             status_topic="/AT_R2/docking_status"
                             gripper_topic="/AT_R2/head_gripper_cmd"
-                            target_status="{dock_idx}"
                             release_cmd="7"
+                            finished_all="{finished_all}"
                             timeout="1000.0"/>
       </Parallel>
       <DelayMs delay_msec="1200">

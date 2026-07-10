@@ -21,13 +21,14 @@
                     enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/> -->
+    <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.35"
-        global_radius="0.35"
+        local_radius="0.30"
+        global_radius="0.30"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
-        
+
     <SetMppiParams node="{node}"
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
@@ -63,17 +64,17 @@
                     enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/>
-      
+
       <PublishGoal node="{node}" x="11.5" y="-0.7" yaw="3.14" frame_id="map" goal="{goal}"/>
 
       <WaitForStart node="{node}"
                           prompt="按 Enter 或接受 /AT_R2/blue_start_cmd 开始放置 KFS"
-                          start_topic="/AT_R2/blue_start_cmd"
+                          start_topic="/AT_R2/zone3_cmd"
                           start_value="1"
                           enable_topic="true"
                           clear_buffer="true"
                           timeout="0.0"/>
-        
+
       <SetMppiParams node="{node}"
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
@@ -94,7 +95,7 @@
                   goal_yaw_tolerance="0.05"
                   goal_stable_duration="0.3"
                   wait_after_set="0.2"/>
-                  
+
       <PublishGoal node="{node}"
                      x="10.97"
                      y="-2.2"
@@ -130,7 +131,7 @@
       <Script code="total_rounds := place_count + 1"/>
       <!-- 单次 tick 模型下用 KeepRunningUntilFailure 替代定长 Repeat:
            case5(去等待位)不推进 loop_i, 轮数不固定; loop_i 只在放块(1/2/3)时自增。
-           放完 total_rounds 块置 places_done, 大胜置 race_done,
+           放完 total_rounds 块后回起始点并置 race_done, 大胜也置 race_done,
            任一置位后本轮末尾 AlwaysFailure 返回 FAILURE 结束循环。 -->
       <ForceSuccess>
         <KeepRunningUntilFailure>
@@ -146,6 +147,11 @@
 
           <!-- ===== case 4: 大胜爬三层, 结束比赛 ===== -->
           <Sequence _skipIf="slot_sel != 4">
+            <ArmMoveNamed node="{node}"
+                            pose_name="three_layer_arm_1_blue"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
             <!-- 到大胜准备位 (导航 || 摆臂, 两者都必须成功) -->
             <ParallelAll max_failures="1">
               <PublishGoal node="{node}"
@@ -157,7 +163,7 @@
                            goal="{place_goal}"/>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_2_blue"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -173,7 +179,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_2_blue"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -200,7 +206,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_3_blue"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -210,13 +216,13 @@
             </DelayMs>
             <!-- 按回车或等话题: 放块 -->
             <WaitForStart node="{node}"
-                          prompt="大胜: 按 Enter 或发布 /AT_R2/zone3_cmd 放块"
-                          start_topic="/AT_R2/zone3_cmd"
+                          prompt="大胜: 按 Enter 或发布 /AT_R2/meilin_mission_start 放块"
+                          start_topic="/AT_R2/meilin_mission_start"
                           start_value="1"
                           enable_topic="true"
                           clear_buffer="true"
                           timeout="0.0"/>
-                          
+
             <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
             <DelayMs delay_msec="1000">
               <AlwaysSuccess/>
@@ -228,6 +234,11 @@
           <!-- ===== case 5: 手里举着块去等待位(P2), 本轮不放块, 回循环开头再等话题 =====
                不设标志、不动 loop_i, 循环继续, 无上限。 -->
           <Sequence _skipIf="slot_sel != 5">
+            <ArmMoveNamed node="{node}"
+                            pose_name="hold_block_blue"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
             <ParallelAll max_failures="1">
               <PublishGoal node="{node}"
                            x="11.5"
@@ -254,6 +265,13 @@
             global_radius="0.25"
             local_cost_scaling_factor="1.0"
             global_cost_scaling_factor="4.0"/>
+            <PublishGoal node="{node}"
+                     x="11.07"
+                     y="-4.75"
+                     yaw="1.57"
+                     frame_id="map"
+                     action_name="/AT_R2/navigate_to_pose"
+                     goal="{place_goal}"/>
             <!-- B1+B2. 摆放置姿态 + 导航到所选 slot (slot_x/y/yaw 已由 WaitSlotSelect 按值填好) -->
             <ParallelAll max_failures="1">
               <Sequence>
@@ -275,17 +293,59 @@
                            goal="{place_goal}"/>
             </ParallelAll>
 
+            <!-- B2.5 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 =====
+                 TODO: 下列 target_y / target_distance / distance_topic 为占位值(y 由红区镜像取负), 按蓝区放块实测调整。 -->
+            <Fallback>
+              <GraspReadyByPoseDistance node="{node}"
+                                        map_frame="map"
+                                        base_frame="base_footprint"
+                                        target_y="-5.45"
+                                        y_tolerance="6.00"
+                                        target_yaw="1.57"
+                                        yaw_tolerance="1.0"
+                                        distance_topic="/AT_R2/distance_grasp"
+                                        distance_scale="0.001"
+                                        target_distance="{slot_laser_dist}"
+                                        distance_tolerance="0.050"
+                                        stable_count="3"
+                                        max_data_age="0.5"/>
+
+              <DistanceServoAlign node="{node}"
+                                  distance_topic="/AT_R2/distance_grasp"
+                                  distance_scale="0.001"
+                                  target_distance="{slot_laser_dist}"
+                                  tolerance="0.01"
+                                  kp="0.8"
+                                  max_speed="0.2"
+                                  min_speed="0.015"
+                                  stable_count="2"
+                                  max_data_age="0.5"
+                                  timeout="8.0"
+                                  publish_rate_hz="50.0"
+                                  cmd_axis="y"
+                                  positive_error_direction="1.0"
+                                  side_speed_scale="0.0"
+                                  side_speed_direction="-1.0"
+                                  filter_enable="true"
+                                  median_window="3"
+                                  ema_tau="0.1"
+                                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+            </Fallback>
+
             <!-- B3. 往格子里怼 (顶墙) -->
             <ForceSuccess>
               <DockToWall node="{node}"
                           vy="0.0"
-                          vx="-0.1"
+                          vx="0.15"
                           wz="0.0"
                           stall_threshold="0.02"
                           stall_duration="10.0"
-                          timeout="3.5"
+                          timeout="5.0"
                           publish_rate_hz="50.0"
                           cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                          distance_topic="/AT_R2/distance_head"
+                          distance_scale="0.001"
+                          distance_stop_below="0.27"
                           odom_topic="/AT_R2/odometry"/>
             </ForceSuccess>
 
@@ -300,11 +360,11 @@
               <ForceSuccess>
                 <DockToWall node="{node}"
                       vy="0.0"
-                      vx="0.1"
+                      vx="-0.2"
                       wz="0.0"
                       stall_threshold="0.02"
                       stall_duration="10.0"
-                      timeout="4.0"
+                      timeout="2.0"
                       publish_rate_hz="50.0"
                       cmd_vel_topic="/AT_R2/cmd_vel_bt"
                       odom_topic="/AT_R2/odometry"/>
@@ -323,9 +383,19 @@
               </ForceSuccess>
             </ParallelAll>
 
+            <!-- 仅 slot 1: 放完第一个格子倒车退出后, 导航回准备点 -->
+            <PublishGoal node="{node}"
+                         x="11.07"
+                         y="-4.75"
+                         yaw="1.57"
+                         frame_id="map"
+                         action_name="/AT_R2/navigate_to_pose"
+                         goal="{place_goal}"
+                         _skipIf="slot_sel != 1"/>
+
             <!-- ===== C 段: 抓下一个地上 KFS (仅前 place_count 轮; 末轮已放完最后一块, 只放不抓) =====
                  末轮 loop_i == total_rounds: 整段 (取块参数+导航取块+笛卡尔抓+回过渡+去P2) 跳过,
-                 放完最后一块后置 places_done -> 循环末尾 AlwaysFailure 结束 -> 机器人停住。 -->
+                 放完最后一块后直接结束该轮 -> Repeat 结束 -> 机器人停住。 -->
             <Sequence _skipIf="loop_i >= total_rounds">
               <!-- 选当前 KFS 的取块参数 -> 工作键 kfs_prep_x/y/yaw/kfs_place_x/y -->
               <SelectKfsParams start="{place_start}"/>
@@ -365,33 +435,20 @@
                             server_name="robotic_task"
                             task_id="1"
                             duration="1.0"/>
-              <ArmMoveNamed node="{node}"
-                              pose_name="hold_block_blue"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="2.0"/>
-              <!-- ===== 抓完块后, 导航到【之后准备位 P2】(固定写死) || 摆臂, 下一轮开头再等话题 =====
-                   两者都必须成功。此时手里举着刚抓的 KFS, 勿摆成松开姿态。 -->
-              <ParallelAll max_failures="1">
-                <PublishGoal node="{node}"
-                             x="11.5"
-                             y="-4.11"
-                             yaw="3.14"
-                             frame_id="map"
-                             action_name="/AT_R2/navigate_to_pose"
-                             goal="{place_goal}"/>
-                <!-- TODO: 填并行臂姿态名 -->
-                <ArmMoveNamed node="{node}"
-                              pose_name="hold_block_blue"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="2.0"/>
-              </ParallelAll>
             </Sequence>
 
-            <!-- 放完最后一块 (含预装共 total_rounds 块) -> 标记完成 -->
+            <!-- ===== 末轮放完最后一块后: 导航回起始点 (11.5, -0.7, -1.57) 并结束比赛 =====
+                 loop_i == total_rounds (含预装共 total_rounds 块全部放完) 时执行。 -->
             <Sequence _skipIf="loop_i &lt; total_rounds">
-              <Script code="places_done := 1"/>
+              <PublishGoal node="{node}"
+                           x="11.5"
+                           y="-0.7"
+                           yaw="-1.57"
+                           frame_id="map"
+                           action_name="/AT_R2/navigate_to_pose"
+                           goal="{place_goal}"/>
+              <!-- 标记结束, 触发循环末尾 AlwaysFailure -->
+              <Script code="race_done := 1"/>
             </Sequence>
 
           </Sequence>

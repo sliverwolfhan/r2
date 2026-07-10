@@ -26,10 +26,12 @@ BT::PortsList WaitDockingReleaseAction::providedPorts()
     BT::InputPort<std::string>("gripper_topic", "/AT_R2/head_gripper_cmd",
       "Topic to publish gripper release command (Int32)"),
     BT::InputPort<int32_t>("target_status", 1,
-      "Docking status value that triggers release"),
+      "(已废弃) 兼容旧端口, 不再使用; 现固定匹配 1/2/3 任一值"),
     BT::InputPort<int32_t>("release_cmd", 5,
       "Command value to publish for release"),
     BT::InputPort<double>("timeout", 30.0, "Timeout in seconds"),
+    BT::OutputPort<int32_t>("finished_all",
+      "收到结束信号(docking_status==3)时置 1, 否则 0; 供外层判断是否结束循环"),
   };
 }
 
@@ -59,6 +61,8 @@ BT::NodeStatus WaitDockingReleaseAction::onStart()
 
   // 初始化状态
   docking_confirmed_ = false;
+  finish_received_ = false;
+  setOutput("finished_all", static_cast<int32_t>(0));
   start_time_ = node_->now();
 
   // 创建订阅者
@@ -71,9 +75,9 @@ BT::NodeStatus WaitDockingReleaseAction::onStart()
     gripper_topic_, rclcpp::QoS(1).transient_local().reliable());
 
   RCLCPP_INFO(node_->get_logger(),
-    "WaitDockingRelease started: waiting for %s == %d, will publish %s = %d",
-    status_topic_.c_str(), target_status_,
-    gripper_topic_.c_str(), release_cmd_);
+    "WaitDockingRelease started: waiting for %s in {1,2,3}, will publish %s = %d "
+    "(收到 %d 则结束整棵树)",
+    status_topic_.c_str(), gripper_topic_.c_str(), release_cmd_, kFinishStatus);
 
   return BT::NodeStatus::RUNNING;
 }
@@ -92,17 +96,20 @@ BT::NodeStatus WaitDockingReleaseAction::onRunning()
     return BT::NodeStatus::FAILURE;
   }
 
-  // 检查是否收到目标状态
+  // 检查是否收到对接完成信号(1/2/3 任一)
   if (docking_confirmed_) {
     // 发布松开指令
     auto msg = std_msgs::msg::Int32();
     msg.data = release_cmd_;
     gripper_pub_->publish(msg);
 
+    // 收到 3 -> 结束整棵树; 否则继续下一轮
+    setOutput("finished_all", static_cast<int32_t>(finish_received_ ? 1 : 0));
+
     status_sub_.reset();
     RCLCPP_INFO(node_->get_logger(),
-      "WaitDockingRelease SUCCESS: docking_status=%d, published release cmd=%d",
-      target_status_, release_cmd_);
+      "WaitDockingRelease SUCCESS: docking done, published release cmd=%d, finished_all=%d",
+      release_cmd_, finish_received_ ? 1 : 0);
     return BT::NodeStatus::SUCCESS;
   }
 
@@ -121,10 +128,14 @@ void WaitDockingReleaseAction::statusCallback(const std_msgs::msg::Int32::Shared
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  if (msg->data == target_status_) {
+  // 收到 1/2/3 任一值即视为对接完成; 3 额外标记为"结束"信号
+  if (msg->data == 1 || msg->data == 2 || msg->data == kFinishStatus) {
     docking_confirmed_ = true;
+    if (msg->data == kFinishStatus) {
+      finish_received_ = true;
+    }
     RCLCPP_DEBUG(node_->get_logger(),
-      "WaitDockingRelease: received target status %d", msg->data);
+      "WaitDockingRelease: received docking status %d", msg->data);
   }
 }
 
