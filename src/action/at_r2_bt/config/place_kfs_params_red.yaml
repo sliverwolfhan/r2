@@ -20,13 +20,13 @@ simple_bt_runner:
     #   prep_x / prep_y / prep_yaw    -> 机器人预备点位姿 (map 系, m / rad)
     #   place_x / place_y             -> KFS 放置点的格子位置 (map 系, m)
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
-    kfs_1.prep_x: 11.10
+    kfs_1.prep_x: 11.12
     kfs_1.prep_y: 3.895
     kfs_1.prep_yaw: 0.0
     kfs_1.place_x: 11.825
     kfs_1.place_y: 4.115
 
-    kfs_2.prep_x: 11.10
+    kfs_2.prep_x: 11.12
     kfs_2.prep_y: 3.195
     kfs_2.prep_yaw: 0.0
     kfs_2.place_x: 11.825
@@ -45,14 +45,14 @@ simple_bt_runner:
       - slot_2
       - slot_3
 
-    slot_1.x: 11.570
+    slot_1.x: 11.540
     slot_1.y: 4.85
     slot_1.yaw: 1.57
 
-    slot_2.x: 11.040
+    slot_2.x: 11.030
     slot_2.y: 4.80
     slot_2.yaw: 1.57
 
-    slot_3.x: 10.49
+    slot_3.x: 10.48
     slot_3.y: 4.80
     slot_3.yaw: 1.57
