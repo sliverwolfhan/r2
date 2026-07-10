@@ -208,8 +208,23 @@
                             cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
       </Fallback>
 
-      <!-- B3. 往格子里怼 (顶墙) -->
-      <ForceSuccess>
+      <!-- B3. 往格子里怼 (顶墙)。格子1(slot_sel==1)停距 +10cm=0.37, 其它格子 0.27 -->
+      <ForceSuccess _skipIf="slot_sel != 1">
+        <DockToWall node="{node}"
+                    vy="0.0"
+                    vx="0.15"
+                    wz="0.0"
+                    stall_threshold="0.02"
+                    stall_duration="10.0"
+                    timeout="5.0"
+                    publish_rate_hz="50.0"
+                    cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                    distance_topic="/AT_R2/distance_head"
+                    distance_scale="0.001"
+                    distance_stop_below="0.37"
+                    odom_topic="/AT_R2/odometry"/>
+      </ForceSuccess>
+      <ForceSuccess _skipIf="slot_sel == 1">
         <DockToWall node="{node}"
                     vy="0.0"
                     vx="0.15"
