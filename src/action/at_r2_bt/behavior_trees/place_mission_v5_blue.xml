@@ -147,14 +147,14 @@
             <ParallelAll max_failures="1">
               <PublishGoal node="{node}"
                            x="10.7"
-                           y="-4.5"
+                           y="-4.95"
                            yaw="3.14"
                            frame_id="map"
                            action_name="/AT_R2/navigate_to_pose"
                            goal="{place_goal}"/>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="three_layer_arm_1"
+                            pose_name="arm_name"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -170,7 +170,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="three_layer_arm_2"
+                            pose_name="arm_name"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -197,7 +197,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="three_layer_arm_3"
+                            pose_name="arm_name"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -280,7 +280,7 @@
                       wz="0.0"
                       stall_threshold="0.02"
                       stall_duration="10.0"
-                      timeout="3.0"
+                      timeout="4.0"
                       publish_rate_hz="50.0"
                       cmd_vel_topic="/AT_R2/cmd_vel_bt"
                       odom_topic="/AT_R2/odometry"/>
@@ -341,12 +341,16 @@
                             server_name="robotic_task"
                             task_id="1"
                             duration="1.0"/>
-
+              <ArmMoveNamed node="{node}"
+                              pose_name="hold_block_blue"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="2.0"/>
               <!-- ===== 抓完块后, 导航到【之后准备位 P2】(固定写死) || 摆臂, 下一轮开头再等话题 =====
                    两者都必须成功。此时手里举着刚抓的 KFS, 勿摆成松开姿态。 -->
               <ParallelAll max_failures="1">
                 <PublishGoal node="{node}"
-                             x="11.07"
+                             x="11.5"
                              y="-4.11"
                              yaw="3.14"
                              frame_id="map"

@@ -403,9 +403,9 @@ controller_server:
       stable_duration: 0.1
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 40
+      time_steps: 30
       model_dt: 0.05      # 改为 0.1s，预测时域 = 30 × 0.1 = 3s
-      batch_size: 5000
+      batch_size: 2000
       vx_std: 0.45        # 增大速度采样标准差以匹配更高速度
       vy_std: 0.45
       wz_std: 0.35
