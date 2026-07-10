@@ -126,17 +126,20 @@
            race_done: 大胜后置 1, 后续轮次整轮 _skipIf 跳过 (BT 无 break, 用标志空转)。 -->
       <Script code="loop_i := 0"/>
       <Script code="race_done := 0"/>
+      <Script code="places_done := 0"/>
       <Script code="total_rounds := place_count + 1"/>
-      <Repeat num_cycles="{total_rounds}">
-        <!-- 大胜已发生则整轮跳过 -->
-        <Sequence _skipIf="race_done == 1">
-          <!-- 每进一次循环自增, 放在最前面 -->
-          <Script code="loop_i := loop_i + 1"/>
+      <!-- 单次 tick 模型下用 KeepRunningUntilFailure 替代定长 Repeat:
+           case5(去等待位)不推进 loop_i, 轮数不固定; loop_i 只在放块(1/2/3)时自增。
+           放完 total_rounds 块后回起始点并置 race_done, 大胜也置 race_done,
+           任一置位后本轮末尾 AlwaysFailure 返回 FAILURE 结束循环。 -->
+      <ForceSuccess>
+        <KeepRunningUntilFailure>
+          <Sequence>
 
           <!-- ===== 等话题选格子 (收到 0/其它值忽略继续等) ===== -->
           <WaitSlotSelect node="{node}"
                           topic="/AT_R2/place_slot_select"
-                          prompt="等待放格子选择 (1/2/3=格子, 4=大胜)"
+                          prompt="等待放格子选择 (1/2/3=格子, 4=大胜, 5=等待位)"
                           slot_sel="{slot_sel}"/>
 
           <!-- ===== 按 slot_sel 分流: 1/2/3=放块+抓下一块; 4=大胜 ===== -->
@@ -222,9 +225,35 @@
             <Script code="race_done := 1"/>
           </Sequence>
 
+          <!-- ===== case 5: 手里举着块去等待位(P2), 本轮不放块, 回循环开头再等话题 =====
+               不设标志、不动 loop_i, 循环继续, 无上限。 -->
+          <Sequence _skipIf="slot_sel != 5">
+            <ArmMoveNamed node="{node}"
+                            pose_name="hold_block_red"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
+            <ParallelAll max_failures="1">
+              <PublishGoal node="{node}"
+                           x="11.6"
+                           y="4.11"
+                           yaw="0.0"
+                           frame_id="map"
+                           action_name="/AT_R2/navigate_to_pose"
+                           goal="{place_goal}"/>
+              <ArmMoveNamed node="{node}"
+                            pose_name="hold_block_red"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
+            </ParallelAll>
+          </Sequence>
+
           <!-- ===== case 1/2/3: 放块到 slot_<值> 再抓下一块 ===== -->
-          <Sequence _skipIf="slot_sel == 4">
-            
+          <!-- 只有真正放块的轮 (1/2/3) 才推进 loop_i -->
+          <Sequence _skipIf="slot_sel == 4 || slot_sel == 5">
+            <Script code="loop_i := loop_i + 1"/>
+
           <SetCostmapInflation node="{node}"
             local_radius="0.25"
             global_radius="0.25"
@@ -341,32 +370,11 @@
                             server_name="robotic_task"
                             task_id="1"
                             duration="1.0"/>
-              <ArmMoveNamed node="{node}"
-                              pose_name="hold_block_red"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="2.0"/>
-              <!-- ===== 抓完块后, 导航到【之后准备位 P2】(固定写死) || 摆臂, 下一轮开头再等话题 =====
-                   两者都必须成功。此时手里举着刚抓的 KFS, 勿摆成松开姿态。 -->
-              <ParallelAll max_failures="1">
-                <PublishGoal node="{node}"
-                             x="11.5"
-                             y="4.11"
-                             yaw="0.0"
-                             frame_id="map"
-                             action_name="/AT_R2/navigate_to_pose"
-                             goal="{place_goal}"/>
-                <!-- TODO: 填并行臂姿态名 -->
-                <ArmMoveNamed node="{node}"
-                              pose_name="hold_block_red"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="2.0"/>
-              </ParallelAll>
             </Sequence>
 
-            <!-- ===== 第三次放完块后: 导航回起始点 (11.5, 0.7, 1.57) 并结束比赛 ===== -->
-            <Sequence _skipIf="loop_i != 3">
+            <!-- ===== 末轮放完最后一块后: 导航回起始点 (11.5, 0.7, 1.57) 并结束比赛 =====
+                 loop_i == total_rounds (含预装共 total_rounds 块全部放完) 时执行。 -->
+            <Sequence _skipIf="loop_i &lt; total_rounds">
               <PublishGoal node="{node}"
                            x="11.5"
                            y="0.7"
@@ -374,14 +382,18 @@
                            frame_id="map"
                            action_name="/AT_R2/navigate_to_pose"
                            goal="{place_goal}"/>
-              <!-- 标记结束, 后续轮次整轮 _skipIf 跳过 -->
+              <!-- 标记结束, 触发循环末尾 AlwaysFailure -->
               <Script code="race_done := 1"/>
             </Sequence>
 
           </Sequence>
 
-        </Sequence>
-      </Repeat>
+          <!-- 完成信号 (大胜 或 全部放完) 出现时返回 FAILURE, 结束循环 -->
+          <AlwaysFailure _skipIf="race_done == 0 &amp;&amp; places_done == 0"/>
+
+          </Sequence>
+        </KeepRunningUntilFailure>
+      </ForceSuccess>
 
     </Sequence>
   </BehaviorTree>

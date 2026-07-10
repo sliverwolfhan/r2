@@ -126,17 +126,20 @@
            race_done: 大胜后置 1, 后续轮次整轮 _skipIf 跳过 (BT 无 break, 用标志空转)。 -->
       <Script code="loop_i := 0"/>
       <Script code="race_done := 0"/>
+      <Script code="places_done := 0"/>
       <Script code="total_rounds := place_count + 1"/>
-      <Repeat num_cycles="{total_rounds}">
-        <!-- 大胜已发生则整轮跳过 -->
-        <Sequence _skipIf="race_done == 1">
-          <!-- 每进一次循环自增, 放在最前面 -->
-          <Script code="loop_i := loop_i + 1"/>
+      <!-- 单次 tick 模型下用 KeepRunningUntilFailure 替代定长 Repeat:
+           case5(去等待位)不推进 loop_i, 轮数不固定; loop_i 只在放块(1/2/3)时自增。
+           放完 total_rounds 块置 places_done, 大胜置 race_done,
+           任一置位后本轮末尾 AlwaysFailure 返回 FAILURE 结束循环。 -->
+      <ForceSuccess>
+        <KeepRunningUntilFailure>
+          <Sequence>
 
           <!-- ===== 等话题选格子 (收到 0/其它值忽略继续等) ===== -->
           <WaitSlotSelect node="{node}"
                           topic="/AT_R2/place_slot_select"
-                          prompt="等待放格子选择 (1/2/3=格子, 4=大胜)"
+                          prompt="等待放格子选择 (1/2/3=格子, 4=大胜, 5=等待位)"
                           slot_sel="{slot_sel}"/>
 
           <!-- ===== 按 slot_sel 分流: 1/2/3=放块+抓下一块; 4=大胜 ===== -->
@@ -222,9 +225,30 @@
             <Script code="race_done := 1"/>
           </Sequence>
 
+          <!-- ===== case 5: 手里举着块去等待位(P2), 本轮不放块, 回循环开头再等话题 =====
+               不设标志、不动 loop_i, 循环继续, 无上限。 -->
+          <Sequence _skipIf="slot_sel != 5">
+            <ParallelAll max_failures="1">
+              <PublishGoal node="{node}"
+                           x="11.5"
+                           y="-4.11"
+                           yaw="3.14"
+                           frame_id="map"
+                           action_name="/AT_R2/navigate_to_pose"
+                           goal="{place_goal}"/>
+              <ArmMoveNamed node="{node}"
+                            pose_name="hold_block_blue"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
+            </ParallelAll>
+          </Sequence>
+
           <!-- ===== case 1/2/3: 放块到 slot_<值> 再抓下一块 ===== -->
-          <Sequence _skipIf="slot_sel == 4">
-            
+          <!-- 只有真正放块的轮 (1/2/3) 才推进 loop_i -->
+          <Sequence _skipIf="slot_sel == 4 || slot_sel == 5">
+            <Script code="loop_i := loop_i + 1"/>
+
           <SetCostmapInflation node="{node}"
             local_radius="0.25"
             global_radius="0.25"
@@ -301,7 +325,7 @@
 
             <!-- ===== C 段: 抓下一个地上 KFS (仅前 place_count 轮; 末轮已放完最后一块, 只放不抓) =====
                  末轮 loop_i == total_rounds: 整段 (取块参数+导航取块+笛卡尔抓+回过渡+去P2) 跳过,
-                 放完最后一块后直接结束该轮 -> Repeat 结束 -> 机器人停住。 -->
+                 放完最后一块后置 places_done -> 循环末尾 AlwaysFailure 结束 -> 机器人停住。 -->
             <Sequence _skipIf="loop_i >= total_rounds">
               <!-- 选当前 KFS 的取块参数 -> 工作键 kfs_prep_x/y/yaw/kfs_place_x/y -->
               <SelectKfsParams start="{place_start}"/>
@@ -365,10 +389,19 @@
               </ParallelAll>
             </Sequence>
 
+            <!-- 放完最后一块 (含预装共 total_rounds 块) -> 标记完成 -->
+            <Sequence _skipIf="loop_i &lt; total_rounds">
+              <Script code="places_done := 1"/>
+            </Sequence>
+
           </Sequence>
 
-        </Sequence>
-      </Repeat>
+          <!-- 完成信号 (大胜 或 全部放完) 出现时返回 FAILURE, 结束循环 -->
+          <AlwaysFailure _skipIf="race_done == 0 &amp;&amp; places_done == 0"/>
+
+          </Sequence>
+        </KeepRunningUntilFailure>
+      </ForceSuccess>
 
     </Sequence>
   </BehaviorTree>

@@ -26,8 +26,8 @@ BT::PortsList WaitSlotSelectAction::providedPorts()
   return {
     BT::InputPort<rclcpp::Node::SharedPtr>("node", "ROS node"),
     BT::InputPort<std::string>("topic", "/AT_R2/place_slot_select",
-      "放格子选择话题 (std_msgs/Int32): 1/2/3=放 slot_1/2/3, 4=大胜"),
-    BT::InputPort<std::string>("prompt", "等待放格子选择 (话题 1/2/3=格子, 4=大胜)",
+      "放格子选择话题 (std_msgs/Int32): 1/2/3=放 slot_1/2/3, 4=大胜, 5=去等待位"),
+    BT::InputPort<std::string>("prompt", "等待放格子选择 (话题 1/2/3=格子, 4=大胜, 5=等待位)",
       "等待时的提示语"),
     BT::InputPort<bool>("enable_enter", true,
       "允许操作员按 Enter 手动放行 (调试用, 视作收到 enter_value)"),
@@ -38,7 +38,7 @@ BT::PortsList WaitSlotSelectAction::providedPorts()
     BT::InputPort<bool>("clear_buffer", true,
       "显示提示前清空 stdin 残留"),
     BT::OutputPort<int>("slot_sel",
-      "收到的选择值 (1/2/3=格子编号, 4=大胜)"),
+      "收到的选择值 (1/2/3=格子编号, 4=大胜, 5=等待位)"),
   };
 }
 
@@ -85,7 +85,7 @@ BT::NodeStatus WaitSlotSelectAction::onStart()
   }
 
   topic_ = "/AT_R2/place_slot_select";
-  prompt_ = "等待放格子选择 (话题 1/2/3=格子, 4=大胜)";
+  prompt_ = "等待放格子选择 (话题 1/2/3=格子, 4=大胜, 5=等待位)";
   enable_enter_ = true;
   enter_value_ = 1;
   timeout_ = 0.0;
@@ -150,9 +150,11 @@ BT::NodeStatus WaitSlotSelectAction::onRunning()
       }
     } else if (selected == 4) {
       RCLCPP_INFO(node_->get_logger(), "WaitSlotSelect: 收到 4 (大胜)");
+    } else if (selected == 5) {
+      RCLCPP_INFO(node_->get_logger(), "WaitSlotSelect: 收到 5 (去等待位, 不放块)");
     } else {
       RCLCPP_ERROR(node_->get_logger(),
-        "WaitSlotSelect: 非法选择值 %d (仅支持 1/2/3/4)", selected);
+        "WaitSlotSelect: 非法选择值 %d (仅支持 1/2/3/4/5)", selected);
       return BT::NodeStatus::FAILURE;
     }
     return BT::NodeStatus::SUCCESS;
@@ -182,8 +184,8 @@ void WaitSlotSelectAction::onHalted()
 void WaitSlotSelectAction::slotSelectCallback(const std_msgs::msg::Int32::SharedPtr msg)
 {
   const int v = msg->data;
-  // 只接受有效选择 1/2/3/4, 其它忽略继续等
-  if (v >= 1 && v <= 4) {
+  // 只接受有效选择 1/2/3/4/5, 其它忽略继续等
+  if (v >= 1 && v <= 5) {
     received_value_ = v;
     received_ = true;
   }

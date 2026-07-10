@@ -20,6 +20,7 @@ namespace nav2_bt_publish_goal
 //   - v ∈ {1,2,3}: 把黑板里 slot_<v>_x/y/yaw 拷到无前缀工作键 slot_x/y/yaw
 //                  (供后续 PublishGoal 直接用), 值直接当 slot 编号。
 //   - v == 4:      大胜信号, 只输出 slot_sel=4, 不选 slot。
+//   - v == 5:      去等待位信号, 只输出 slot_sel=5, 不选 slot。
 //   - 其它值:      忽略, 继续等待。
 // 也支持操作员按 Enter 手动放行 (调试用): Enter 时 slot_sel 输出 enter_value。
 class WaitSlotSelectAction : public BT::StatefulActionNode
