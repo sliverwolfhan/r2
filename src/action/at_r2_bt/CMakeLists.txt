@@ -66,6 +66,7 @@ add_library(${PROJECT_NAME} SHARED
   src/publish_lift_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
+  src/wait_grasp_result_action.cpp
   src/wait_for_enter_action.cpp
   src/wait_for_start_action.cpp
   src/wait_slot_select_action.cpp
@@ -130,6 +131,7 @@ add_executable(simple_bt_runner
   src/publish_lift_cmd_action.cpp
   src/set_zone_mode_action.cpp
   src/wait_docking_release_action.cpp
+  src/wait_grasp_result_action.cpp
   src/wait_for_enter_action.cpp
   src/wait_for_start_action.cpp
   src/wait_slot_select_action.cpp

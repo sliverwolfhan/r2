@@ -47,7 +47,7 @@ struct R2MissionPacket {
 #pragma pack(pop)
 
 // 从下位机接收的 放格子选择 数据包结构 (packet_id 之后直接是 9 字节数据域, 无 0xAA/0xBB 头尾)
-//   data[0..2]: 忽略不用
+//   data[0..2]: 前3位 (任一为 1 -> 发 5)
 //   data[3..5]: 放格子选择位 (哪个为 1 -> 发 slot 1/2/3, 优先级 2>1>3)
 //   data[6..8]: 大胜位 (任一为 1 -> 发 4, 优先级高于放格子)
 // 整包 = 1+1+1+4+9+1 = 17 字节 (length 字段应为 0x11)
@@ -257,10 +257,15 @@ private:
                                 sum += rx_buffer_[i];
                             }
                             if (sum == slot_packet.sum) {
-                                // data[0..2] 忽略; data[3..5]=放格子位; data[6..8]=大胜位
-                                // 优先级: 先判大胜(7-9位任一=1 -> 4); 否则放格子(4-6位, 2>1>3)
+                                // data[0..2]=前3位(任一=1 -> 5); data[3..5]=放格子位; data[6..8]=大胜位
+                                // 前3位与后6位不会同时出现, 优先级无所谓; 这里前3位命中即发 5。
+                                // 否则: 先判大胜(7-9位任一=1 -> 4); 再放格子(4-6位, 2>1>3)
                                 int32_t sel = 0;
-                                if (slot_packet.data[6] == 1 ||
+                                if (slot_packet.data[0] == 1 ||
+                                    slot_packet.data[1] == 1 ||
+                                    slot_packet.data[2] == 1) {
+                                    sel = 5;                              // 前3位命中
+                                } else if (slot_packet.data[6] == 1 ||
                                     slot_packet.data[7] == 1 ||
                                     slot_packet.data[8] == 1) {
                                     sel = 4;                              // 大胜

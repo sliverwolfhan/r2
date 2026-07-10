@@ -161,4 +161,17 @@
       entirely (Enter-only, equivalent to WaitForEnter).
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::WaitGraspResultAction" base_class_type="BT::ActionNodeBase">
+    <description>
+      After closing the weapon-head gripper, waits for a grasp result decided by
+      the COMBINATION of two std_msgs/Int32 topics (topic_a default
+      /AT_R2/meilin_mission_start, topic_b default /AT_R2/zone3_cmd). It keeps the
+      latest post-start value of each and, once both have been received, returns
+      SUCCESS when topic_a==success_a(1) AND topic_b==success_b(0), FAILURE when
+      topic_a==fail_a(0) AND topic_b==fail_b(1); any other combination keeps
+      waiting (RUNNING). On timeout (>0) returns timeout_result (default FAILURE).
+      Placed at the tail of a RetryUntilSuccessful sub-tree so a failed grasp
+      re-runs the laser-align + grasp steps.
+    </description>
+  </class>
 </library>

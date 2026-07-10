@@ -45,6 +45,7 @@
 #include "nav2_bt_publish_goal/publish_lift_cmd_action.hpp"
 #include "nav2_bt_publish_goal/set_zone_mode_action.hpp"
 #include "nav2_bt_publish_goal/wait_docking_release_action.hpp"
+#include "nav2_bt_publish_goal/wait_grasp_result_action.hpp"
 #include "nav2_bt_publish_goal/wait_for_enter_action.hpp"
 #include "nav2_bt_publish_goal/wait_for_start_action.hpp"
 #include "nav2_bt_publish_goal/wait_slot_select_action.hpp"
@@ -127,6 +128,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PublishLiftCmdAction>("PublishLiftCmd");
   factory.registerNodeType<nav2_bt_publish_goal::SetZoneModeAction>("SetZoneMode");
   factory.registerNodeType<nav2_bt_publish_goal::WaitDockingReleaseAction>("WaitDockingRelease");
+  factory.registerNodeType<nav2_bt_publish_goal::WaitGraspResultAction>("WaitGraspResult");
   factory.registerNodeType<nav2_bt_publish_goal::WaitForEnterAction>("WaitForEnter");
   factory.registerNodeType<nav2_bt_publish_goal::WaitForStartAction>("WaitForStart");
   factory.registerNodeType<nav2_bt_publish_goal::WaitSlotSelectAction>("WaitSlotSelect");
