@@ -19,6 +19,7 @@
 #include "nav2_bt_publish_goal/pre_steer_align_action.hpp"
 #include "nav2_bt_publish_goal/set_costmap_inflation_action.hpp"
 #include "nav2_bt_publish_goal/set_mppi_params_action.hpp"
+#include "nav2_bt_publish_goal/set_arm_payload_action.hpp"
 #include "nav2_bt_publish_goal/arm_task_action.hpp"
 #include "nav2_bt_publish_goal/arm_cartesian_task_action.hpp"
 #include "nav2_bt_publish_goal/arm_move_joint_action.hpp"
@@ -103,6 +104,7 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PreSteerAlignAction>("PreSteerAlign");
   factory.registerNodeType<nav2_bt_publish_goal::SetCostmapInflationAction>("SetCostmapInflation");
   factory.registerNodeType<nav2_bt_publish_goal::SetMppiParamsAction>("SetMppiParams");
+  factory.registerNodeType<nav2_bt_publish_goal::SetArmPayloadAction>("SetArmPayload");
   factory.registerNodeType<nav2_bt_publish_goal::ArmTaskAction>("ArmTask");
   factory.registerNodeType<nav2_bt_publish_goal::ArmCartesianTaskAction>("ArmCartesianTask");
   factory.registerNodeType<nav2_bt_publish_goal::ArmMoveJointAction>("ArmMoveJoint");

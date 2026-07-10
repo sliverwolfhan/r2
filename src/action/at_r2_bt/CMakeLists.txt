@@ -48,6 +48,7 @@ add_library(${PROJECT_NAME} SHARED
   src/pre_steer_align_action.cpp
   src/set_costmap_inflation_action.cpp
   src/set_mppi_params_action.cpp
+  src/set_arm_payload_action.cpp
   src/get_plan_action.cpp
   src/pop_next_step_action.cpp
   src/peek_next_step_action.cpp
@@ -113,6 +114,7 @@ add_executable(simple_bt_runner
   src/pre_steer_align_action.cpp
   src/set_costmap_inflation_action.cpp
   src/set_mppi_params_action.cpp
+  src/set_arm_payload_action.cpp
   src/get_plan_action.cpp
   src/pop_next_step_action.cpp
   src/peek_next_step_action.cpp

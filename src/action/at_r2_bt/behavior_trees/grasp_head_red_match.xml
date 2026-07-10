@@ -70,11 +70,85 @@
                     clear_buffer="true"
                     timeout="0.0"/>
 
-      <!-- ===== A/B. 导航到武器 prep 点 ===== -->
-      <PublishGoal node="{node}"
-              x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
-              frame_id="map"
-              goal="{nav_goal}"/>
+      <!-- ===== 大循环: 抓一个武器->对接->松爪, 由操作手 docking_status 决定继续/结束 =====
+           对接结果(松爪环节 WaitDockingRelease 输出 finished_all):
+             收到 1/2 (finished_all=0, 对接未成功) -> 换下一个武器头重抓;
+             收到 3   (finished_all=1, 对接成功)   -> 结束整棵树。
+           每轮 SelectWeaponParams 选下一个武器(w1->w2->...->w6), 选到第7个 FAILURE ->
+           退出循环(最多6次上限); ForceSuccess 把退出兜成 SUCCESS, 避免整树报错。
+           KeepRunningUntilFailure: 子 Sequence SUCCESS 继续循环, FAILURE 停止。 -->
+      <Script code="first_grasp := 1"/>
+      <Script code="finished_all := 0"/>
+      <ForceSuccess>
+        <KeepRunningUntilFailure>
+          <Sequence>
+
+      <!-- 选当前武器, 把 w{n}_* 拷到工作键 grasp_*; 超范围(抓满6个)返回 FAILURE 退出循环 -->
+      <SelectWeaponParams start="1"/>
+
+      <!-- ===== A/B. 导航到武器 prep 点: 首轮/重抓两套 MPPI+导航配置 ===== -->
+      <!-- 首轮(first_grasp==1): 宽 yaw 阈值, 远距离接近 -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 0"/>
+        <Sequence>
+          <SetMppiParams node="{node}"
+                   controller_node="/AT_R2/controller_server"
+                   plugin_prefix="FollowPath"
+                   goal_angle_weight="6.0"
+                   goal_angle_threshold="2.0"
+                   vx_max="1.2"
+                   vx_min="-1.2"
+                   vy_max="1.2"
+                   wz_max="4.0"
+                   vx_std="0.4"
+                   vy_std="0.4"
+                   wz_std="0.4"
+                   pathalign_threshold="3.0"
+                   pathalign_offset_from_furthest="15"
+                   goal_x_tolerance="0.03"
+                   goal_y_tolerance="0.05"
+                   goal_yaw_tolerance="0.05"
+                   goal_stable_duration="0.3"
+                   pathalign_use_path_orientations="false"
+                   wait_after_set="0.2"/>
+          <PublishGoal node="{node}"
+                  x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                  frame_id="map"
+                  goal="{nav_goal}"/>
+        </Sequence>
+      </Fallback>
+      <!-- 重抓轮(first_grasp==0): 占位, 待调整数值 -->
+      <Fallback>
+        <ScriptCondition code="first_grasp == 1"/>
+        <Sequence>
+          <SetMppiParams node="{node}"
+                   controller_node="/AT_R2/controller_server"
+                   plugin_prefix="FollowPath"
+                   goal_angle_weight="6.0"
+                   goal_angle_threshold="2.0"
+                   vx_max="1.2"
+                   vx_min="-1.2"
+                   vy_max="1.2"
+                   wz_max="4.0"
+                   vx_std="0.3"
+                   vy_std="0.3"
+                   wz_std="0.5"
+                   goal_x_tolerance="0.05"
+                   goal_y_tolerance="0.05"
+                   goal_yaw_tolerance="0.08"
+                   goal_stable_duration="0.3"
+                   pathalign_threshold="3.0"
+                   pathalign_offset_from_furthest="15"
+                   pathalign_use_path_orientations="false"
+                   wait_after_set="0.2"/>
+          <PublishGoal node="{node}"
+                  x="{grasp_prep_x}" y="{grasp_prep_y}" yaw="{grasp_prep_yaw}"
+                  frame_id="map"
+                  goal="{nav_goal}"/>
+        </Sequence>
+      </Fallback>
+      <!-- 翻转首轮标志(两个 Fallback 都判断完再改) -->
+      <Script code="first_grasp := 0"/>
 
       <!-- ===== C. 张爪(cmd=1) + 侧向贴靠柜台(激光判贴住) ===== -->
       <ParallelAll max_failures="1">
@@ -271,8 +345,10 @@
       </ParallelAll>
 
       <!-- 等对接完成后松爪 cmd=7: 操作员按 Enter, 或收到 /AT_R2/docking_status 为 1/2/3 任一,
-           任一满足即松爪(只松一次)。竞技赛只抓一个, 收到即结束, 无需 finished_all。 -->
+           任一满足即松爪(只松一次)。
+           WaitDockingRelease 输出 finished_all: 收到 3 置 1(对接成功->结束), 收到 1/2 置 0(->换武器重抓)。 -->
       <Parallel success_count="1" failure_count="2">
+        <!-- 分支A: 操作员按 Enter -> 松爪 cmd=7 (Enter 松爪不代表结束, finished_all 保持 0 -> 继续重抓) -->
         <Sequence>
           <WaitForEnter node="{node}"
                         prompt="对接完成后按 Enter 松爪 (cmd=7), 或等下位机发布 docking_status"
@@ -282,16 +358,27 @@
           <PublishHeadCmd node="{node}" command="7"
                           topic="/AT_R2/head_gripper_cmd"
                           wait_done="false"/>
+          <Script code="finished_all := 0"/>
         </Sequence>
+        <!-- 分支B: 收到 docking_status 1/2/3 任一 -> 发松爪; 收到 3 -> finished_all 置 1 结束循环 -->
         <WaitDockingRelease node="{node}"
                             status_topic="/AT_R2/docking_status"
                             gripper_topic="/AT_R2/head_gripper_cmd"
                             release_cmd="7"
+                            finished_all="{finished_all}"
                             timeout="1000.0"/>
       </Parallel>
       <DelayMs delay_msec="1300">
         <AlwaysSuccess/>
       </DelayMs>
+
+      <!-- 循环收尾: finished_all==0(收到1/2)->SUCCESS 继续换武器重抓;
+                     ==1(收到3)->FAILURE 退出循环 -> ForceSuccess 兜成 SUCCESS 正常结束。 -->
+      <ScriptCondition code="finished_all == 0"/>
+
+          </Sequence>
+        </KeepRunningUntilFailure>
+      </ForceSuccess>
 
     </Sequence>
   </BehaviorTree>
