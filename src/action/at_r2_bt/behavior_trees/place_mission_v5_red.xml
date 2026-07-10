@@ -265,32 +265,42 @@
             global_radius="0.25"
             local_cost_scaling_factor="1.0"
             global_cost_scaling_factor="4.0"/>
-            <PublishGoal node="{node}"
-                     x="11.07"
-                     y="4.75"
-                     yaw="1.57"
-                     frame_id="map"
-                     action_name="/AT_R2/navigate_to_pose"
-                     goal="{place_goal}"/>
+            <ParallelAll max_failures="1">
+              <PublishGoal node="{node}"
+                      x="11.07"
+                      y="4.75"
+                      yaw="1.57"
+                      frame_id="map"
+                      action_name="/AT_R2/navigate_to_pose"
+                      goal="{place_goal}"/>
+              <ArmMoveNamed node="{node}"
+                              pose_name="hold_block_red"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="2.0"/>        
+            </ParallelAll>
+
             <!-- B1+B2. 摆放置姿态 + 导航到所选 slot (slot_x/y/yaw 已由 WaitSlotSelect 按值填好) -->
             <ParallelAll max_failures="1">
-              <Sequence>
-                <DelayMs delay_msec="100">
-                  <AlwaysSuccess/>
-                </DelayMs>
+              </Sequence>
                 <ArmMoveNamed node="{node}"
                               pose_name="place_grid_red_1"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
               </Sequence>
-              <PublishGoal node="{node}"
-                           x="{slot_x}"
-                           y="{slot_y}"
-                           yaw="{slot_yaw}"
-                           frame_id="map"
-                           action_name="/AT_R2/navigate_to_pose"
-                           goal="{place_goal}"/>
+              <Sequence>
+                <DelayMs delay_msec="800">
+                  <AlwaysSuccess/>
+                </DelayMs>
+                <PublishGoal node="{node}"
+                            x="{slot_x}"
+                            y="{slot_y}"
+                            yaw="{slot_yaw}"
+                            frame_id="map"
+                            action_name="/AT_R2/navigate_to_pose"
+                            goal="{place_goal}"/>
+              </Sequence>
             </ParallelAll>
 
             <!-- B2.5 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 =====
