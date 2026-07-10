@@ -21,10 +21,11 @@
                     enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/> -->
+    <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.35"
-        global_radius="0.35"
+        local_radius="0.30"
+        global_radius="0.30"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
         
@@ -64,11 +65,11 @@
                     clear_buffer="true"
                     timeout="0.0"/>
       
-      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="1.57" frame_id="map" goal="{goal}"/>
+      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
 
       <WaitForStart node="{node}"
                           prompt="按 Enter 或接受 /AT_R2/red_start_cmd 开始放置 KFS"
-                          start_topic="/AT_R2/red_start_cmd"
+                          start_topic="/AT_R2/zone3_cmd"
                           start_value="1"
                           enable_topic="true"
                           clear_buffer="true"
@@ -142,22 +143,27 @@
                           prompt="等待放格子选择 (1/2/3=格子, 4=大胜, 5=等待位)"
                           slot_sel="{slot_sel}"/>
 
-          <!-- ===== 按 slot_sel 分流: 1/2/3=放块+抓下一块; 4=大胜 ===== -->
+          <!-- ===== 按 slot_sel 分流: 1/2/3=放块+抓下*一块; 4=大胜 ===== -->
 
           <!-- ===== case 4: 大胜爬三层, 结束比赛 ===== -->
           <Sequence _skipIf="slot_sel != 4">
+            <ArmMoveNamed node="{node}"
+                            pose_name="three_layer_arm_1_red"
+                            server_name="robotic_task"
+                            task_id="1"
+                            duration="2.0"/>
             <!-- 到大胜准备位 (导航 || 摆臂, 两者都必须成功) -->
             <ParallelAll max_failures="1">
               <PublishGoal node="{node}"
                            x="10.7"
-                           y="4.95"
+                           y="4.85"
                            yaw="0.0"
                            frame_id="map"
                            action_name="/AT_R2/navigate_to_pose"
                            goal="{place_goal}"/>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_2_red"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -173,7 +179,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_2_red"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -200,7 +206,7 @@
               </Sequence>
               <!-- TODO: 填并行臂姿态名 -->
               <ArmMoveNamed node="{node}"
-                            pose_name="arm_name"
+                            pose_name="three_layer_arm_3_red"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
@@ -210,8 +216,8 @@
             </DelayMs>
             <!-- 按回车或等话题: 放块 -->
             <WaitForStart node="{node}"
-                          prompt="大胜: 按 Enter 或发布 /AT_R2/zone3_cmd 放块"
-                          start_topic="/AT_R2/zone3_cmd"
+                          prompt="大胜: 按 Enter 或发布 /AT_R2/meilin_mission_start 放块"
+                          start_topic="/AT_R2/meilin_mission_start"
                           start_value="1"
                           enable_topic="true"
                           clear_buffer="true"
@@ -305,7 +311,7 @@
                                         max_data_age="0.5"/>
 
               <DistanceServoAlign node="{node}"
-                                  distance_topic="/AT_R2/distance_tail"
+                                  distance_topic="/AT_R2/distance_grasp"
                                   distance_scale="0.001"
                                   target_distance="{slot_laser_dist}"
                                   tolerance="0.01"
@@ -339,7 +345,7 @@
                           cmd_vel_topic="/AT_R2/cmd_vel_bt"
                           distance_topic="/AT_R2/distance_head"
                           distance_scale="0.001"
-                          distance_stop_below="0.37"
+                          distance_stop_below="0.27"
                           odom_topic="/AT_R2/odometry"/>
             </ForceSuccess>
 
