@@ -287,6 +287,45 @@
                            goal="{place_goal}"/>
             </ParallelAll>
 
+            <!-- B2.5 激光对距精对齐: 已在范围内直接过, 否则伺服对齐 =====
+                 TODO: 下列 target_y / target_distance / distance_topic 为占位值, 按红区放块实测调整。 -->
+            <Fallback>
+              <GraspReadyByPoseDistance node="{node}"
+                                        map_frame="map"
+                                        base_frame="base_footprint"
+                                        target_y="5.45"
+                                        y_tolerance="6.00"
+                                        target_yaw="1.57"
+                                        yaw_tolerance="1.0"
+                                        distance_topic="/AT_R2/distance_grasp"
+                                        distance_scale="0.001"
+                                        target_distance="{slot_laser_dist}"
+                                        distance_tolerance="0.050"
+                                        stable_count="3"
+                                        max_data_age="0.5"/>
+
+              <DistanceServoAlign node="{node}"
+                                  distance_topic="/AT_R2/distance_tail"
+                                  distance_scale="0.001"
+                                  target_distance="{slot_laser_dist}"
+                                  tolerance="0.01"
+                                  kp="0.8"
+                                  max_speed="0.2"
+                                  min_speed="0.015"
+                                  stable_count="2"
+                                  max_data_age="0.5"
+                                  timeout="8.0"
+                                  publish_rate_hz="50.0"
+                                  cmd_axis="y"
+                                  positive_error_direction="1.0"
+                                  side_speed_scale="0.0"
+                                  side_speed_direction="-1.0"
+                                  filter_enable="true"
+                                  median_window="3"
+                                  ema_tau="0.1"
+                                  cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
+            </Fallback>
+
             <!-- B3. 往格子里怼 (顶墙) -->
             <ForceSuccess>
               <DockToWall node="{node}"
@@ -295,9 +334,12 @@
                           wz="0.0"
                           stall_threshold="0.02"
                           stall_duration="10.0"
-                          timeout="3.5"
+                          timeout="5.0"
                           publish_rate_hz="50.0"
                           cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                          distance_topic="/AT_R2/distance_head"
+                          distance_scale="0.001"
+                          distance_stop_below="0.37"
                           odom_topic="/AT_R2/odometry"/>
             </ForceSuccess>
 

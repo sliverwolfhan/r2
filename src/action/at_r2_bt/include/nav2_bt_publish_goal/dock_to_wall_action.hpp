@@ -23,6 +23,8 @@ namespace nav2_bt_publish_goal
 ///          1) 里程计位移(默认)：一段时间内位置变化量小于阈值 -> 贴住;
 ///          2) 激光测距(配置 distance_topic 时启用)：对爪子侧激光测距滤波后，
 ///             一段时间内距离变化量小于阈值 -> 压不动了 -> 贴住。
+///        激光模式下另可配 distance_stop_below: 滤波后距离一旦低于该绝对阈值即
+///        立即判贴住(不依赖"距离不变")，与上述 stall 判据共存, 任一满足即停。
 ///        判定贴住后停止发送速度并返回 SUCCESS。
 class DockToWallAction : public BT::StatefulActionNode
 {
@@ -72,11 +74,16 @@ private:
   // "距离不变"判为贴住。避免激光被挡/读数卡住时把大距离的假不变误判成贴住。
   // <=0 表示不设门槛(仅靠"距离不变")。
   double distance_stall_max_{0.0};
+  // 绝对阈值停止(激光)：滤波后距离一旦 < distance_stop_below 立即判贴住停车，
+  // 不依赖"距离不变"的 stall 判据。与 stall 判据共存, 任一满足即停。
+  // <=0 表示不启用该判据。
+  double distance_stop_below_{0.0};
 
   // 状态
   rclcpp::Time start_time_;
   rclcpp::Time stall_start_time_;
   bool is_stalling_{false};
+  bool docked_by_threshold_{false};  // 绝对阈值判据已触发(距离 < distance_stop_below)
   bool odom_received_{false};
 
   // 摇摆状态

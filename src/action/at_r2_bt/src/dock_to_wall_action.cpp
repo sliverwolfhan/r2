@@ -60,6 +60,10 @@ BT::PortsList DockToWallAction::providedPorts()
     BT::InputPort<double>("distance_stall_max", 0.0,
       "Filtered distance (m) must be below this to allow declaring docked; guards against "
       "false stall when laser reading is stuck far away; <=0 disables the gate"),
+    BT::InputPort<double>("distance_stop_below", 0.0,
+      "Absolute-threshold stop (laser): declare docked and stop as soon as filtered "
+      "distance (m) drops below this, independent of the stall check; coexists with stall "
+      "(either one stops the robot); <=0 disables this criterion"),
     BT::InputPort<bool>("filter_enable", true,
       "Enable median+EMA distance filtering (laser mode only)"),
     BT::InputPort<int>("median_window", 5,
@@ -95,6 +99,7 @@ BT::NodeStatus DockToWallAction::onStart()
   distance_topic_ = "";
   distance_scale_ = 0.001;
   distance_stall_max_ = 0.0;
+  distance_stop_below_ = 0.0;
   filter_enable_ = true;
   median_window_ = 5;
   ema_tau_ = 0.1;
@@ -114,6 +119,7 @@ BT::NodeStatus DockToWallAction::onStart()
   getInput("distance_topic", distance_topic_);
   getInput("distance_scale", distance_scale_);
   getInput("distance_stall_max", distance_stall_max_);
+  getInput("distance_stop_below", distance_stop_below_);
   getInput("filter_enable", filter_enable_);
   getInput("median_window", median_window_);
   getInput("ema_tau", ema_tau_);
@@ -133,6 +139,7 @@ BT::NodeStatus DockToWallAction::onStart()
 
   // 初始化状态
   is_stalling_ = false;
+  docked_by_threshold_ = false;
   odom_received_ = false;
   distance_received_ = false;
   last_distance_ = 0.0;
@@ -179,7 +186,8 @@ BT::NodeStatus DockToWallAction::onStart()
     stall_duration_, timeout_, cmd_vel_topic_.c_str(),
     use_distance_
       ? ("LASER topic=" + distance_topic_ + " stall_max=" +
-         std::to_string(distance_stall_max_) + "m").c_str()
+         std::to_string(distance_stall_max_) + "m stop_below=" +
+         std::to_string(distance_stop_below_) + "m").c_str()
       : "ODOM");
 
   return BT::NodeStatus::RUNNING;
@@ -202,6 +210,15 @@ BT::NodeStatus DockToWallAction::onRunning()
   // 还没收到反馈数据，继续等待
   if (use_distance_ ? !distance_received_ : !odom_received_) {
     return BT::NodeStatus::RUNNING;
+  }
+
+  // 绝对阈值判据(激光): 距离已低于 distance_stop_below -> 立即贴住停车
+  if (docked_by_threshold_) {
+    stopAll();
+    RCLCPP_INFO(node_->get_logger(),
+      "DockToWall SUCCESS: laser distance below %.4fm threshold, docked!",
+      distance_stop_below_);
+    return BT::NodeStatus::SUCCESS;
   }
 
   // 检查是否已经持续stall足够长时间
@@ -301,6 +318,19 @@ void DockToWallAction::distanceCallback(const std_msgs::msg::Float64::SharedPtr 
   // 滤波后转米
   const double filtered =
     (filter_enable_ ? filterDistance(msg->data, now) : msg->data) * distance_scale_;
+
+  // 绝对阈值判据: 滤波后距离一旦低于门槛立即置贴住标志(不受下方100ms节流影响,
+  // 首帧就近即可停)。onRunning 下一次 tick 读该标志停车。
+  if (distance_stop_below_ > 0.0 &&
+      std::isfinite(filtered) && filtered < distance_stop_below_)
+  {
+    if (!docked_by_threshold_) {
+      docked_by_threshold_ = true;
+      RCLCPP_DEBUG(node_->get_logger(),
+        "DockToWall: laser below stop threshold, dist=%.4fm < %.4fm",
+        filtered, distance_stop_below_);
+    }
+  }
 
   if (!distance_received_) {
     // 第一帧，初始化
