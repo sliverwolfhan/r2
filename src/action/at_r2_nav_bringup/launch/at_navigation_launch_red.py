@@ -23,6 +23,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     LogInfo,
     RegisterEventHandler,
+    TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
@@ -267,6 +268,22 @@ def generate_launch_description():
         )
     )
 
+    # 开机自启 rqt_reconfigure (动态参数调节器): 用来手动开关
+    # small_gicp_relocalization 的 relocalization_enabled 等动态参数。
+    # 延时 15s 再拉起, 等雷达/导航/gicp 节点先注册好参数, 否则 reconfigure 列表里看不到它。
+    # 需要图形桌面 (有 DISPLAY); 无头启动时 rqt 起不来但不影响导航。
+    start_rqt_reconfigure_cmd = TimerAction(
+        period=15.0,
+        actions=[
+            Node(
+                package="rqt_reconfigure",
+                executable="rqt_reconfigure",
+                name="rqt_reconfigure",
+                output="screen",
+            )
+        ],
+    )
+
     ld = LaunchDescription()
 
     # Declare the launch options
@@ -293,5 +310,6 @@ def generate_launch_description():
     ld.add_action(start_bringup_after_lidar_cmd)
     ld.add_action(wait_for_lidar_ip_cmd)
     ld.add_action(rviz_cmd)
+    ld.add_action(start_rqt_reconfigure_cmd)
 
     return ld

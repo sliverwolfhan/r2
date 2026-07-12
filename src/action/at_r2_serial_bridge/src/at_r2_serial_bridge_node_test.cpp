@@ -62,6 +62,27 @@ struct R2SlotSelectPacket {
 };
 #pragma pack(pop)
 
+// 从下位机接收的 遥控器控制 数据包结构 (cmd 0x01)
+//   载荷 PackControl_t = 4 个摇杆 float + 1 个 uint32 Key。
+//   按 Key 值映射后发布到 /AT_R2/place_retry (放块顶墙中断重试):
+//     0x214 -> 1, 0x20C -> 2, 0x224 -> 3, 0x244 -> 4, 其它 -> 0。
+//   整包 = 1+1+1+4+20+1 = 28 字节 (length 字段应为 0x1C)。
+#define PACK_CONTROL_CMD    0x01
+#pragma pack(push, 1)
+struct PackControl_t {
+    float rocker[4];       // 4 个摇杆值
+    uint32_t Key;          // 按键值
+};
+struct R2ControlPacket {
+    uint8_t header;        // 包头 0x5A
+    uint8_t length;        // 包长度 28 (即 0x1C)
+    uint8_t cmd;           // 命令字 0x01
+    uint32_t packet_id;    // 包ID
+    PackControl_t control; // 控制载荷 (rocker[4] + Key)
+    uint8_t sum;           // 校验和
+};
+#pragma pack(pop)
+
 class VirtualSerialPortNode : public rclcpp::Node
 {
 public:
@@ -109,6 +130,10 @@ public:
         // 创建 放格子选择 发布器 (1/2/3=格子, 4=大胜)
         place_slot_select_pub_ = this->create_publisher<std_msgs::msg::Int32>(
             "/AT_R2/place_slot_select", 10);
+
+        // 创建 放块顶墙中断重试 发布器 (Key 映射 1/2/3/4, 其它 0)
+        place_retry_pub_ = this->create_publisher<std_msgs::msg::Int32>(
+            "/AT_R2/place_retry", 10);
 
         // 定时持续发布最新状态（10Hz）
         // 平时发0；收到下位机1时持续发1；收到下位机2时发一次2，之后恢复发0
@@ -305,6 +330,47 @@ private:
                             break; // 长度不够，等待新数据
                         }
                     }
+                    else if (pkt_cmd == PACK_CONTROL_CMD && pkt_len == sizeof(R2ControlPacket)) {
+                        // 遥控器控制包 (rocker[4] + Key), 按 Key 映射发 place_retry
+                        if (rx_buffer_.size() >= sizeof(R2ControlPacket)) {
+                            R2ControlPacket ctrl_packet;
+                            std::memcpy(&ctrl_packet, rx_buffer_.data(), sizeof(R2ControlPacket));
+
+                            uint8_t sum = 0;
+                            for (size_t i = 0; i < sizeof(R2ControlPacket) - 1; i++) {
+                                sum += rx_buffer_[i];
+                            }
+                            if (sum == ctrl_packet.sum) {
+                                const uint32_t key = ctrl_packet.control.Key;
+                                // Key 映射: 0x214->1, 0x20C->2, 0x224->3, 0x244->4, 其它->0
+                                int32_t retry = 0;
+                                switch (key) {
+                                    case 0x214: retry = 1; break;
+                                    case 0x20C: retry = 2; break;
+                                    case 0x224: retry = 3; break;
+                                    case 0x244: retry = 4; break;
+                                    default:    retry = 0; break;
+                                }
+
+                                // 只在 Key 变化时发布一次 (去重, 避免同一 Key 连续刷)
+                                if (key != last_control_key_) {
+                                    last_control_key_ = key;
+                                    auto retry_msg = std_msgs::msg::Int32();
+                                    retry_msg.data = retry;
+                                    place_retry_pub_->publish(retry_msg);
+                                    RCLCPP_INFO(this->get_logger(),
+                                        "控制包 Key=0x%X -> 发布 place_retry: %d (Packet ID: %u)",
+                                        key, retry, ctrl_packet.packet_id);
+                                }
+                            } else {
+                                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                    "控制包校验失败: 计算得 0x%02X, 收到 0x%02X", sum, ctrl_packet.sum);
+                            }
+                            rx_buffer_.erase(rx_buffer_.begin(), rx_buffer_.begin() + sizeof(R2ControlPacket));
+                        } else {
+                            break; // 长度不够，等待新数据
+                        }
+                    }
                     else {
                         // 虽然是 0x5A 开头，但指令不对或者长度不匹配，丢弃第一个字节继续找
                         rx_buffer_.erase(rx_buffer_.begin());
@@ -356,6 +422,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr docking_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr zone3_cmd_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr place_slot_select_pub_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr place_retry_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_;
 
     std::thread usb_thread_;
@@ -365,6 +432,7 @@ private:
     bool climber_running_{false};       // 下位机正在执行
     bool climber_finish_once_{false};   // 下位机执行完成，待发一次2
     uint8_t last_climber_raw_{0xFF};    // 上次收到的原始状态，用于去重
+    uint32_t last_control_key_{0xFFFFFFFF};  // 上次控制包 Key，用于去重 (只在变化时发 place_retry)
 
     std::vector<uint8_t> rx_buffer_;
     std::string port_name_;

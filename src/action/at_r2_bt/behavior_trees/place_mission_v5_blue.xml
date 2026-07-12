@@ -332,22 +332,97 @@
                                   cmd_vel_topic="/AT_R2/cmd_vel_nav2_result"/>
             </Fallback>
 
-            <!-- B3. 往格子里怼 (顶墙) -->
-            <ForceSuccess>
-              <DockToWall node="{node}"
-                          vy="0.0"
-                          vx="0.15"
-                          wz="0.0"
-                          stall_threshold="0.02"
-                          stall_duration="10.0"
-                          timeout="5.0"
-                          publish_rate_hz="50.0"
-                          cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                          distance_topic="/AT_R2/distance_head"
-                          distance_scale="0.001"
-                          distance_stop_below="0.27"
-                          odom_topic="/AT_R2/odometry"/>
-            </ForceSuccess>
+            <!-- B3. 往格子里怼 (顶墙), 可被 /AT_R2/place_retry (1/2/3/4) 中断:
+                 顶墙进行中收到值 -> CheckRetryTopic 返回 FAILURE, ReactiveSequence
+                 halt 掉 DockToWall (停车) -> 进恢复段: 固定倒车退出 + 按值动作 ->
+                 ForceFailure 逼 RetryUntilSuccessful 重推。无新中断怼到位才 SUCCESS 往下走 B4。
+                 值 1/4: 机械臂动作(占位 pose); 2: 底盘左移5cm; 3: 底盘右移5cm。 -->
+            <RetryUntilSuccessful num_attempts="-1">
+              <Fallback>
+                <!-- 分支1: 可中断的顶墙 -->
+                <ReactiveSequence>
+                  <CheckRetryTopic node="{node}"
+                                   topic="/AT_R2/place_retry"
+                                   retry_val="{retry_val}"/>
+                  <ForceSuccess>
+                    <DockToWall node="{node}"
+                                vy="0.0"
+                                vx="0.15"
+                                wz="0.0"
+                                stall_threshold="0.02"
+                                stall_duration="10.0"
+                                timeout="5.0"
+                                publish_rate_hz="50.0"
+                                cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                                distance_topic="/AT_R2/distance_head"
+                                distance_scale="0.001"
+                                distance_stop_below="0.27"
+                                odom_topic="/AT_R2/odometry"/>
+                  </ForceSuccess>
+                </ReactiveSequence>
+
+                <!-- 分支2: 恢复 (只有被中断才进). 必须以 FAILURE 收尾, 逼上层重推 -->
+                <ForceFailure>
+                  <Sequence>
+                    <!-- (a) 固定倒车退出格子 (开环, 距离靠 timeout 标定, 约 0.2m/s*0.6s≈12cm) -->
+                    <ForceSuccess>
+                      <DockToWall node="{node}"
+                                  vy="0.0"
+                                  vx="0.2"
+                                  wz="0.0"
+                                  stall_threshold="0.02"
+                                  stall_duration="10.0"
+                                  timeout="1.0"
+                                  publish_rate_hz="50.0"
+                                  cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                                  odom_topic="/AT_R2/odometry"/>
+                    </ForceSuccess>
+
+                    <!-- (b) 按 retry_val 分支: 1/4 机械臂; 2 左移; 3 右移 -->
+                    <!-- 值1: 机械臂动作 (占位 pose, 关节值见 arm_ready_position.yaml) -->
+                    <ArmMoveNamed _skipIf="retry_val != 1"
+                                  node="{node}"
+                                  pose_name="place_retry_arm_up_blue"
+                                  server_name="robotic_task"
+                                  task_id="1"
+                                  duration="2.0"/>
+                    <!-- 值2: 底盘左移5cm (车体+y; 开环 timeout*vy≈0.05, 需实测标定; 方向按底盘确认) -->
+                    <ForceSuccess _skipIf="retry_val != 2">
+                      <DockToWall node="{node}"
+                                  vx="0.0"
+                                  vy="-0.15"
+                                  wz="0.0"
+                                  stall_threshold="0.0"
+                                  stall_duration="999.0"
+                                  timeout="0.34"
+                                  publish_rate_hz="50.0"
+                                  cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                                  odom_topic="/AT_R2/odometry"/>
+                    </ForceSuccess>
+                    <!-- 值3: 底盘右移5cm (车体-y) -->
+                    <ForceSuccess _skipIf="retry_val != 3">
+                      <DockToWall node="{node}"
+                                  vx="0.0"
+                                  vy="0.15"
+                                  wz="0.0"
+                                  stall_threshold="0.0"
+                                  stall_duration="999.0"
+                                  timeout="0.34"
+                                  publish_rate_hz="50.0"
+                                  cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                                  odom_topic="/AT_R2/odometry"/>
+                    </ForceSuccess>
+                    <!-- 值4: 机械臂动作 (占位 pose) -->
+                    <ArmMoveNamed _skipIf="retry_val != 4"
+                                  node="{node}"
+                                  pose_name="place_retry_arm_down_blue"
+                                  server_name="robotic_task"
+                                  task_id="1"
+                                  duration="2.0"/>
+                  </Sequence>
+                </ForceFailure>
+              </Fallback>
+            </RetryUntilSuccessful>
 
             <!-- B4. 松气泵 放下 KFS -->
             <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>

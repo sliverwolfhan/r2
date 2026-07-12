@@ -111,6 +111,16 @@
       navigation-to-prep-pose step when the robot is already there.
     </description>
   </class>
+  <class type="nav2_bt_publish_goal::CheckRetryTopicCondition" base_class_type="BT::ConditionNode">
+    <description>
+      Condition node. Subscribes to a retry topic (std_msgs/Int32, default
+      /AT_R2/place_retry). Returns SUCCESS while no pending value; returns
+      FAILURE (latching the value 1..4 to retry_val) when an interrupt arrives,
+      so that inside a ReactiveSequence it halts a running dock/push action to
+      trigger a back-out-and-retry. Values are consumed on read and drained on
+      re-entry so only values received during an active push interrupt.
+    </description>
+  </class>
   <class type="nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition" base_class_type="BT::ConditionNode">
     <description>
       Condition node. During navigation, reads current map->base TF and
