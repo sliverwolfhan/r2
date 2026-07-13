@@ -114,7 +114,7 @@
                      goal="{place_goal}"/>
         <!-- TODO: 填并行臂姿态名 (此时手里预装着 KFS, 勿摆成松开姿态) -->
         <ArmMoveNamed node="{node}"
-                      pose_name="place_grid_red_1"
+                      pose_name="hold_block_red"
                       server_name="robotic_task"
                       task_id="1"
                       duration="2.0"/>
@@ -275,26 +275,33 @@
                       frame_id="map"
                       action_name="/AT_R2/navigate_to_pose"
                       goal="{place_goal}"/>
-              <ArmMoveNamed node="{node}"
-                              pose_name="hold_block_red"
-                              server_name="robotic_task"
-                              task_id="1"
-                              duration="2.0"/>        
+              <Sequence>
+                <ArmMoveNamed node="{node}"
+                                pose_name="hold_block_red_1"
+                                server_name="robotic_task"
+                                task_id="1"
+                                duration="2.0"/>    
+                <ArmMoveNamed node="{node}"
+                                pose_name="hold_block_red_2"
+                                server_name="robotic_task"
+                                task_id="1"
+                                duration="2.0"/>      
+              </Sequence>   
             </ParallelAll>
 
             <!-- B1+B2. 摆放置姿态 + 导航到所选 slot (slot_x/y/yaw 已由 WaitSlotSelect 按值填好) -->
             <ParallelAll max_failures="1">
               <Sequence>
+                <DelayMs delay_msec="500">
+                  <AlwaysSuccess/>
+                </DelayMs>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_red_1"
+                              pose_name="place_grid_red_2"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
               </Sequence>
               <Sequence>
-                <DelayMs delay_msec="800">
-                  <AlwaysSuccess/>
-                </DelayMs>
                 <PublishGoal node="{node}"
                             x="{slot_x}"
                             y="{slot_y}"
@@ -391,6 +398,17 @@
                   </ForceSuccess>
                 </ReactiveSequence>
 
+                <PublishLiftCmd node="{node}" command="6"/>
+                <ArmMoveNamed node="{node}"
+                              pose_name="place_grid_red_2"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="2.0"/>
+                <ArmMoveNamed node="{node}"
+                              pose_name="place_grid_red_3"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="2.0"/>
                 <!-- 分支2: 恢复 (只有被中断才进). 必须以 FAILURE 收尾, 逼上层重推 -->
                 <ForceFailure>
                   <Sequence>
@@ -420,27 +438,39 @@
                     <ForceSuccess _skipIf="retry_val != 2">
                       <DockToWall node="{node}"
                                   vx="0.0"
-                                  vy="0.15"
+                                  vy="0.10"
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="0.34"
+                                  timeout="1.0"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
+                      <!-- <ArmMoveNamed _skipIf="retry_val != 2"
+                                  node="{node}"
+                                  pose_name="place_retry_arm_left_red"
+                                  server_name="robotic_task"
+                                  task_id="1"
+                                  duration="2.0"/> -->
                     </ForceSuccess>
                     <!-- 值3: 底盘右移5cm (车体-y) -->
                     <ForceSuccess _skipIf="retry_val != 3">
                       <DockToWall node="{node}"
                                   vx="0.0"
-                                  vy="-0.15"
+                                  vy="-0.10"
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="0.34"
+                                  timeout="1.0"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
+                      <!-- <ArmMoveNamed _skipIf="retry_val != 3"
+                                  node="{node}"
+                                  pose_name="place_retry_arm_right_red"
+                                  server_name="robotic_task"
+                                  task_id="1"
+                                  duration="2.0"/> -->
                     </ForceSuccess>
                     <!-- 值4: 机械臂动作 (占位 pose) -->
                     <ArmMoveNamed _skipIf="retry_val != 4"

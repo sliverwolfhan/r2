@@ -291,7 +291,7 @@
                             min_speed="0.015"
                             stable_count="2"
                             max_data_age="0.5"
-                            timeout="8.0"
+                            timeout="100.0"
                             publish_rate_hz="50.0"
                             cmd_axis="x"
                             positive_error_direction="1.0"
