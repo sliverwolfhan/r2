@@ -310,6 +310,6 @@ def generate_launch_description():
     ld.add_action(start_bringup_after_lidar_cmd)
     ld.add_action(wait_for_lidar_ip_cmd)
     ld.add_action(rviz_cmd)
-    ld.add_action(start_rqt_reconfigure_cmd)
+    # ld.add_action(start_rqt_reconfigure_cmd)
 
     return ld

@@ -40,8 +40,8 @@
               </Sequence>
               <Sequence>
                 <ArmMoveNamedAsync pose_name="lift_block2" task_id="1" duration="-1.0"/>
-                <ArmMoveNamedAsync pose_name="stow_block2" task_id="1" duration="1.2"/>
                 <WaitArmIdle timeout="20.0"/>
+                <ArmMoveNamedAsync pose_name="stow_block2" task_id="1" duration="1.2"/>
                 <ArmMoveNamedAsync pose_name="place_block2" task_id="1" duration="1.0"/>
               </Sequence>
               <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.5"/>
