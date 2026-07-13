@@ -24,8 +24,8 @@
     <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.30"
-        global_radius="0.30"
+        local_radius="0.20"
+        global_radius="0.20"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
         
@@ -38,9 +38,9 @@
                   vx_min="-1.2"
                   vy_max="1.2"
                   wz_max="4.0"
-                  vx_std="0.35"
-                  vy_std="0.35"
-                  wz_std="0.35"
+                  vx_std="0.3"
+                  vy_std="0.3"
+                  wz_std="0.3"
                   pathalign_use_path_orientations="false"
                   pathalign_threshold="3.0"
                   pathalign_offset_from_furthest="15"
@@ -84,9 +84,9 @@
                   vx_min="-1.2"
                   vy_max="1.2"
                   wz_max="4.0"
-                  vx_std="0.4"
-                  vy_std="0.4"
-                  wz_std="0.35"
+                  vx_std="0.3"
+                  vy_std="0.3"
+                  wz_std="0.3"
                   pathalign_use_path_orientations="false"
                   pathalign_threshold="3.0"
                   pathalign_offset_from_furthest="15"
@@ -107,7 +107,7 @@
       <ParallelAll max_failures="1">
         <PublishGoal node="{node}"
                      x="11.07"
-                     y="4.0"
+                     y="4.11"
                      yaw="1.57"
                      frame_id="map"
                      action_name="/AT_R2/navigate_to_pose"
@@ -263,8 +263,8 @@
             <Script code="loop_i := loop_i + 1"/>
 
           <SetCostmapInflation node="{node}"
-            local_radius="0.25"
-            global_radius="0.25"
+            local_radius="0.20"
+            global_radius="0.20"
             local_cost_scaling_factor="1.0"
             global_cost_scaling_factor="4.0"/>
             <ParallelAll max_failures="1">
@@ -283,7 +283,7 @@
             </ParallelAll>
 
             <!-- B1+B2. 摆放置姿态 + 导航到所选 slot (slot_x/y/yaw 已由 WaitSlotSelect 按值填好) -->
-            <ParallelAll max_failures="1">
+         <ParallelAll max_failures="1">
               <Sequence>
                 <DelayMs delay_msec="500">
                   <AlwaysSuccess/>
@@ -295,13 +295,14 @@
                               duration="2.0"/>
               </Sequence>
               <Sequence>
-                <PublishGoal node="{node}"
-                            x="{slot_x}"
-                            y="{slot_y}"
-                            yaw="{slot_yaw}"
-                            frame_id="map"
-                            action_name="/AT_R2/navigate_to_pose"
-                            goal="{place_goal}"/>
+                <Fallback>
+                  <IsPrepSkippable node="{node}"
+                                  target_x="{slot_x}" target_y="{slot_y}" target_yaw="{slot_yaw}"
+                                  x_tolerance="0.1" y_tolerance="0.1" yaw_tolerance="0.1"/>
+                  <PublishGoal node="{node}"
+                              x="{slot_x}" y="{slot_y}" yaw="{slot_yaw}"
+                              frame_id="map" goal="{nav_goal}"/>
+                </Fallback>
               </Sequence>
             </ParallelAll>
 
@@ -468,9 +469,14 @@
 
             <!-- B4. 松气泵 放下 KFS -->
             <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-            <DelayMs delay_msec="1000">
+            <DelayMs delay_msec="100">
               <AlwaysSuccess/>
             </DelayMs>
+            <ArmMoveNamed node="{node}"
+                        pose_name="place_grid_red_1_1"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="0.8"/>
 
             <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
             <ParallelAll max_failures="1">
@@ -501,14 +507,14 @@
             </ParallelAll>
 
             <!-- 仅 slot 1: 放完第一个格子倒车退出后, 导航回准备点 -->
-            <PublishGoal node="{node}"
-                         x="11.07"
-                         y="4.75"
-                         yaw="1.57"
-                         frame_id="map"
-                         action_name="/AT_R2/navigate_to_pose"
-                         goal="{place_goal}"
-                         _skipIf="slot_sel != 1"/>
+              <Fallback>
+              <IsPrepSkippable node="{node}"
+                                target_x="11.00" target_y="4.75" target_yaw="1.57"
+                                x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+              <PublishGoal node="{node}"
+                            x="11.0" y="4.75" yaw="1.57"
+                            frame_id="map" goal="{nav_goal}"/>
+            </Fallback>
 
             <!-- ===== C 段: 抓下一个地上 KFS (仅前 place_count 轮; 末轮已放完最后一块, 只放不抓) =====
                  末轮 loop_i == total_rounds: 整段 (取块参数+导航取块+笛卡尔抓+回过渡+去P2) 跳过,
@@ -545,7 +551,18 @@
                                 cube_y="{kfs_place_y}"
                                 cube_z="{kfs_grab_z}"
                                 tf_timeout="5.0"/>
-
+              <ForceSuccess>
+                <DockToWall node="{node}"
+                            vx="-0.25"
+                            vy="0.0"
+                            wz="0.0"
+                            stall_threshold="0.0"
+                            stall_duration="999.0"
+                            timeout="1.25"
+                            publish_rate_hz="50.0"
+                            cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                            odom_topic="/AT_R2/odometry"/>
+              </ForceSuccess>
               <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
               <ArmMoveNamed node="{node}"
                             pose_name="place_interim_pos_red"

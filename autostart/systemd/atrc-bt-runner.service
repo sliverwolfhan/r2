@@ -12,8 +12,8 @@ Environment=DISPLAY=:0
 # 启动前再等 BT_START_DELAY 秒(默认5)让导航稳定, 等待逻辑在 start_bt_runner.sh 里读 autostart.env。
 ExecStart=/usr/bin/bash /home/pc1/AT_RC/autostart/start_bt_runner.sh
 TimeoutStartSec=0
-Restart=always
-RestartSec=5
+# 行为树只跑一次: 进程退出后不再自动拉起 (原来是 Restart=always 会无限重启)。
+Restart=no
 
 [Install]
 WantedBy=atrc.target
