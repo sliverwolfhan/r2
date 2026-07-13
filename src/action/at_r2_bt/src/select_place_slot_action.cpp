@@ -55,7 +55,10 @@ BT::NodeStatus SelectPlaceSlotAction::tick()
   // simple_bt_runner.cpp 里写的键名是 "slot_<i>_x" 这种。
   const std::string prefix = "slot_" + std::to_string(index) + "_";
 
-  const std::vector<std::string> suffixes = {"x", "y", "yaw"};
+  // x/y/yaw: 导航预备点位姿; place_x/place_y/place_z: 放块 ArmCartesianTask(task_id=5)
+  // 的 cube 目标 -> 工作键 slot_place_x/slot_place_y/slot_place_z。
+  const std::vector<std::string> suffixes =
+    {"x", "y", "yaw", "place_x", "place_y", "place_z"};
 
   for (const auto & suffix : suffixes) {
     if (!copyDouble(prefix, suffix)) {

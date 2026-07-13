@@ -20,13 +20,13 @@ simple_bt_runner:
     #   prep_x / prep_y / prep_yaw    -> 机器人预备点位姿 (map 系, m / rad)
     #   place_x / place_y             -> KFS 放置点的格子位置 (map 系, m)
     #                                    放置时底盘往前怼到这个点, yaw 复用 prep_yaw
-    kfs_1.prep_x: 11.09
+    kfs_1.prep_x: 11.05
     kfs_1.prep_y: -3.895
     kfs_1.prep_yaw: 3.14
     kfs_1.place_x: 11.825
     kfs_1.place_y: -4.115
 
-    kfs_2.prep_x: 11.09
+    kfs_2.prep_x: 11.05
     kfs_2.prep_y: -3.195
     kfs_2.prep_yaw: 3.14
     kfs_2.place_x: 11.825
@@ -40,6 +40,10 @@ simple_bt_runner:
     #   slot_3 给地上 kfs_2 放
     # 每个 slot 一组机器人导航预备点位姿 (map 系, m / rad)。
     # 机械臂关节姿态 (place_grid) 和过渡姿态 (place_interim_pos_0) 在 XML 写死。
+    # place_x / place_y / place_z: 该格子放块时 ArmCartesianTask(task_id=5) 用的 cube 目标,
+    #   place_x/place_y 是块在 map 系的目标格子坐标(m), place_z 为放置高度(m, 底盘系, 不做 TF)。
+    #   由 WaitSlotSelect / SelectPlaceSlot 拷到工作键 slot_place_x/slot_place_y/slot_place_z,
+    #   XML 里用 {slot_place_x}/{slot_place_y}/{slot_place_z} 引用。各格子分别配置。
     place_slot_priority:
       - slot_1
       - slot_2
@@ -49,13 +53,22 @@ simple_bt_runner:
     slot_1.y: -4.80
     slot_1.yaw: 1.57
     slot_1.laser_dist: 1.170
+    slot_1.place_x: 10.25
+    slot_1.place_y: -6.0
+    slot_1.place_z: 0.09
 
     slot_2.x: 11.030
     slot_2.y: -4.80
     slot_2.yaw: 1.57
     slot_2.laser_dist: 0.630
+    slot_2.place_x: 10.80
+    slot_2.place_y: -6.0
+    slot_2.place_z: 1.210
 
     slot_3.x: 11.540
     slot_3.y: -4.85
     slot_3.yaw: 1.57
     slot_3.laser_dist: 0.090
+    slot_3.place_x: 11.310
+    slot_3.place_y: -6.0
+    slot_3.place_z: 1.210

@@ -356,18 +356,29 @@ int main(int argc, char** argv)
     const double syaw = get_slot_double(slot, "yaw", 0.0);
     // 每个 slot 顶墙前激光对齐的目标距离 (m); 各格子位置不同, 分别配置。
     const double slaser = get_slot_double(slot, "laser_dist", 0.0);
+    // 放块目标 (ArmCartesianTask task_id=5 的 cube): place_x/place_y 为 map 系格子坐标 (m),
+    // place_z 为放置高度 (m, 底盘系, 不做 TF)。各格子分别配置。
+    const double splace_x = get_slot_double(slot, "place_x", 0.0);
+    const double splace_y = get_slot_double(slot, "place_y", 0.0);
+    const double splace_z = get_slot_double(slot, "place_z", 0.0);
 
-    // 黑板键: slot_<index>_x, slot_<index>_y, slot_<index>_yaw, slot_<index>_laser_dist
-    // (index 是 1-based, 对应 place_slot_priority 第几个; SelectPlaceSlot 用这个前缀)
+    // 黑板键: slot_<index>_x, slot_<index>_y, slot_<index>_yaw, slot_<index>_laser_dist,
+    // slot_<index>_place_x, slot_<index>_place_y, slot_<index>_place_z
+    // (index 是 1-based, 对应 place_slot_priority 第几个; SelectPlaceSlot / WaitSlotSelect 用这个前缀)
     const std::string prefix = "slot_" + std::to_string(i + 1) + "_";
     blackboard->set(prefix + "x", sx);
     blackboard->set(prefix + "y", sy);
     blackboard->set(prefix + "yaw", syaw);
     blackboard->set(prefix + "laser_dist", slaser);
+    blackboard->set(prefix + "place_x", splace_x);
+    blackboard->set(prefix + "place_y", splace_y);
+    blackboard->set(prefix + "place_z", splace_z);
 
     RCLCPP_INFO(node->get_logger(),
-      "✓ 放置 slot[%s -> %sN]: (x=%.3f, y=%.3f, yaw=%.3f, laser_dist=%.3f)",
-      slot.c_str(), prefix.c_str(), sx, sy, syaw, slaser);
+      "✓ 放置 slot[%s -> %sN]: (x=%.3f, y=%.3f, yaw=%.3f, laser_dist=%.3f, "
+      "place=(%.3f, %.3f, %.3f))",
+      slot.c_str(), prefix.c_str(), sx, sy, syaw, slaser,
+      splace_x, splace_y, splace_z);
   }
 
   // ---- 连续放置的循环控制参数 ----

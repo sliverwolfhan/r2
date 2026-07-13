@@ -24,8 +24,8 @@
     <SetZoneMode node="{node}" mode="3" topic="/AT_R2/zone_mode"/>
 
     <SetCostmapInflation node="{node}"
-        local_radius="0.30"
-        global_radius="0.30"
+        local_radius="0.20"
+        global_radius="0.20"
         local_cost_scaling_factor="1.0"
         global_cost_scaling_factor="4.0"/>
 
@@ -44,9 +44,9 @@
                   pathalign_use_path_orientations="false"
                   pathalign_threshold="3.0"
                   pathalign_offset_from_furthest="15"
-                  goal_x_tolerance="0.03"
-                  goal_y_tolerance="0.05"
-                  goal_yaw_tolerance="0.05"
+                  goal_x_tolerance="0.1"
+                  goal_y_tolerance="0.1"
+                  goal_yaw_tolerance="0.08"
                   goal_stable_duration="0.3"
                   wait_after_set="0.2"/>
       <!-- ===== A 段: 预装 ===== -->
@@ -74,7 +74,7 @@
                           enable_topic="true"
                           clear_buffer="true"
                           timeout="0.0"/>
-
+      设置
       <SetMppiParams node="{node}"
                   controller_node="/AT_R2/controller_server"
                   plugin_prefix="FollowPath"
@@ -84,8 +84,8 @@
                   vx_min="-1.2"
                   vy_max="1.2"
                   wz_max="4.0"
-                  vx_std="0.4"
-                  vy_std="0.4"
+                  vx_std="0.35"
+                  vy_std="0.35"
                   wz_std="0.35"
                   pathalign_use_path_orientations="false"
                   pathalign_threshold="3.0"
@@ -234,11 +234,11 @@
           <!-- ===== case 5: 手里举着块去等待位(P2), 本轮不放块, 回循环开头再等话题 =====
                不设标志、不动 loop_i, 循环继续, 无上限。 -->
           <Sequence _skipIf="slot_sel != 5">
-            <ArmMoveNamed node="{node}"
+            <!-- <ArmMoveNamed node="{node}"
                             pose_name="hold_block_blue"
                             server_name="robotic_task"
                             task_id="1"
-                            duration="2.0"/>
+                            duration="2.0"/> -->
             <ParallelAll max_failures="1">
               <PublishGoal node="{node}"
                            x="11.5"
@@ -261,29 +261,30 @@
             <Script code="loop_i := loop_i + 1"/>
 
           <SetCostmapInflation node="{node}"
-            local_radius="0.25"
-            global_radius="0.25"
-            local_cost_scaling_factor="1.0"
-            global_cost_scaling_factor="4.0"/>
+                  local_radius="0.20"
+                  global_radius="0.20"
+                  local_cost_scaling_factor="1.0"
+                  global_cost_scaling_factor="4.0"/>
             <ParallelAll max_failures="1">
-              <PublishGoal node="{node}"
-                      x="11.07"
-                      y="-4.75"
-                      yaw="1.57"
-                      frame_id="map"
-                      action_name="/AT_R2/navigate_to_pose"
-                      goal="{place_goal}"/>
+              <Fallback>
+                <IsPrepSkippable node="{node}"
+                                 target_x="11.05" target_y="-4.11" target_yaw="1.57"
+                                 x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+                <PublishGoal node="{node}"
+                             x="11.05" y="-4.75" yaw="1.57"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Fallback>
               <Sequence>
                 <ArmMoveNamed node="{node}"
-                                pose_name="hold_block_blue_1"
+                                pose_name="hold_block_blue"
                                 server_name="robotic_task"
                                 task_id="1"
                                 duration="2.0"/>
-                <ArmMoveNamed node="{node}"
-                                pose_name="hold_block_blue_2"
+                <!-- <ArmMoveNamed node="{node}"
+                                pose_name="hold_block_blue"
                                 server_name="robotic_task"
                                 task_id="1"
-                                duration="2.0"/>
+                                duration="2.0"/> -->
               </Sequence>
             </ParallelAll>
 
@@ -294,19 +295,20 @@
                   <AlwaysSuccess/>
                 </DelayMs>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_3"
+                              pose_name="place_grid_blue_1"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
               </Sequence>
               <Sequence>
-                <PublishGoal node="{node}"
-                            x="{slot_x}"
-                            y="{slot_y}"
-                            yaw="{slot_yaw}"
-                            frame_id="map"
-                            action_name="/AT_R2/navigate_to_pose"
-                            goal="{place_goal}"/>
+                <Fallback>
+                  <IsPrepSkippable node="{node}"
+                                  target_x="{slot_x}" target_y="{slot_y}" target_yaw="{slot_yaw}"
+                                  x_tolerance="0.1" y_tolerance="0.1" yaw_tolerance="0.1"/>
+                  <PublishGoal node="{node}"
+                              x="{slot_x}" y="{slot_y}" yaw="{slot_yaw}"
+                              frame_id="map" goal="{nav_goal}"/>
+                </Fallback>
               </Sequence>
             </ParallelAll>
 
@@ -370,12 +372,12 @@
                                 wz="0.0"
                                 stall_threshold="0.02"
                                 stall_duration="10.0"
-                                timeout="5.0"
+                                timeout="3.0"
                                 publish_rate_hz="50.0"
                                 cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                 distance_topic="/AT_R2/distance_head"
                                 distance_scale="0.001"
-                                distance_stop_below="0.40"
+                                distance_stop_below="0.35"
                                 odom_topic="/AT_R2/odometry"/>
                   </ForceSuccess>
                   <!-- 其它格子: 停距 0.27 -->
@@ -386,24 +388,25 @@
                                 wz="0.0"
                                 stall_threshold="0.02"
                                 stall_duration="10.0"
-                                timeout="5.0"
+                                timeout="3.0"
                                 publish_rate_hz="50.0"
                                 cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                 distance_topic="/AT_R2/distance_head"
                                 distance_scale="0.001"
-                                distance_stop_below="0.27"
+                                distance_stop_below="0.35"
                                 odom_topic="/AT_R2/odometry"/>
                   </ForceSuccess>
                 </ReactiveSequence>
 
-                <PublishLiftCmd node="{node}" command="6"/>
+                <!-- <PublishLiftCmd node="{node}" command="6"/>
+                <PublishLiftCmd node="{node}" command="6"/> -->
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_3"
+                              pose_name="place_grid_blue_1"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_4"
+                              pose_name="place_grid_blue_1"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
@@ -440,7 +443,7 @@
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="0.34"
+                                  timeout="0.8"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
@@ -453,7 +456,7 @@
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="0.34"
+                                  timeout="0.8"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
@@ -472,7 +475,7 @@
 
             <!-- B4. 松气泵 放下 KFS -->
             <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-            <DelayMs delay_msec="1000">
+            <DelayMs delay_msec="1300">
               <AlwaysSuccess/>
             </DelayMs>
 
@@ -492,9 +495,9 @@
               </ForceSuccess>
               <ForceSuccess>
                 <Sequence>
-                  <DelayMs delay_msec="300">
+                  <!-- <DelayMs delay_msec="300">
                     <AlwaysSuccess/>
-                  </DelayMs>
+                  </DelayMs> -->
                   <ArmMoveNamed node="{node}"
                         pose_name="place_grid_finish_blue"
                         server_name="robotic_task"
@@ -505,14 +508,22 @@
             </ParallelAll>
 
             <!-- 仅 slot 1: 放完第一个格子倒车退出后, 导航回准备点 -->
-            <PublishGoal node="{node}"
+            <Fallback>
+              <IsPrepSkippable node="{node}"
+                                target_x="11.00" target_y="-4.75" target_yaw="1.57"
+                                x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+              <PublishGoal node="{node}"
+                            x="11.0" y="-4.75" yaw="1.57"
+                            frame_id="map" goal="{nav_goal}"/>
+            </Fallback>
+            <!-- <PublishGoal node="{node}"
                          x="11.07"
                          y="-4.75"
                          yaw="1.57"
                          frame_id="map"
                          action_name="/AT_R2/navigate_to_pose"
                          goal="{place_goal}"
-                         _skipIf="slot_sel != 1"/>
+                         _skipIf="slot_sel != 1"/> -->
 
             <!-- ===== C 段: 抓下一个地上 KFS (仅前 place_count 轮; 末轮已放完最后一块, 只放不抓) =====
                  末轮 loop_i == total_rounds: 整段 (取块参数+导航取块+笛卡尔抓+回过渡+去P2) 跳过,
@@ -549,7 +560,19 @@
                                 cube_y="{kfs_place_y}"
                                 cube_z="{kfs_grab_z}"
                                 tf_timeout="5.0"/>
-
+              <ForceSuccess>
+                <DockToWall node="{node}"
+                            vx="0.15"
+                            vy="0.0"
+                            wz="0.0"
+                            stall_threshold="0.0"
+                            stall_duration="999.0"
+                            timeout="2.0"
+                            publish_rate_hz="50.0"
+                            cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                            odom_topic="/AT_R2/odometry"/>
+              </ForceSuccess>
+                  
               <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
               <ArmMoveNamed node="{node}"
                             pose_name="place_interim_pos_blue"

@@ -60,9 +60,14 @@ bool WaitSlotSelectAction::copyDouble(
 
 bool WaitSlotSelectAction::selectSlotParams(int v)
 {
-  // 值直接当 slot 编号: slot_<v>_x/y/yaw/laser_dist -> slot_x/y/yaw/laser_dist
+  // 值直接当 slot 编号:
+  //   slot_<v>_x/y/yaw/laser_dist          -> slot_x/y/yaw/laser_dist
+  //   slot_<v>_place_x/place_y/place_z     -> slot_place_x/place_y/place_z
+  //     (放块 ArmCartesianTask task_id=5 的 cube 目标, XML 用 {slot_place_x} 等引用)
   const std::string prefix = "slot_" + std::to_string(v) + "_";
-  for (const auto & suffix : {"x", "y", "yaw", "laser_dist"}) {
+  for (const auto & suffix :
+    {"x", "y", "yaw", "laser_dist", "place_x", "place_y", "place_z"})
+  {
     if (!copyDouble(prefix, suffix)) {
       RCLCPP_ERROR(node_->get_logger(),
         "WaitSlotSelect: 找不到黑板键 [%s%s] (slot 编号 %d 越界或未加载)",
@@ -71,7 +76,8 @@ bool WaitSlotSelectAction::selectSlotParams(int v)
     }
   }
   RCLCPP_INFO(node_->get_logger(),
-    "WaitSlotSelect: 选定格子 %d (前缀 %s) -> slot_x/y/yaw/laser_dist", v, prefix.c_str());
+    "WaitSlotSelect: 选定格子 %d (前缀 %s) -> slot_x/y/yaw/laser_dist/place_x/place_y/place_z",
+    v, prefix.c_str());
   return true;
 }
 

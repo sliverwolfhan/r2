@@ -397,9 +397,9 @@ controller_server:
       movement_time_allowance: 15.0
     general_goal_checker:
       plugin: "pb_nav2_plugins/PreciseGoalChecker"
-      x_goal_tolerance: 0.07
-      y_goal_tolerance: 0.07
-      yaw_goal_tolerance: 0.07
+      x_goal_tolerance: 0.15
+      y_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.1
       stable_duration: 0.1
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
