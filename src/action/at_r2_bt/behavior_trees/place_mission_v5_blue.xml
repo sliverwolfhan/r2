@@ -475,10 +475,14 @@
 
             <!-- B4. 松气泵 放下 KFS -->
             <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-            <DelayMs delay_msec="1300">
+            <DelayMs delay_msec="100">
               <AlwaysSuccess/>
             </DelayMs>
-
+            <ArmMoveNamed node="{node}"
+                        pose_name="place_grid_blue_1_1"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="0.8"/>
             <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
             <ParallelAll max_failures="1">
               <ForceSuccess>
@@ -562,12 +566,12 @@
                                 tf_timeout="5.0"/>
               <ForceSuccess>
                 <DockToWall node="{node}"
-                            vx="0.15"
+                            vx="0.25"
                             vy="0.0"
                             wz="0.0"
                             stall_threshold="0.0"
                             stall_duration="999.0"
-                            timeout="2.0"
+                            timeout="1.25"
                             publish_rate_hz="50.0"
                             cmd_vel_topic="/AT_R2/cmd_vel_bt"
                             odom_topic="/AT_R2/odometry"/>
