@@ -175,15 +175,14 @@
                 <DelayMs delay_msec="1000">
                   <AlwaysSuccess/>
                 </DelayMs>
-                <ArmMoveNamed node="{node}"
+                <PublishLiftCmd node="{node}" command="1"/>
+              </Sequence>
+              <!-- TODO: 填并行臂姿态名 -->
+              <ArmMoveNamed node="{node}"
                             pose_name="three_layer_arm_2_blue"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
-              </Sequence>
-              <!-- TODO: 填并行臂姿态名 -->
-              <PublishLiftCmd node="{node}" command="1"/>
-
             </ParallelAll>
             <!-- 按回车或等话题: 降下底盘 -->
             <WaitForStart node="{node}"
@@ -203,15 +202,14 @@
                 <DelayMs delay_msec="1000">
                   <AlwaysSuccess/>
                 </DelayMs>
-                       <ArmMoveNamed node="{node}"
+                <PublishLiftCmd node="{node}" command="3"/>
+              </Sequence>
+              <!-- TODO: 填并行臂姿态名 -->
+              <ArmMoveNamed node="{node}"
                             pose_name="three_layer_arm_3_blue"
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
-
-              </Sequence>
-              <!-- TODO: 填并行臂姿态名 -->
-              <PublishLiftCmd node="{node}" command="3"/>
             </ParallelAll>
             <DelayMs delay_msec="2000">
               <AlwaysSuccess/>
@@ -296,7 +294,7 @@
                   <AlwaysSuccess/>
                 </DelayMs>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_2"
+                              pose_name="place_grid_blue_3"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
@@ -368,7 +366,7 @@
                   <ForceSuccess _skipIf="slot_sel != 1">
                     <DockToWall node="{node}"
                                 vy="0.0"
-                                vx="0.15"
+                                vx="-0.15"
                                 wz="0.0"
                                 stall_threshold="0.02"
                                 stall_duration="10.0"
@@ -384,7 +382,7 @@
                   <ForceSuccess _skipIf="slot_sel == 1">
                     <DockToWall node="{node}"
                                 vy="0.0"
-                                vx="0.15"
+                                vx="-0.15"
                                 wz="0.0"
                                 stall_threshold="0.02"
                                 stall_duration="10.0"
@@ -400,12 +398,12 @@
 
                 <PublishLiftCmd node="{node}" command="6"/>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_2"
+                              pose_name="place_grid_blue_3"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
                 <ArmMoveNamed node="{node}"
-                              pose_name="place_grid_blue_3"
+                              pose_name="place_grid_blue_4"
                               server_name="robotic_task"
                               task_id="1"
                               duration="2.0"/>
@@ -438,11 +436,11 @@
                     <ForceSuccess _skipIf="retry_val != 2">
                       <DockToWall node="{node}"
                                   vx="0.0"
-                                  vy="-0.10"
+                                  vy="-0.15"
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="1.0"
+                                  timeout="0.34"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
@@ -451,11 +449,11 @@
                     <ForceSuccess _skipIf="retry_val != 3">
                       <DockToWall node="{node}"
                                   vx="0.0"
-                                  vy="0.10"
+                                  vy="0.15"
                                   wz="0.0"
                                   stall_threshold="0.0"
                                   stall_duration="999.0"
-                                  timeout="1.0"
+                                  timeout="0.34"
                                   publish_rate_hz="50.0"
                                   cmd_vel_topic="/AT_R2/cmd_vel_bt"
                                   odom_topic="/AT_R2/odometry"/>
