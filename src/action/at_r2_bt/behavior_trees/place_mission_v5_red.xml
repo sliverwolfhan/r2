@@ -64,7 +64,9 @@
                     enable_topic="true"
                     clear_buffer="true"
                     timeout="0.0"/>
-      
+      <DelayMs delay_msec="3000"> 
+        <AlwaysSuccess/>
+      </DelayMs>
       <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
 
       <WaitForStart node="{node}"
@@ -556,24 +558,26 @@
                                 cube_y="{kfs_place_y}"
                                 cube_z="{kfs_grab_z}"
                                 tf_timeout="5.0"/>
-              <ForceSuccess>
-                <DockToWall node="{node}"
-                            vx="-0.25"
-                            vy="0.0"
-                            wz="0.0"
-                            stall_threshold="0.0"
-                            stall_duration="999.0"
-                            timeout="1.25"
-                            publish_rate_hz="50.0"
-                            cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                            odom_topic="/AT_R2/odometry"/>
-              </ForceSuccess>
+              <ParallelAll max_failures="1">
+                <ForceSuccess>
+                  <DockToWall node="{node}"
+                              vx="-0.25"
+                              vy="0.0"
+                              wz="0.0"
+                              stall_threshold="0.0"
+                              stall_duration="999.0"
+                              timeout="1.0"
+                              publish_rate_hz="50.0"
+                              cmd_vel_topic="/AT_R2/cmd_vel_bt"
+                              odom_topic="/AT_R2/odometry"/>
+                </ForceSuccess>
               <!-- C4. 回过渡姿态 (抬起, 避免拖在地上) -->
-              <ArmMoveNamed node="{node}"
-                            pose_name="place_interim_pos_red"
-                            server_name="robotic_task"
-                            task_id="1"
-                            duration="1.0"/>
+                <ArmMoveNamed node="{node}"
+                              pose_name="place_interim_pos_red"
+                              server_name="robotic_task"
+                              task_id="1"
+                              duration="1.0"/>
+              </ParallelAll>       
             </Sequence>
 
             <!-- ===== 末轮放完最后一块后: 导航回起始点 (11.5, 0.7, 1.57) 并结束比赛 =====
