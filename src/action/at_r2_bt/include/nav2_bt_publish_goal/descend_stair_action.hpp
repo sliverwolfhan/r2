@@ -63,7 +63,7 @@ private:
   double yaw_engage_threshold_{0.1};  // 启动阈值：|err| 超过此才开始纠偏
   bool yaw_engaged_{false};         // 迟滞状态位：当前是否处于"纠偏中"
   double yaw_tf_timeout_{0.1};
-  std::string yaw_base_frame_{"base_link"};
+  std::string yaw_base_frame_{"base_footprint"};
   std::string yaw_map_frame_{"map"};
   std::string yaw_cmd_topic_{"/AT_R2/cmd_vel_bt"};
 

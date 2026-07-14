@@ -44,7 +44,7 @@ BT::PortsList DescendStairAction::providedPorts()
       "停止阈值 (rad)：纠偏中偏差回落到此以下才停 (迟滞下界，需 <= 启动阈值)"),
     BT::InputPort<double>("yaw_publish_rate_hz", 30.0, "纠偏 cmd_vel 发布频率 (Hz)"),
     BT::InputPort<std::string>("yaw_cmd_topic", "/AT_R2/cmd_vel_bt", "纠偏速度话题"),
-    BT::InputPort<std::string>("yaw_base_frame", "base_link", "当前朝向的 base TF frame"),
+    BT::InputPort<std::string>("yaw_base_frame", "base_footprint", "当前朝向的 base TF frame"),
     BT::InputPort<std::string>("yaw_map_frame", "map", "map TF frame"),
     BT::InputPort<double>("yaw_tf_timeout", 0.1, "TF 查询超时 (s)"),
 

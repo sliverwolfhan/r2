@@ -1,7 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <std_msgs/msg/float64.hpp>
-#include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
 #include "virtual_serial_port/cdc_trans.hpp"
@@ -12,7 +11,6 @@
 #include <iomanip>
 #include <cstring>
 #include <memory>
-#include <limits>
 
 // 爬楼梯动作类型
 enum class ClimbAction : uint8_t {
@@ -32,7 +30,6 @@ struct VelocityPacket {
     uint8_t action;        // 动作命令 (单次发送, 其余发0): mode=1时为抓取命令(1/2/3/4), mode=2时为爬楼梯动作(1=上,2=下), mode=3时为三区动作(1=抬升,2=降到架机,3=抬腿,4=伸腿,5=降下去)
     uint8_t climb_height;  // 爬楼梯高度 (mode=2时配合action, 0=无 1=200mm 2=400mm)
     uint8_t pump;          // 气泵使能 (连续发送当前值): 1=吸气, 0=放气
-    float offset_angle;    // 朝向偏移角 (rad, 连续发送当前值): 当前朝向 - 准备朝向, 逆时针为正
     uint8_t retry_cmd;     // 重试命令 (连续发送): 目前始终为 0
     uint8_t tail;          // 包尾 0xBA
 };
@@ -94,8 +91,6 @@ public:
         pump_send_once_ = false;
         current_zone3_cmd_ = 0;
         zone3_send_once_ = false;
-        // 未收到过 offset_angle 时发最大值作哨兵, 让下位机区分"无数据"
-        current_offset_angle_ = std::numeric_limits<float>::max();
 
         // 初始化CDC设备
         cdc_trans_ = std::make_unique<CDCTrans>();
@@ -154,11 +149,6 @@ public:
         pump_cmd_sub_ = this->create_subscription<std_msgs::msg::Int32>(
             "/AT_R2/pump_cmd", 10,
             std::bind(&VirtualSerialPortNode::pump_cmd_callback, this, std::placeholders::_1));
-
-        // 订阅朝向偏移角话题 (offset_angle 连续发送当前值, rad: 当前朝向 - 准备朝向, 逆时针为正)
-        offset_angle_sub_ = this->create_subscription<std_msgs::msg::Float32>(
-            "/AT_R2/offset_angle", 10,
-            std::bind(&VirtualSerialPortNode::offset_angle_callback, this, std::placeholders::_1));
 
         // 创建爬楼梯状态发布器
         climber_status_pub_ = this->create_publisher<std_msgs::msg::Int32>(
@@ -371,14 +361,6 @@ private:
         RCLCPP_INFO(this->get_logger(), "收到三区动作命令: %d (将发送一次)", msg->data);
     }
 
-    void offset_angle_callback(const std_msgs::msg::Float32::SharedPtr msg)
-    {
-        std::lock_guard<std::mutex> lock(velocity_mutex_);
-        current_offset_angle_ = msg->data;
-        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-            "收到朝向偏移角: %.4f rad", current_offset_angle_);
-    }
-
     void send_thread_func()
     {
         using namespace std::chrono_literals;
@@ -422,7 +404,6 @@ private:
                 } else {
                     packet.pump = current_pump_;        // 平时连续发 0/1
                 }
-                packet.offset_angle = current_offset_angle_;  // 连续发最新朝向偏移角 (无数据时为 FLT_MAX)
                 packet.retry_cmd = 0;  // 重试命令: 目前始终发 0
                 if (grasp_send_once_) {
                     packet.action = current_grasp_cmd_;
@@ -603,7 +584,6 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pump_cmd_sub_;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr zone3_sub_;
-    rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr offset_angle_sub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr climber_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr grasp_status_pub_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr distance_head_pub_;
@@ -639,7 +619,6 @@ private:
     bool pump_send_once_;
     uint8_t current_zone3_cmd_;
     bool zone3_send_once_;
-    float current_offset_angle_;   // 最新朝向偏移角 (rad), 无数据时为 FLT_MAX
 
     std::mutex status_mutex_;
     bool climber_running_{false};
