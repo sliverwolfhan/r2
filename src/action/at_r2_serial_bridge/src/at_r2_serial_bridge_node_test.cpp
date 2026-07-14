@@ -158,6 +158,16 @@ public:
                 }
                 msg.data = publish_value;
                 climber_status_pub_->publish(msg);
+
+                // 持续重发最新 KFS 数据: 收到过一帧后就一直发, UI 上不再闪没
+                {
+                    std::lock_guard<std::mutex> lock(kfs_mutex_);
+                    if (kfs_valid_) {
+                        auto kfs_msg = std_msgs::msg::Int32MultiArray();
+                        kfs_msg.data.assign(latest_kfs_.begin(), latest_kfs_.end());
+                        kfs_pub_->publish(kfs_msg);
+                    }
+                }
             });
 
         // 只启动USB事件处理线程，不再向串口发送任何数据
@@ -221,13 +231,15 @@ private:
                                 sum += rx_buffer_[i];
                             }
                             if (sum == kfs_packet.sum) {
-                                auto msg = std_msgs::msg::Int32MultiArray();
-                                for (int i = 0; i < 12; i++) {
-                                    msg.data.push_back(kfs_packet.kfs_data[i]);
+                                // 校验通过: 缓存最新 KFS 数据, 由定时器持续重发
+                                // (下位机是间歇发包, 若只在此处发一次, UI 上会闪一下就消失)
+                                {
+                                    std::lock_guard<std::mutex> lock(kfs_mutex_);
+                                    latest_kfs_.assign(kfs_packet.kfs_data, kfs_packet.kfs_data + 12);
+                                    kfs_valid_ = true;
                                 }
-                                kfs_pub_->publish(msg);
                                 RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                                    "成功接收并发布 KFS 状态 (Packet ID: %u)", kfs_packet.packet_id);
+                                    "成功接收 KFS 状态 (Packet ID: %u), 持续重发中", kfs_packet.packet_id);
                             } else {
                                 RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                     "KFS数据包校验失败: 计算得 0x%02X, 收到 0x%02X", sum, kfs_packet.sum);
@@ -433,6 +445,10 @@ private:
     bool climber_finish_once_{false};   // 下位机执行完成，待发一次2
     uint8_t last_climber_raw_{0xFF};    // 上次收到的原始状态，用于去重
     uint32_t last_control_key_{0xFFFFFFFF};  // 上次控制包 Key，用于去重 (只在变化时发 place_retry)
+
+    std::mutex kfs_mutex_;
+    std::vector<int32_t> latest_kfs_;   // 最新一帧 KFS 数据 (12 个方块), 由定时器持续重发
+    bool kfs_valid_{false};             // 是否已收到过有效 KFS 帧
 
     std::vector<uint8_t> rx_buffer_;
     std::string port_name_;

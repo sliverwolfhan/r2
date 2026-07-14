@@ -350,6 +350,7 @@
                   server_name="robotic_task"
                   task_id="1"
                   duration="1.0"/>
+            <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
           </Sequence>
         </ForceSuccess>
       </ParallelAll>
@@ -374,9 +375,19 @@
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
+<<<<<<< Updated upstream
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
           <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
           <ArmMoveNamedAsync pose_name="hold_block_red" task_id="1" duration="1.0"/>
+=======
+          <!-- 底盘气泵松开, 把块交给机械臂 -->
+          <DelayMs delay_msec="500">
+            <AlwaysSuccess/>
+          </DelayMs>
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="place_block_red" task_id="1" duration="1.5"/>
+>>>>>>> Stashed changes
           <WaitArmIdle timeout="20.0"/>
         </Sequence>
         <!-- 取块动作时同时导航回放置准备位, 为下一次放块做准备 -->
