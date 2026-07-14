@@ -7,17 +7,33 @@
          2. MeilinMission   (meilin_mission.xml)   —— 梅林区域块导航/抓取/推
        子树内部各自负责自己的 SetZoneMode / MPPI / Costmap / WaitForEnter,
        这里只做串行编排，避免参数重复维护。 -->
-  <include path="grasp_head_red_match.xml"/>
+  <include path="grasp_head_red.xml"/>
   <include path="meilin_mission.xml"/>
+  <include path="place_mission_red_match.xml"/>
 
   <BehaviorTree ID="MainTree">
     <Sequence>
-      <SubTree ID="GraspHeadRedMatch"    _autoremap="true"/>
-      <DelayMs delay_msec="2000">
+      <SubTree ID="GraspHeadRed"    _autoremap="true"/>
+      <DelayMs delay_msec="1000">
           <AlwaysSuccess/>
       </DelayMs>
       <SubTree ID="MeilinMission" _autoremap="true"/>
+      <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+      </DelayMs>
+
+      <PublishGoal node="{node}"
+                   x="8.6"
+                   y="0.7"
+                   yaw="0.0"
+                   frame_id="map"
+                   action_name="/AT_R2/navigate_to_pose"
+                   goal="{place_goal}"/>
+
+      <SubTree ID="PlaceMission" _autoremap="true"/>
+
     </Sequence>
+
   </BehaviorTree>
 
 </root>

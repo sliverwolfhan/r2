@@ -46,31 +46,33 @@
                     pathalign_use_path_orientations="false"
                     pathalign_threshold="3.0"
                     pathalign_offset_from_furthest="15"
-                    goal_x_tolerance="0.03"
-                    goal_y_tolerance="0.05"
-                    goal_yaw_tolerance="0.05"
-                    goal_stable_duration="0.3"
+                    goal_x_tolerance="0.1"
+                    goal_y_tolerance="0.1"
+                    goal_yaw_tolerance="0.1"
+                    goal_stable_duration="0.1"
                     wait_after_set="0.2"/>
 
+      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+
       <!-- ===== A 段: 预装手上块 (机械臂 hold_block_red + 顶端气泵吸住) ===== -->
+      <ArmMoveNamed node="{node}"
+                    pose_name="stow_block2"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
+
+      <ArmMoveNamed node="{node}"
+                    pose_name="lift_block2"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>  
+
       <ArmMoveNamed node="{node}"
                     pose_name="hold_block_red"
                     server_name="robotic_task"
                     task_id="1"
-                    duration="5.0"/>
-      <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
-
-      <!-- 一键启动门控 -->
-      <WaitForStart node="{node}"
-                    prompt="按 Enter 或接受 /AT_R2/red_start_cmd 开始启动"
-                    start_topic="/AT_R2/red_start_cmd"
-                    start_value="1"
-                    enable_topic="true"
-                    clear_buffer="true"
-                    timeout="0.0"/>
-
-      <!-- 导航进三区入口 -->
-      <PublishGoal node="{node}" x="11.5" y="0.7" yaw="0.0" frame_id="map" goal="{goal}"/>
+                    duration="2.0"/>              
+      <!-- <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/> -->
 
       <!-- 等三区放行信号 -->
       <WaitForStart node="{node}"
@@ -90,15 +92,15 @@
                     vx_min="-1.2"
                     vy_max="1.2"
                     wz_max="4.0"
-                    vx_std="0.4"
-                    vy_std="0.4"
+                    vx_std="0.35"
+                    vy_std="0.35"
                     wz_std="0.35"
                     pathalign_use_path_orientations="false"
                     pathalign_threshold="3.0"
                     pathalign_offset_from_furthest="15"
-                    goal_x_tolerance="0.03"
-                    goal_y_tolerance="0.05"
-                    goal_yaw_tolerance="0.05"
+                    goal_x_tolerance="0.1"
+                    goal_y_tolerance="0.1"
+                    goal_yaw_tolerance="0.1"
                     goal_stable_duration="0.3"
                     wait_after_set="0.2"/>
 
@@ -121,7 +123,7 @@
                      action_name="/AT_R2/navigate_to_pose"
                      goal="{place_goal}"/>
         <ArmMoveNamed node="{node}"
-                      pose_name="place_grid_red_1"
+                      pose_name="hold_block_red"
                       server_name="robotic_task"
                       task_id="1"
                       duration="2.0"/>
@@ -151,7 +153,7 @@
       <!-- B1+B2. 摆放置姿态 + 导航到所选 slot -->
       <ParallelAll max_failures="1">
         <Sequence>
-          <DelayMs delay_msec="100">
+          <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
           <ArmMoveNamed node="{node}"
@@ -234,7 +236,7 @@
                           cmd_vel_topic="/AT_R2/cmd_vel_bt"
                           distance_topic="/AT_R2/distance_head"
                           distance_scale="0.001"
-                          distance_stop_below="0.37"
+                          distance_stop_below="0.4"
                           odom_topic="/AT_R2/odometry"/>
             </ForceSuccess>
             <!-- 其它格子: 停距 0.27 -->
@@ -316,10 +318,14 @@
 
       <!-- B4. 松顶端气泵 放下【手上块】 -->
       <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-      <DelayMs delay_msec="1000">
+      <DelayMs delay_msec="100">
         <AlwaysSuccess/>
       </DelayMs>
-
+      <ArmMoveNamed node="{node}"
+                  pose_name="place_grid_red_1_1"
+                  server_name="robotic_task"
+                  task_id="1"
+                  duration="0.8"/>
       <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
       <ParallelAll max_failures="1">
         <ForceSuccess>
@@ -354,6 +360,11 @@
            TODO: lift_block/stow_block/place_block 姿态名沿用 v2, 按红区实机确认。 -->
       <ParallelAll max_failures="1">
         <Sequence>
+          <!-- 底盘气泵松开, 把块交给机械臂 -->
+          <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
+          <DelayMs delay_msec="500">
+            <AlwaysSuccess/>
+          </DelayMs>
           <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.2"/>
           <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
@@ -363,14 +374,9 @@
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
-          <!-- 底盘气泵松开, 把块交给机械臂 -->
-          <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
-          <DelayMs delay_msec="500">
-            <AlwaysSuccess/>
-          </DelayMs>
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
           <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
-          <ArmMoveNamedAsync pose_name="place_interim_pos_red" task_id="1" duration="1.5"/>
+          <ArmMoveNamedAsync pose_name="hold_block_red" task_id="1" duration="1.0"/>
           <WaitArmIdle timeout="20.0"/>
         </Sequence>
         <!-- 取块动作时同时导航回放置准备位, 为下一次放块做准备 -->
@@ -393,8 +399,8 @@
       <!-- ===== case 1/2/3: 放【底盘块】到第二层所选格子 (照 v5 case1/2/3) ===== -->
       <Sequence _skipIf="slot_sel == 4">
         <SetCostmapInflation node="{node}"
-            local_radius="0.25"
-            global_radius="0.25"
+            local_radius="0.20"
+            global_radius="0.20"
             local_cost_scaling_factor="1.0"
             global_cost_scaling_factor="4.0"/>
         <PublishGoal node="{node}"
@@ -408,7 +414,7 @@
         <!-- 摆放置姿态 + 导航到所选 slot -->
         <ParallelAll max_failures="1">
           <Sequence>
-            <DelayMs delay_msec="100">
+            <DelayMs delay_msec="500">
               <AlwaysSuccess/>
             </DelayMs>
             <ArmMoveNamed node="{node}"
