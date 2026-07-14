@@ -72,7 +72,9 @@
                         yaw_wz_max="0.4"
                         yaw_engage_threshold="0.1"
                         yaw_deadband="0.02"
-                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"/>
+                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"
+                        offset_pub_enable="true"
+                        offset_topic="/AT_R2/offset_angle"/>
           <DescendStair node="{node}" height="{abs_dh}"
                         yaw_correct_enable="false"
                         target_yaw="{prep_yaw}"
@@ -80,7 +82,9 @@
                         yaw_wz_max="0.4"
                         yaw_engage_threshold="0.1"
                         yaw_deadband="0.02"
-                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"/>
+                        yaw_cmd_topic="/AT_R2/cmd_vel_bt"
+                        offset_pub_enable="true"
+                        offset_topic="/AT_R2/offset_angle"/>
           <AlwaysSuccess/>
         </Switch2>
         <ForceSuccess>

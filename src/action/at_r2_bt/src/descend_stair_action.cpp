@@ -46,7 +46,13 @@ BT::PortsList DescendStairAction::providedPorts()
     BT::InputPort<std::string>("yaw_cmd_topic", "/AT_R2/cmd_vel_bt", "纠偏速度话题"),
     BT::InputPort<std::string>("yaw_base_frame", "base_link", "当前朝向的 base TF frame"),
     BT::InputPort<std::string>("yaw_map_frame", "map", "map TF frame"),
-    BT::InputPort<double>("yaw_tf_timeout", 0.1, "TF 查询超时 (s)")
+    BT::InputPort<double>("yaw_tf_timeout", 0.1, "TF 查询超时 (s)"),
+
+    // ===== 朝向偏移角发布（独立开关，与 yaw_correct_enable 无关）=====
+    BT::InputPort<bool>("offset_pub_enable", false,
+      "总开关：true 才发布朝向偏移角 (cur_yaw - target_yaw) 到 offset_topic"),
+    BT::InputPort<std::string>("offset_topic", "/AT_R2/offset_angle",
+      "朝向偏移角发布话题 (std_msgs/Float32, rad)")
   };
 }
 
@@ -65,41 +71,59 @@ bool DescendStairAction::ensureYawCorrection()
 {
   // 每次 onStart 重新读端口（允许不同台阶用不同参数）
   yaw_correct_enable_ = false;
+  offset_pub_enable_ = false;
   (void)getInput("yaw_correct_enable", yaw_correct_enable_);
-  if (!yaw_correct_enable_) {
+  (void)getInput("offset_pub_enable", offset_pub_enable_);
+  // 两个功能都关：无需定时器
+  if (!yaw_correct_enable_ && !offset_pub_enable_) {
     return false;
   }
 
+  // 纠偏和偏移角发布都需要 target_yaw（偏移角 = cur_yaw - target_yaw）
   if (!getInput("target_yaw", yaw_target_)) {
     RCLCPP_WARN(node_->get_logger(),
-      "DescendStair: yaw_correct_enable=true 但缺少 [target_yaw]，本次不纠偏");
+      "DescendStair: yaw_correct_enable/offset_pub_enable=true 但缺少 [target_yaw]，本次不启用");
     yaw_correct_enable_ = false;
+    offset_pub_enable_ = false;
     return false;
   }
 
-  (void)getInput("yaw_kp", yaw_kp_);
-  (void)getInput("yaw_wz_max", yaw_wz_max_);
-  (void)getInput("yaw_engage_threshold", yaw_engage_threshold_);
-  (void)getInput("yaw_deadband", yaw_deadband_);
+  // TF / 通用参数（两功能共用）
   (void)getInput("yaw_tf_timeout", yaw_tf_timeout_);
   (void)getInput("yaw_base_frame", yaw_base_frame_);
   (void)getInput("yaw_map_frame", yaw_map_frame_);
-  (void)getInput("yaw_cmd_topic", yaw_cmd_topic_);
   if (yaw_tf_timeout_ < 0.0) {
     yaw_tf_timeout_ = 0.0;
   }
-  // 迟滞要求 启动阈值 >= 停止阈值，否则退化：夹到不小于死区
-  if (yaw_engage_threshold_ < yaw_deadband_) {
-    RCLCPP_WARN(node_->get_logger(),
-      "DescendStair: yaw_engage_threshold(%.3f) < yaw_deadband(%.3f)，已夹到 deadband",
-      yaw_engage_threshold_, yaw_deadband_);
-    yaw_engage_threshold_ = yaw_deadband_;
-  }
-  yaw_engaged_ = false;  // 每次下台阶重置迟滞状态
 
-  // cmd_vel publisher（话题变更时重建）
-  if (!cmd_vel_pub_ || cmd_vel_pub_->get_topic_name() != yaw_cmd_topic_) {
-    cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(yaw_cmd_topic_, 10);
+  // ===== 纠偏专属参数与 cmd_vel publisher（仅纠偏开启时才建）=====
+  if (yaw_correct_enable_) {
+    (void)getInput("yaw_kp", yaw_kp_);
+    (void)getInput("yaw_wz_max", yaw_wz_max_);
+    (void)getInput("yaw_engage_threshold", yaw_engage_threshold_);
+    (void)getInput("yaw_deadband", yaw_deadband_);
+    (void)getInput("yaw_cmd_topic", yaw_cmd_topic_);
+    // 迟滞要求 启动阈值 >= 停止阈值，否则退化：夹到不小于死区
+    if (yaw_engage_threshold_ < yaw_deadband_) {
+      RCLCPP_WARN(node_->get_logger(),
+        "DescendStair: yaw_engage_threshold(%.3f) < yaw_deadband(%.3f)，已夹到 deadband",
+        yaw_engage_threshold_, yaw_deadband_);
+      yaw_engage_threshold_ = yaw_deadband_;
+    }
+    yaw_engaged_ = false;  // 每次下台阶重置迟滞状态
+
+    // cmd_vel publisher（话题变更时重建）
+    if (!cmd_vel_pub_ || cmd_vel_pub_->get_topic_name() != yaw_cmd_topic_) {
+      cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(yaw_cmd_topic_, 10);
+    }
+  }
+
+  // ===== 偏移角 publisher（仅发布开启时才建，话题变更时重建）=====
+  if (offset_pub_enable_) {
+    (void)getInput("offset_topic", offset_topic_);
+    if (!offset_pub_ || offset_pub_->get_topic_name() != offset_topic_) {
+      offset_pub_ = node_->create_publisher<std_msgs::msg::Float32>(offset_topic_, 10);
+    }
   }
 
   // TF buffer：优先复用根黑板注入的共享 buffer（与 IsPrepSkippable 同源）
@@ -194,8 +218,10 @@ BT::NodeStatus DescendStairAction::onStart()
     yaw_timer_ = node_->create_wall_timer(
       period_ns, std::bind(&DescendStairAction::yawCorrectTimerCallback, this));
     RCLCPP_INFO(node_->get_logger(),
-      "DescendStair: 朝向纠偏启用 target_yaw=%.3f kp=%.2f wz_max=%.2f topic=%s rate=%.1fHz",
-      yaw_target_, yaw_kp_, yaw_wz_max_, yaw_cmd_topic_.c_str(), rate_hz);
+      "DescendStair: 定时器启用 target_yaw=%.3f rate=%.1fHz | 纠偏=%s(kp=%.2f wz_max=%.2f topic=%s) | 偏移角=%s(topic=%s)",
+      yaw_target_, rate_hz,
+      yaw_correct_enable_ ? "on" : "off", yaw_kp_, yaw_wz_max_, yaw_cmd_topic_.c_str(),
+      offset_pub_enable_ ? "on" : "off", offset_topic_.c_str());
   }
 
   return BT::NodeStatus::RUNNING;
@@ -205,7 +231,12 @@ void DescendStairAction::yawCorrectTimerCallback()
 {
   {
     std::lock_guard<std::mutex> lock(yaw_timer_mutex_);
-    if (!yaw_timer_armed_ || !cmd_vel_pub_ || !tf_buffer_) {
+    // 需要 TF；纠偏需 cmd_vel_pub_，发偏移角需 offset_pub_，至少一个功能可用
+    if (!yaw_timer_armed_ || !tf_buffer_) {
+      return;
+    }
+    if ((!yaw_correct_enable_ || !cmd_vel_pub_) &&
+        (!offset_pub_enable_ || !offset_pub_)) {
       return;
     }
   }
@@ -229,6 +260,18 @@ void DescendStairAction::yawCorrectTimerCallback()
   } catch (const std::exception & e) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
       "DescendStair yaw-correct: TF lookup 失败 (%s)", e.what());
+    return;
+  }
+
+  // ===== 发布朝向偏移角 (cur_yaw - target_yaw) =====
+  if (offset_pub_enable_ && offset_pub_) {
+    std_msgs::msg::Float32 offset_msg;
+    offset_msg.data = static_cast<float>(normalizeAngle(cur_yaw - yaw_target_));
+    offset_pub_->publish(offset_msg);
+  }
+
+  // ===== 朝向纠偏（只发 angular.z），仅在纠偏开启时执行 =====
+  if (!yaw_correct_enable_ || !cmd_vel_pub_) {
     return;
   }
 

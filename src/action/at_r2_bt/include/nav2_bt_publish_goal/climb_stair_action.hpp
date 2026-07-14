@@ -11,6 +11,7 @@
 #include "behaviortree_cpp/action_node.h"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/int32.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "tf2_ros/buffer.h"
@@ -65,6 +66,12 @@ private:
   std::string yaw_base_frame_{"base_footprint"};
   std::string yaw_map_frame_{"map"};
   std::string yaw_cmd_topic_{"/AT_R2/cmd_vel_bt"};
+
+  // ===== 朝向偏移角发布（独立开关，与纠偏无关）=====
+  // 每拍用同一次 TF 查询得到 cur_yaw，发布 (cur_yaw - target_yaw) 到 offset_topic
+  bool offset_pub_enable_{false};
+  std::string offset_topic_{"/AT_R2/offset_angle"};
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr offset_pub_;
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
