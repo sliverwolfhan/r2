@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <string>
 #include <vector>
@@ -145,6 +146,15 @@ private:
     if (msg->data.size() != 12) {
       RCLCPP_WARN(
         this->get_logger(), "kfs_positions 长度异常: 期望 12, 收到 %zu", msg->data.size());
+      return;
+    }
+
+    // 全 0 帧当“无效/心跳帧”丢弃，不重规划：真机上 /AT_R2/kfs_positions 常被两个发布者
+    // （virtual_serial_port 与 at_r2_serial_bridge）同时占用，一个发真实布局、一个发全 0，
+    // ~150Hz 交替到达。若不滤掉全 0，规划器会在“真实布局↔空场”间横跳重规划、疯狂重发
+    // /r2_planner/plan，污染下游行为树。忽略全 0 帧即只按真实布局规划。
+    // 代价：真·空场（12 块全取完）不会触发规划——那是终局，无块可抓，可接受。
+    if (std::all_of(msg->data.begin(), msg->data.end(), [](int32_t c) { return c == 0; })) {
       return;
     }
 

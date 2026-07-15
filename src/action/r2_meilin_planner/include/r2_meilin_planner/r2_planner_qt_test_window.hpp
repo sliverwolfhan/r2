@@ -97,6 +97,10 @@ private:
   // 上一次已应用的 kfs 布局（12 个下位机码）。kfs 话题会周期/latched 反复发同一布局，
   // 若每条都 apply+redraw 会导致梅林格子一闪一闪；仅在布局真正变化时才刷新。
   std::vector<int> last_kfs_codes_;
+  // 上一次真正画进 scene 的“画面指纹”（着色 + 路径 + 红蓝区）。redraw_scene() 内部据此
+  // 兜底去重：无论上游哪条回调、codes/steps 是否在边缘抖动，只要最终画面不变就整个跳过
+  // scene_->clear()+重建+fitInView，从根上消除“一直一闪一闪”。空串表示尚未画过，强制首绘。
+  std::string last_scene_key_;
 
   static r2_planner::BlockState block_from_phase(int phase);
   /** 显示序号 <-> 按钮下标。红区：第一行 3/2/1…最后一行 12/11/10。

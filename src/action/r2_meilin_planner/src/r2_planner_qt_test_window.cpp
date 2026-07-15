@@ -516,6 +516,29 @@ void PlannerWindow::apply_r1_preclear_selection(r2_planner::ForestConfig & confi
 
 void PlannerWindow::redraw_scene()
 {
+  // 画面指纹兜底去重：把决定画面的全部输入（红蓝区 + 12 格着色 + 路径每步关键字段）
+  // 拼成一个 key。与上次相同就整个跳过——不 clear()、不重建、不 fitInView，从根上消除
+  // “监视话题周期重发 / 下位机码边缘抖动”导致的持续闪烁。坐标量化到毫米，屏蔽浮点噪声。
+  {
+    std::ostringstream key;
+    key << (zone_blue_ ? 'B' : 'R') << '|';
+    for (int p : cell_phase_) {
+      key << (p % 5);
+    }
+    key << '|';
+    auto q = [](double v) { return static_cast<long>(std::lround(v * 1000.0)); };  // m→mm
+    for (const auto & s : last_steps_) {
+      key << int(s.type) << ',' << s.target_id << ',' << s.from_id << ','
+          << q(s.prep_pose.x) << ',' << q(s.prep_pose.y) << ','
+          << q(s.cube_x) << ',' << q(s.cube_y) << ';';
+    }
+    const std::string k = key.str();
+    if (k == last_scene_key_) {
+      return;  // 画面无变化，跳过重画（防闪）
+    }
+    last_scene_key_ = k;
+  }
+
   scene_->clear();
 
   // 收集所有已知节点(0..13)的真实 map 坐标，算边界用于缩放。
@@ -862,9 +885,16 @@ void PlannerWindow::on_kfs_msg(const std_msgs::msg::Int32MultiArray::SharedPtr m
     RCLCPP_WARN(node_->get_logger(), "kfs_positions 长度异常: 期望 12, 收到 %zu", msg->data.size());
     return;
   }
+  const std::vector<int> codes(msg->data.begin(), msg->data.end());
+  // 全 0 帧当“无效/心跳帧”丢弃：真机上 /AT_R2/kfs_positions 常被两个发布者
+  // （virtual_serial_port 与 at_r2_serial_bridge）同时占用，一个发真实布局、一个发全 0，
+  // ~150Hz 交替到达 → 监视画面在“布局↔全空”间横跳、一直闪。忽略全 0 帧即可稳住显示。
+  // 代价：真·空场（12 块全取完）监视时不刷新——那是终局，可接受。
+  if (std::all_of(codes.begin(), codes.end(), [](int c) { return c == 0; })) {
+    return;
+  }
   // kfs 话题会周期/latched 反复发同一布局；若每条都重画，scene_->clear()+全量重建
   // 会让梅林格子一闪一闪。仅在布局相对上一次真正变化时才 apply+redraw。
-  const std::vector<int> codes(msg->data.begin(), msg->data.end());
   if (codes == last_kfs_codes_) {
     return;
   }
