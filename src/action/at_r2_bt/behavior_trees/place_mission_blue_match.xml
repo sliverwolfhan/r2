@@ -120,7 +120,9 @@
                       task_id="1"
                       duration="2.0"/>
       </ParallelAll>
-
+      <!-- 底盘放气 -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
+      
       <!-- 导航到放置准备点(P1) || 摆放置姿态, 两者都必须成功 -->
       <ParallelAll max_failures="1">
         <PublishGoal node="{node}"
@@ -294,7 +296,7 @@
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
-              <ForceSuccess _skipIf="retry_val != 2">
+              <ForceSuccess _skipIf="retry_val != 2">place_grid_bluplace_grid_blue_1_1e_1_1
                 <DockToWall node="{node}"
                             vx="0.0"
                             vy="0.15"
@@ -334,13 +336,14 @@
       <DelayMs delay_msec="100">
         <AlwaysSuccess/>
       </DelayMs>
+      <!-- 松底盘气泵 -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
       <ArmMoveNamed node="{node}"
                   pose_name="place_grid_blue_1_1"
                   server_name="robotic_task"
                   task_id="1"
                   duration="0.8"/>
       <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
-      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
       <ParallelAll max_failures="1">
         <ForceSuccess>
           <DockToWall node="{node}"
@@ -575,7 +578,7 @@
           <AlwaysSuccess/>
         </DelayMs>
         <ArmMoveNamed node="{node}"
-                    pose_name="place_grid_red_1_1"
+                    pose_name="place_grid_blue_1_1"
                     server_name="robotic_task"
                     task_id="1"
                     duration="0.8"/>

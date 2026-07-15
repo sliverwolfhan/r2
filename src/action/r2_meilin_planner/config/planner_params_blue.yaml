@@ -34,7 +34,7 @@ kfs_subscriber_node:
     # 把下位机码1的 R1 块（R1 正在收取的目标）建模为"会随时间让开的硬障碍"：
     # 未消失前 R2 不能踩，可原地等待(WAIT)；消失后正常通行。
     # false（默认）时码1仍当空地，规划行为与历史一致。
-    r1_timed_removal_enable: true
+    r1_timed_removal_enable: false
     # R2 每走几步 R1 消失一个（所有动作 MOVE/PICK/PUSH/WAIT 都算一步）。
     # 600 高度（节点6、8）最先消失，其余按高度降序假设顺序。
     r1_removal_steps: 10

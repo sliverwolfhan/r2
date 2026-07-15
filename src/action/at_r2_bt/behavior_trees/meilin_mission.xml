@@ -135,10 +135,10 @@
                           vx_std="0.4"
                           vy_std="0.5"/>
                 <SetCostmapInflation node="{node}"
-                          local_radius="0.25"
-                          global_radius="0.25"
+                          local_radius="0.15"
+                          global_radius="0.15"
                           local_cost_scaling_factor="1.0"
-                          global_cost_scaling_factor="4.0"/>
+                          global_cost_scaling_factor="1.0"/>
               </Sequence>
             </Precondition>
           </Sequence>

@@ -52,7 +52,7 @@ simple_bt_runner:
     slot_1.x: 10.48
     slot_1.y: -4.80
     slot_1.yaw: 1.57
-    slot_1.laser_dist: 1.170
+    slot_1.laser_dist: 1.140
     slot_1.place_x: 10.25
     slot_1.place_y: -6.0
     slot_1.place_z: 0.09
@@ -60,7 +60,7 @@ simple_bt_runner:
     slot_2.x: 11.030
     slot_2.y: -4.80
     slot_2.yaw: 1.57
-    slot_2.laser_dist: 0.630
+    slot_2.laser_dist: 0.600
     slot_2.place_x: 10.80
     slot_2.place_y: -6.0
     slot_2.place_z: 1.210
