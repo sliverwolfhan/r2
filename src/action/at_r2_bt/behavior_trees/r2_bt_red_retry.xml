@@ -60,6 +60,25 @@
       <DelayMs delay_msec="1000">
           <AlwaysSuccess/>
       </DelayMs>
+      <SetMppiParams node="{node}"
+               controller_node="/AT_R2/controller_server"
+               plugin_prefix="FollowPath"
+               goal_angle_weight="6.0"
+               goal_angle_threshold="2.0"
+               vx_max="1.2"
+               vx_min="-1.2"
+               vy_max="1.2"
+               wz_max="4.0"
+               vx_std="0.40"
+               vy_std="0.40"
+               wz_std="0.35"
+               pathalign_threshold="3.0"
+               pathalign_offset_from_furthest="15"
+               goal_x_tolerance="0.03"
+               goal_y_tolerance="0.05"
+               goal_yaw_tolerance="0.05"
+               goal_stable_duration="0.3"
+               wait_after_set="0.2"/>
 
       <PublishGoal node="{node}"
                    x="8.6"
@@ -69,7 +88,7 @@
                    action_name="/AT_R2/navigate_to_pose"
                    goal="{place_goal}"/>
 
-      <SubTree ID="PlaceMissionRetry" _autoremap="true"/>
+      <SubTree ID="PlaceMission" _autoremap="true"/>
     </Sequence>
   </BehaviorTree>
 
