@@ -20,16 +20,10 @@
                 pathalign_use_path_orientations="false"
                 pathalign_threshold="3.0"
                 pathalign_offset_from_furthest="15"
-                wz_std="0.25"
-                vx_std="0.35"
-                vy_std="0.4"
-                wz_max="1.5"
-                costcritic_weight="20.0"
-                costcritic_consider_footprint="true"
-                pathfollow_weight="14.0"/>
-      <!--      wz_std="0.45"
-                vx_std="0.35"
-                vy_std="0.4" -->
+                wz_std="0.5"                     
+                vx_std="0.3"
+                vy_std="0.3"/>
+          
 
       <SetCostmapInflation node="{node}"
                 local_radius="0.05"

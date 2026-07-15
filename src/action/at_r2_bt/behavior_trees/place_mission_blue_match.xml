@@ -642,13 +642,15 @@
             <DelayMs delay_msec="1000">
               <AlwaysSuccess/>
             </DelayMs>
-            <PublishLiftCmd node="{node}" command="1"/>
+            <ArmMoveNamed node="{node}"
+                          pose_name="three_layer_arm_2_blue"
+                          server_name="robotic_task"
+                          task_id="1"
+                          duration="2.0"/>
           </Sequence>
-          <ArmMoveNamed node="{node}"
-                        pose_name="three_layer_arm_2_blue"
-                        server_name="robotic_task"
-                        task_id="1"
-                        duration="2.0"/>
+          
+          <PublishLiftCmd node="{node}" command="1"/>
+          
         </ParallelAll>
         <!-- 按回车或等话题: 降下底盘 -->
         <WaitForStart node="{node}"
