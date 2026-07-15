@@ -139,8 +139,13 @@
            (照 v5 case1/2/3 放块流程) -->
       <WaitSlotSelect node="{node}"
                       topic="/AT_R2/place_slot_select"
-                      prompt="第一次: 等待放格子选择 (1/2/3=格子)"
+                      prompt="第一次: 等待放格子选择 (1/2/3=格子, 4=第一个块直接大胜)"
                       slot_sel="{slot_sel}"/>
+
+      <!-- 第一次就收到 4: 跳过 B/C/D 放格子全流程, 直接用【手上块】爬三层大胜。
+           手上块此刻已在机械臂顶端 pump 上, 与大胜段结尾 pump=0 松开逻辑天然兼容;
+           底盘块留在车上不用。1/2/3 则照常走下面的整套放块流程。 -->
+      <Sequence name="PlaceFlowWhenNotFirstBigWin" _skipIf="slot_sel == 4">
 
       <SetCostmapInflation node="{node}"
           local_radius="0.25"
@@ -608,6 +613,92 @@
 
       <!-- ===== case 4: 大胜爬三层, 结束比赛 (照 v5 case4) ===== -->
       <Sequence _skipIf="slot_sel != 4">
+        <ArmMoveNamed node="{node}"
+                        pose_name="three_layer_arm_1_red"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        <!-- 到大胜准备位 (导航 || 摆臂, 两者都必须成功) -->
+        <ParallelAll max_failures="1">
+          <PublishGoal node="{node}"
+                       x="10.7"
+                       y="4.85"
+                       yaw="0.0"
+                       frame_id="map"
+                       action_name="/AT_R2/navigate_to_pose"
+                       goal="{place_goal}"/>
+          <ArmMoveNamed node="{node}"
+                        pose_name="three_layer_arm_2_red"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        </ParallelAll>
+
+        <!-- 发 lift command=1 (发指令 || 摆臂, 两者都必须成功) -->
+        <ParallelAll max_failures="1">
+          <Sequence>
+            <DelayMs delay_msec="1000">
+              <AlwaysSuccess/>
+            </DelayMs>
+            <PublishLiftCmd node="{node}" command="1"/>
+          </Sequence>
+          <ArmMoveNamed node="{node}"
+                        pose_name="three_layer_arm_2_red"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        </ParallelAll>
+        <!-- 按回车或等话题: 降下底盘 -->
+        <WaitForStart node="{node}"
+                      prompt="大胜: 按 Enter 或发布 /AT_R2/zone3_cmd 继续 (抬腿)"
+                      start_topic="/AT_R2/zone3_cmd"
+                      start_value="1"
+                      enable_topic="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
+        <PublishLiftCmd node="{node}" command="2"/>
+        <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+        </DelayMs>
+        <!-- 发 lift command=3 (发指令 || 摆臂, 两者都必须成功) -->
+        <ParallelAll max_failures="1">
+          <Sequence>
+            <DelayMs delay_msec="1000">
+              <AlwaysSuccess/>
+            </DelayMs>
+            <PublishLiftCmd node="{node}" command="3"/>
+          </Sequence>
+          <ArmMoveNamed node="{node}"
+                        pose_name="three_layer_arm_3_red"
+                        server_name="robotic_task"
+                        task_id="1"
+                        duration="2.0"/>
+        </ParallelAll>
+        <DelayMs delay_msec="2000">
+          <AlwaysSuccess/>
+        </DelayMs>
+        <!-- 按回车或等话题: 放块 -->
+        <WaitForStart node="{node}"
+                      prompt="大胜: 按 Enter 或发布 /AT_R2/meilin_mission_start 放块"
+                      start_topic="/AT_R2/meilin_mission_start"
+                      start_value="1"
+                      enable_topic="true"
+                      clear_buffer="true"
+                      timeout="0.0"/>
+
+        <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
+        <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+        </DelayMs>
+      </Sequence>
+
+      </Sequence>
+      <!-- ===== 结束: 非首块大胜的整套放块流程 (B/C/D) ===== -->
+
+      <!-- ================================================================
+           首块大胜: 第一次 slot 选择即收到 4 -> 直接用【手上块】爬三层大胜结束。
+           动作与 D 段 case4 一致 (手上块此刻在机械臂顶端 pump 上)。 -->
+      <Sequence name="FirstBlockBigWin" _skipIf="slot_sel != 4">
         <ArmMoveNamed node="{node}"
                         pose_name="three_layer_arm_1_red"
                         server_name="robotic_task"

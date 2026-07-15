@@ -16,7 +16,7 @@
                 plugin_prefix="FollowPath"
                 goal_angle_weight="6.0"
                 wait_after_set="0.3"
-                goal_angle_threshold="2.0"
+                goal_angle_threshold="3.0"
                 pathalign_use_path_orientations="false"
                 pathalign_threshold="3.0"
                 pathalign_offset_from_furthest="15"

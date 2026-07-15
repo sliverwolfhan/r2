@@ -10,14 +10,14 @@ kfs_subscriber_node:
     descend_200_cost: 0.2 # 下台阶 高度差落在 [-0.2, 0) 的额外代价
     descend_400_cost: 0.4 # 下台阶 高度差落在 [-0.4, -0.2) 的额外代价
     pick_cost: 2.0        # 抓取一个 R2 KFS
-    push_cost: 4.0        # 推走挡路 KFS
+    push_cost: 1.0        # 推走挡路 KFS
 
     # 爬高代价
     climb_200_cost: 1.5   # 高度差 (0, 0.2] m
     climb_400_cost: 1.0  # 高度差 (0.2, 0.4] m，仅当 can_climb_400=true 生效
 
     # 转弯代价：每转 90° 加一次，掉头 180°=2×。
-    turn_cost: 2.0
+    turn_cost: 4.0
 
     # 400 台阶开关：
     can_climb_400: true
@@ -25,7 +25,7 @@ kfs_subscriber_node:
     # 抓取偏好列代价减免（柔性偏好）：抓机器人物理左手列（红 {3,6,9,12} / 蓝 {1,4,7,10}）
     # 时从 pick_cost 里减去此值。默认 1.5 ≈ 1 个 move+climb_200 的代价，
     # 表示愿意为去左手列多走 1 格台阶。设 0 关闭；调大几乎硬选左手列。
-    preferred_column_pick_bonus: 1.5
+    preferred_column_pick_bonus: 3.0
 
     # 高度开关：true 时忽略台阶高度（升/降代价清零、强制可上 400）。
     ignore_height: false
@@ -37,7 +37,7 @@ kfs_subscriber_node:
     r1_timed_removal_enable: true
     # R2 每走几步 R1 消失一个（所有动作 MOVE/PICK/PUSH/WAIT 都算一步）。
     # 600 高度（节点6、8）最先消失，其余按高度降序假设顺序。
-    r1_removal_steps: 3
+    r1_removal_steps: 10
     # 原地等待一步(WAIT)的代价。默认 = move_cost(1.0)；调大→更倾向绕路而非干等。
     wait_cost: 3.0
 

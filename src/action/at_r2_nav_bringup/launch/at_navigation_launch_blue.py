@@ -104,7 +104,7 @@ def generate_launch_description():
     declare_params_file_cmd = DeclareLaunchArgument(
         "params_file",
         default_value=os.path.join(
-            bringup_dir, "config", "nav2_params_mppi_blue_2.yaml"
+            bringup_dir, "config", "nav2_params_mppi_blue.yaml"
         ),
         description="Full path to the ROS2 parameters file to use for all launched nodes",
     )
