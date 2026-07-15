@@ -87,5 +87,16 @@ else
   exit 1
 fi
 
-echo "==> ros2 run r2_meilin_planner r2_planner_qt_test ${RUN_ARGS[*]}"
-exec ros2 run r2_meilin_planner r2_planner_qt_test "${RUN_ARGS[@]}"
+# 从 zone.conf 读红/蓝区，透传给 qt_test（否则监视窗口默认红区，会把蓝区真车的
+# plan 画到红区方块外——路线飞出场地、格子着色左右镜像错位）。默认 blue，与 start_planner.sh 一致。
+# 注入 --ros-args -p zone:=<zone>；用户在 -- 后自带的 -p zone:= 排在其后，可覆盖本值。
+ZONE_FILE="${WORKSPACE_DIR}/autostart/zone.conf"
+ZONE="blue"
+if [ -f "${ZONE_FILE}" ]; then
+  ZONE="$(grep -vE '^\s*#' "${ZONE_FILE}" | tr -d '[:space:]' | head -c 16)"
+  ZONE="${ZONE:-blue}"
+fi
+echo "==> zone=${ZONE} (来自 ${ZONE_FILE})"
+
+echo "==> ros2 run r2_meilin_planner r2_planner_qt_test --ros-args -p zone:=${ZONE} ${RUN_ARGS[*]}"
+exec ros2 run r2_meilin_planner r2_planner_qt_test --ros-args -p "zone:=${ZONE}" "${RUN_ARGS[@]}"

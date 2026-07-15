@@ -93,15 +93,21 @@ int main(int argc, char ** argv)
   auto node = rclcpp::Node::make_shared("r2_planner_qt_test");
   RCLCPP_INFO(node->get_logger(), "Qt planner UI (12 cells, Plan button).");
 
-  // 加载方块表（默认使用包内 config/blocks.yaml，支持 ROS 参数 blocks_yaml 覆盖）
+  // 红/蓝区：必须与真车运行的区一致，否则监视到的 plan（蓝区坐标）会画到红区方块外
+  // ——路线飞出场地、着色左右镜像错位。启动脚本从 zone.conf 读出后透传本参数。
+  const std::string zone = node->declare_parameter<std::string>("zone", "red");
+  const bool zone_blue = (zone == "blue");
+
+  // 加载方块表（按 zone 选红/蓝 yaml，支持 ROS 参数 blocks_yaml 显式覆盖）
   std::string blocks_yaml;
   try {
     blocks_yaml = ament_index_cpp::get_package_share_directory("r2_meilin_planner") +
-                  "/config/block_red.yaml";
+                  (zone_blue ? "/config/block_blue.yaml" : "/config/block_red.yaml");
   } catch (const std::exception & ex) {
     RCLCPP_WARN(node->get_logger(), "ament_index lookup failed: %s", ex.what());
   }
   blocks_yaml = node->declare_parameter<std::string>("blocks_yaml", blocks_yaml);
+  RCLCPP_INFO(node->get_logger(), "zone=%s（%s区）", zone.c_str(), zone_blue ? "蓝" : "红");
 
   r2_planner::BlockTable blocks;
   std::string load_err;
@@ -120,7 +126,7 @@ int main(int argc, char ** argv)
   // 读入 planner_params.yaml 的代价基线（yaml 打底，界面控件在其上覆盖）。
   PlannerParams planner_params = load_planner_params(node->get_logger());
 
-  PlannerWindow window(node, std::move(blocks), plan_pub, std::move(planner_params));
+  PlannerWindow window(node, std::move(blocks), plan_pub, std::move(planner_params), zone_blue);
   window.show();
 
   QTimer ros_timer;

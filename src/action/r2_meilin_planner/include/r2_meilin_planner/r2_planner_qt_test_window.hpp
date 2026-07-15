@@ -52,6 +52,7 @@ public:
     r2_planner::BlockTable blocks,
     rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub,
     PlannerParams params,
+    bool initial_zone_blue = false,
     QWidget * parent = nullptr);
 
 private slots:

@@ -38,12 +38,15 @@ PlannerWindow::PlannerWindow(
   r2_planner::BlockTable blocks,
   rclcpp::Publisher<robot_interfaces::msg::Plan>::SharedPtr plan_pub,
   PlannerParams params,
+  bool initial_zone_blue,
   QWidget * parent)
 : QMainWindow(parent),
   node_(std::move(node)),
   blocks_(std::move(blocks)),
   plan_pub_(std::move(plan_pub)),
   params_base_(std::move(params)),
+  zone_blue_(initial_zone_blue),   // 必须先于建 UI 设定：zone_btn_ 文案、序号镜像、方块着色都读它。
+                                   // 传入的 blocks 已由 main() 按同一 zone 加载（红/蓝坐标一致）。
   scene_(nullptr),
   view_(nullptr),
   log_(nullptr),
@@ -882,6 +885,11 @@ void PlannerWindow::on_kfs_msg(const std_msgs::msg::Int32MultiArray::SharedPtr m
 void PlannerWindow::on_plan_msg(const robot_interfaces::msg::Plan::SharedPtr msg)
 {
   if (monitor_chk_ && !monitor_chk_->isChecked()) {
+    return;
+  }
+  // /r2_planner/plan 是 latched + 会周期重发同一条计划；每条都 redraw_scene()（内含
+  // scene_->clear() 全量重建）会让示意图一闪一闪。计划内容相对上次没变就跳过重画/重设文本。
+  if (msg->steps == last_steps_) {
     return;
   }
   last_steps_ = msg->steps;
