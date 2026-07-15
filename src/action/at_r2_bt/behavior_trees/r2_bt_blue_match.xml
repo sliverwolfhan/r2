@@ -13,10 +13,12 @@
 
   <BehaviorTree ID="MainTree">
     <Sequence>
+      <!-- 抓头子树已取消
       <SubTree ID="GraspHeadBlue"    _autoremap="true"/>
       <DelayMs delay_msec="2000">
           <AlwaysSuccess/>
       </DelayMs>
+      -->
       <SubTree ID="MeilinMission" _autoremap="true"/>
       <DelayMs delay_msec="1000">
           <AlwaysSuccess/>
