@@ -11,7 +11,7 @@
       <Sequence name="NavigateWithFixedPath">
         <!-- 只在开始时规划一次，不循环重规划 -->
         <RecoveryNode name="ComputePathToPose"
-                      number_of_retries="1">
+                      number_of_retries="3">
           <ComputePathToPose goal="{goal}"
                              path="{path}"
                              planner_id="GridBased"/>
@@ -29,16 +29,14 @@
       </Sequence>
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
-        <RoundRobin name="RecoveryActions">
-          <Sequence name="ClearingActions">
-            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
-                                service_name="local_costmap/clear_entirely_local_costmap"/>
-            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
-                                service_name="global_costmap/clear_entirely_global_costmap"/>
-          </Sequence>
+        <Sequence name="RecoveryActions">
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+                              service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+                              service_name="global_costmap/clear_entirely_global_costmap"/>
           <BackUp backup_dist="0.05"
                   backup_speed="0.1"/>
-        </RoundRobin>
+        </Sequence>
       </ReactiveFallback>
     </RecoveryNode>
   </BehaviorTree>

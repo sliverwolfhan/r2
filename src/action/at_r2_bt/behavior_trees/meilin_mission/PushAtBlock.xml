@@ -4,25 +4,62 @@
   <!-- ================== PUSH 子树 ================== -->
   <BehaviorTree ID="PushAtBlock">
     <Sequence>
-      <!-- 等上一段 MOVE 后台跑的臂动作落定，再开 PUSH 的 ArmTask -->
+      <!-- 导航到 prep || 臂 prep 兜底排队，二者并行（与 PICK 入口同构）
+           - 导航：MOVE 段 C 已经走过则 IsPrepSkippable 通过，不再重复发 goal；
+                   首次 PUSH 前面没有 MOVE、或 PUSH 前一步不是 MOVE 时由这里兜底导航
+           - 臂 prep：MOVE 段 C 只为 PICK 排 prep（arm_prep_queued==1），PUSH 分支不排；
+                     所以这里对 PUSH 兜底排队，选名逻辑复用 SelectArmPrepName(pick_*) -->
+      <ParallelAll max_failures="1">
+        <Fallback>
+          <IsPrepSkippable node="{node}"
+                           target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
+                           x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
+          <PublishGoal node="{node}"
+                       x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                       frame_id="map" goal="{nav_goal}"/>
+        </Fallback>
+        <Sequence>
+          <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>
+          <ForceSuccess>
+            <Fallback>
+              <ScriptCondition code="arm_prep_queued == 1"/>
+              <Sequence>
+                <SelectArmPrepName next_from_id="{from_id}"
+                                  next_target_id="{target_id}"
+                                  from_x_override="{prep_x}"
+                                  from_y_override="{prep_y}"
+                                  from_yaw_override="{prep_yaw}"
+                                  arm_prep_name="{arm_prep_name}"
+                                  block_yaml="{block_yaml}"/>
+                <ArmMoveNamedAsync pose_name="{arm_prep_name}" task_id="1" duration="1.0"/>
+              </Sequence>
+            </Fallback>
+          </ForceSuccess>
+        </Sequence>
+      </ParallelAll>
+      <Script code="arm_prep_queued := 0"/>
+
+      <!-- 等上一段 MOVE 后台跑的臂动作 / 上面兜底排队的 arm prep 落定，再开 PUSH 的 ArmTask -->
       <WaitArmIdle timeout="20.0"/>
 
-      <!-- PublishGoal 已移到上一步 MOVE 上完台阶后按 next_step_type==PUSH 条件下发 -->
       <PreSteerAlign node="{node}" vx="0.1" duration="0.1" publish_rate_hz="50"/>
-      <ArmTask node="{node}"
-               task_id="2"
-               server_name="robotic_task"
-               base_frame="base_link"
-               target_frame="target_object"
-               map_frame="map"
-               tf_timeout="5.0"
-               cube_x="{cube_x}"
-               cube_y="{cube_y}"
-               block_height="{block_h}"
-               grasp_height="{block_h}"
-               goal_data="{arm_goal_data}"
-               err_code="{arm_err_code}"
-               reason="{arm_reason}"/>
+      <PublishPumpCmd node="{node}" command="1"/>
+      <RetryUntilSuccessful num_attempts="100">
+       <ArmTask node="{node}"
+                task_id="2"
+                server_name="robotic_task"
+                base_frame="base_link"
+                target_frame="target_object"
+                map_frame="map"
+                tf_timeout="5.0"
+                cube_x="{cube_x}"
+                cube_y="{cube_y}"
+                block_height="{block_h}"
+                grasp_height="{block_h}"
+                goal_data="{arm_goal_data}"
+                err_code="{arm_err_code}"
+                reason="{arm_reason}"/>
+      </RetryUntilSuccessful>
 
       <!-- 推完成功，标记下一个 MOVE 跑 PUSH 收尾(=2，区别于 PICK 的 1) -->
       <Script code="need_finish := 2"/>

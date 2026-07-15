@@ -42,8 +42,8 @@ kfs_subscriber_node:
     wait_cost: 3.0
 
     # 准备位姿偏移量（米）：准备点 = 目标中心沿单轴退此距离，越小越靠近目标。
-    move_prep_offset: 0.15   # MOVE 准备点
-    grasp_prep_offset: 0.17  # PICK / PUSH 准备点
+    move_prep_offset: 0.1   # MOVE 准备点
+    grasp_prep_offset: 0.1  # PICK / PUSH 准备点
 
     # PICK / PUSH 发布的 block_height 偏移（米）：
     # block_height = (target.height - from.height) + block_height_offset

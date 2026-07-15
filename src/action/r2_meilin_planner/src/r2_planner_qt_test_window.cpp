@@ -590,36 +590,45 @@ void PlannerWindow::redraw_scene()
   draw_marker(0, QColor(255, 220, 0), QString::fromUtf8("入口0"));
   draw_marker(13, QColor(200, 200, 255), QString::fromUtf8("出口13"));
 
-  // ---- 路径：从入口起，沿实际经过的方块中心（真实坐标）连线；抓/推/等就地标注 ----
+  // ---- 路径：沿机器人每步真实站位（prep_pose 的 map 坐标）连线；抓/推/等就地标注 ----
+  // 关键：抓取时机器人不是"走到目标块上"，而是停在相邻块用 prep_pose 站位伸臂取块。
+  // 若只连 MOVE 目标中心，会漏掉这些取块站位（例如先取 3 号再上 1 号，连线会像是
+  // "直接去了 1 号"）。因此路线改走每步的 prep_pose 真实坐标，抓/推标在目标块上，
+  // 并从站位画一小段虚线连到目标块，直观呈现"停在旁边取块"。
   if (last_steps_.empty() || !blocks_.has(0)) {
     view_->fitInView(scene_->itemsBoundingRect().adjusted(-10, -10, 10, 10), Qt::KeepAspectRatio);
     return;
   }
   using PS = robot_interfaces::msg::PlanStep;
   QPainterPath road;
-  int robot_node = 0;
   QPointF robot_pt = center(0);
   road.moveTo(robot_pt);
+  QPen reach_pen(QColor(120, 120, 120), 1, Qt::DashLine);
   for (const auto & s : last_steps_) {
     if (s.type == PS::TYPE_MOVE) {
-      if (!blocks_.has(s.target_id)) continue;
-      robot_node = s.target_id;
-      robot_pt = center(robot_node);
+      // 走到本步的 prep_pose（在 from 块上对齐 target 的真实站位），而非目标块中心。
+      robot_pt = to_scene(s.prep_pose.x, s.prep_pose.y);
       road.lineTo(robot_pt);
     } else if (s.type == PS::TYPE_PICK || s.type == PS::TYPE_PUSH) {
-      if (!blocks_.has(robot_node)) continue;
-      const QPointF c = center(robot_node);
+      // 机器人先走到取块站位（prep_pose），再伸臂到目标块 (cube_x, cube_y)。
+      robot_pt = to_scene(s.prep_pose.x, s.prep_pose.y);
+      road.lineTo(robot_pt);
       const QColor dot = (s.type == PS::TYPE_PICK) ? QColor(0, 160, 0) : QColor(200, 80, 0);
-      auto * d = scene_->addEllipse(QRectF(c.x() - 5, c.y() - 5, 10, 10), QPen(Qt::black, 1), QBrush(dot));
+      // 目标块中心：优先用 cube_x/cube_y（真实物块坐标），否则回退到块表中心。
+      QPointF blk = (s.cube_x != 0.0 || s.cube_y != 0.0)
+        ? to_scene(s.cube_x, s.cube_y)
+        : (blocks_.has(s.target_id) ? center(s.target_id) : robot_pt);
+      // 站位 -> 目标块的伸臂虚线，直观表示"停在旁边取块"。
+      auto * reach = scene_->addLine(QLineF(robot_pt, blk), reach_pen);
+      reach->setZValue(1.4);
+      auto * d = scene_->addEllipse(QRectF(blk.x() - 5, blk.y() - 5, 10, 10), QPen(Qt::black, 1), QBrush(dot));
       d->setZValue(2.5);
       auto * t = scene_->addSimpleText(
         QString::fromUtf8(s.type == PS::TYPE_PICK ? "抓" : "推") + QString::number(s.target_id));
-      t->setBrush(dot); t->setPos(c.x() + 5, c.y() - 16); t->setZValue(2.5);
+      t->setBrush(dot); t->setPos(blk.x() + 5, blk.y() - 16); t->setZValue(2.5);
     } else if (s.type == PS::TYPE_WAIT) {
-      if (!blocks_.has(robot_node)) continue;
-      const QPointF c = center(robot_node);
       auto * t = scene_->addSimpleText(QString::fromUtf8("等"));
-      t->setBrush(QColor(200, 120, 0)); t->setPos(c.x() + 5, c.y() + 2); t->setZValue(2.5);
+      t->setBrush(QColor(200, 120, 0)); t->setPos(robot_pt.x() + 5, robot_pt.y() + 2); t->setZValue(2.5);
     }
   }
   auto * path_item = scene_->addPath(road, QPen(QColor(255, 170, 0), 3));
@@ -850,6 +859,13 @@ void PlannerWindow::on_kfs_msg(const std_msgs::msg::Int32MultiArray::SharedPtr m
     RCLCPP_WARN(node_->get_logger(), "kfs_positions 长度异常: 期望 12, 收到 %zu", msg->data.size());
     return;
   }
+  // kfs 话题会周期/latched 反复发同一布局；若每条都重画，scene_->clear()+全量重建
+  // 会让梅林格子一闪一闪。仅在布局相对上一次真正变化时才 apply+redraw。
+  const std::vector<int> codes(msg->data.begin(), msg->data.end());
+  if (codes == last_kfs_codes_) {
+    return;
+  }
+  last_kfs_codes_ = codes;
   // data[i] 对应节点 id = i+1；按当前红/蓝区映射回按钮格子。
   for (int i = 0; i < 12; ++i) {
     const int idx = cell_index_from_display_number(i + 1);

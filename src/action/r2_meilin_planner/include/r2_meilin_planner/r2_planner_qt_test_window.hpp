@@ -93,6 +93,9 @@ private:
   QCheckBox * monitor_chk_ = nullptr;   // 勾选=监视话题自动填充布局与路径
   rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr kfs_sub_;
   rclcpp::Subscription<robot_interfaces::msg::Plan>::SharedPtr plan_monitor_sub_;
+  // 上一次已应用的 kfs 布局（12 个下位机码）。kfs 话题会周期/latched 反复发同一布局，
+  // 若每条都 apply+redraw 会导致梅林格子一闪一闪；仅在布局真正变化时才刷新。
+  std::vector<int> last_kfs_codes_;
 
   static r2_planner::BlockState block_from_phase(int phase);
   /** 显示序号 <-> 按钮下标。红区：第一行 3/2/1…最后一行 12/11/10。

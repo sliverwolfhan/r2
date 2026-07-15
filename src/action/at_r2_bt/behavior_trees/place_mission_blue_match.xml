@@ -63,17 +63,17 @@
                     task_id="1"
                     duration="2.0"/>
 
-      <ArmMoveNamed node="{node}"
+      <!-- <ArmMoveNamed node="{node}"
                     pose_name="lift_block2"
                     server_name="robotic_task"
                     task_id="1"
-                    duration="2.0"/>
-
+                    duration="2.0"/> -->
+<!-- 
       <ArmMoveNamed node="{node}"
                     pose_name="hold_block_blue"
                     server_name="robotic_task"
                     task_id="1"
-                    duration="2.0"/>
+                    duration="2.0"/> -->
       <!-- <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/> -->
 
       <!-- 等三区放行信号 -->
@@ -105,15 +105,21 @@
                     goal_yaw_tolerance="0.1"
                     goal_stable_duration="0.3"
                     wait_after_set="0.2"/>
-
+      <ParallelAll max_failures="1">
       <!-- 导航到三区内部 + 放置准备位 -->
-      <PublishGoal node="{node}"
-                   x="10.97"
-                   y="-2.2"
-                   yaw="1.57"
-                   frame_id="map"
-                   action_name="/AT_R2/navigate_to_pose"
-                   goal="{place_goal}"/>
+        <PublishGoal node="{node}"
+                    x="10.97"
+                    y="-2.2"
+                    yaw="1.57"
+                    frame_id="map"
+                    action_name="/AT_R2/navigate_to_pose"
+                    goal="{place_goal}"/>
+        <ArmMoveNamed node="{node}"
+                      pose_name="lift_block2"
+                      server_name="robotic_task"
+                      task_id="1"
+                      duration="2.0"/>
+      </ParallelAll>
 
       <!-- 导航到放置准备点(P1) || 摆放置姿态, 两者都必须成功 -->
       <ParallelAll max_failures="1">
@@ -128,7 +134,7 @@
                       pose_name="hold_block_blue"
                       server_name="robotic_task"
                       task_id="1"
-                      duration="2.0"/>
+                      duration="3.0"/>
       </ParallelAll>
 
       <!-- ================================================================
@@ -229,23 +235,23 @@
             <ForceSuccess _skipIf="slot_sel != 1">
               <DockToWall node="{node}"
                           vy="0.0"
-                          vx="0.15"
+                          vx="-0.15"
                           wz="0.0"
                           stall_threshold="0.02"
                           stall_duration="10.0"
                           timeout="5.0"
                           publish_rate_hz="50.0"
                           cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                          distance_topic="/AT_R2/distance_head"
+                          distance_topic="/AT_R2/distance_tail"
                           distance_scale="0.001"
-                          distance_stop_below="0.4"
+                          distance_stop_below="0.27"
                           odom_topic="/AT_R2/odometry"/>
             </ForceSuccess>
             <!-- 其它格子: 停距 0.27 -->
             <ForceSuccess _skipIf="slot_sel == 1">
               <DockToWall node="{node}"
                           vy="0.0"
-                          vx="0.15"
+                          vx="-0.15"
                           wz="0.0"
                           stall_threshold="0.02"
                           stall_duration="10.0"
@@ -266,7 +272,7 @@
               <ForceSuccess>
                 <DockToWall node="{node}"
                             vy="0.0"
-                            vx="-0.2"
+                            vx="0.2"
                             wz="0.0"
                             stall_threshold="0.02"
                             stall_duration="10.0"
@@ -329,11 +335,12 @@
                   task_id="1"
                   duration="0.8"/>
       <!-- B5. 倒车退出格子 与 收臂 并行 (延时300ms再收臂, 避免倒车瞬间扫到墙) -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
       <ParallelAll max_failures="1">
         <ForceSuccess>
           <DockToWall node="{node}"
                 vy="0.0"
-                vx="-0.2"
+                vx="0.2"
                 wz="0.0"
                 stall_threshold="0.02"
                 stall_duration="10.0"
@@ -363,11 +370,10 @@
       <ParallelAll max_failures="1">
         <Sequence>
           <!-- 底盘气泵松开, 把块交给机械臂 -->
-          <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
-          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="3.0"/>
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="1.2"/>
           <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
           <WaitArmIdle timeout="20.0"/>
@@ -378,7 +384,7 @@
           </DelayMs>
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
           <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
-          <ArmMoveNamedAsync pose_name="hold_block_blue" task_id="1" duration="1.0"/>
+          <ArmMoveNamedAsync pose_name="hold_block_blue" task_id="1" duration="3.0"/>
           <WaitArmIdle timeout="20.0"/>
         </Sequence>
         <!-- 取块动作时同时导航回放置准备位, 为下一次放块做准备 -->
@@ -485,14 +491,14 @@
               <ForceSuccess>
                 <DockToWall node="{node}"
                             vy="0.0"
-                            vx="0.15"
+                            vx="-0.15"
                             wz="0.0"
                             stall_threshold="0.02"
                             stall_duration="10.0"
                             timeout="5.0"
                             publish_rate_hz="50.0"
                             cmd_vel_topic="/AT_R2/cmd_vel_bt"
-                            distance_topic="/AT_R2/distance_head"
+                            distance_topic="/AT_R2/distance_tail"
                             distance_scale="0.001"
                             distance_stop_below="0.27"
                             odom_topic="/AT_R2/odometry"/>
@@ -506,7 +512,7 @@
                 <ForceSuccess>
                   <DockToWall node="{node}"
                               vy="0.0"
-                              vx="-0.2"
+                              vx="0.2"
                               wz="0.0"
                               stall_threshold="0.02"
                               stall_duration="10.0"
@@ -560,16 +566,21 @@
 
         <!-- 松顶端气泵 放下块 -->
         <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/pump_cmd"/>
-        <DelayMs delay_msec="1000">
+        <DelayMs delay_msec="100">
           <AlwaysSuccess/>
         </DelayMs>
+        <ArmMoveNamed node="{node}"
+                    pose_name="place_grid_red_1_1"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="0.8"/>
 
         <!-- 倒车退出格子 与 收臂 并行 -->
         <ParallelAll max_failures="1">
           <ForceSuccess>
             <DockToWall node="{node}"
                   vy="0.0"
-                  vx="-0.2"
+                  vx="0.2"
                   wz="0.0"
                   stall_threshold="0.02"
                   stall_duration="10.0"

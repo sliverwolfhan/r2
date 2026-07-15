@@ -202,7 +202,7 @@
                         topic="/AT_R2/head_gripper_cmd"
                         wait_done="false"/>
         <Sequence>
-          <DelayMs delay_msec="200">
+          <DelayMs delay_msec="500">
               <AlwaysSuccess/>
           </DelayMs>
           <ForceSuccess>
