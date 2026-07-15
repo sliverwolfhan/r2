@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+
+  <!-- ================== R2 红区总流程 (带"中途重来") ==================
+       在 r2_bt_red_match 线性编排的基础上, 外套一层"随时中断 + 按位置重来":
+
+       顶层 = RetryUntilSuccessful(-1) > ReactiveSequence:
+         - 首位 MatchStartEdgeGuard 每 tick 监测 red_start_cmd / blue_start_cmd,
+           检测到 red 1->0 且 blue 0->1 的联合跳变沿 -> 返回 FAILURE,
+           ReactiveSequence 会 halt 掉正在跑的主流程(级联取消导航), 触发重来。
+         - is_retry 标志区分首跑 / 重来:
+             首跑(is_retry==0) -> NormalRun (入口把 is_retry 置 1)
+             重来(is_retry==1) -> PickRetryByX (读 base_footprint 的 x 二选一)
+         - 只有整棵流程跑完(SUCCESS)才退出 RetryUntilSuccessful; 否则无限重来。
+
+       首跑用原版子树 GraspHeadRed / MeilinMission / PlaceMission (自带各自的
+       SetZoneMode / MPPI / Costmap / WaitForStart); 重试用去掉内部等待的
+       MeilinMissionRetry / PlaceMissionRetry (初始化+等待已下放到子树内部,
+       place 重试子树自带导航到 11.5,0.7,1.57 + 等 zone3_cmd 放行)。 -->
+
+  <include path="grasp_head_red.xml"/>
+  <include path="meilin_mission.xml"/>
+  <include path="place_mission_red_match.xml"/>
+  <include path="meilin_mission_retry.xml"/>
+  <include path="place_mission_retry.xml"/>
+
+  <!-- ===== 首跑流程 (= 原 r2_bt_red_match 的 MainTree 主体) ===== -->
+  <BehaviorTree ID="NormalRun">
+    <Sequence>
+      <!-- 一进入就翻标志, 之后被中断重来永远走重试分支, 不再回 NormalRun -->
+      <Script code="is_retry := 1"/>
+
+      <SubTree ID="GraspHeadRed" _autoremap="true"/>
+      <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+      </DelayMs>
+      <SubTree ID="MeilinMission" _autoremap="true"/>
+      <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+      </DelayMs>
+
+      <PublishGoal node="{node}"
+                   x="8.6"
+                   y="0.7"
+                   yaw="0.0"
+                   frame_id="map"
+                   action_name="/AT_R2/navigate_to_pose"
+                   goal="{place_goal}"/>
+
+      <SubTree ID="PlaceMission" _autoremap="true"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ===== 重试树 A: 梅林起 (x < 9.5, 还在梅林段) =====
+       梅林重来(MeilinMissionRetry, 无内部等待) -> 导航到放块起点 -> 放块重来。
+       两个 retry 子树内部已含各自的初始化, 这里不再外套等待。 -->
+  <BehaviorTree ID="RetryFromMeilin">
+    <Sequence>
+      <SubTree ID="MeilinMissionRetry" _autoremap="true"/>
+      <DelayMs delay_msec="1000">
+          <AlwaysSuccess/>
+      </DelayMs>
+
+      <PublishGoal node="{node}"
+                   x="8.6"
+                   y="0.7"
+                   yaw="0.0"
+                   frame_id="map"
+                   action_name="/AT_R2/navigate_to_pose"
+                   goal="{place_goal}"/>
+
+      <SubTree ID="PlaceMissionRetry" _autoremap="true"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ===== 重试树 B: 放块起 (x >= 9.5, 已到放块段) =====
+       只重来放块。PlaceMissionRetry 自带初始化(导航 11.5,0.7,1.57 + 摆 hold_block_red
+       + 两气泵开 + 等 zone3_cmd), 这里直接调用。 -->
+  <BehaviorTree ID="RetryFromPlace">
+    <SubTree ID="PlaceMissionRetry" _autoremap="true"/>
+  </BehaviorTree>
+
+  <!-- ===== 中断后按 base_footprint 的 x 选重试树 =====
+       x < 9.5 -> 梅林起; x >= 9.5 或 TF 失败 -> 放块起 -->
+  <BehaviorTree ID="PickRetryByX">
+    <IfThenElse>
+      <IsXBelow node="{node}"
+                x_threshold="9.5"
+                base_frame="base_footprint"
+                map_frame="map"
+                tf_timeout="0.2"/>
+      <SubTree ID="RetryFromMeilin" _autoremap="true"/>
+      <SubTree ID="RetryFromPlace"  _autoremap="true"/>
+    </IfThenElse>
+  </BehaviorTree>
+
+  <!-- ===== 顶层: 无限"跑一轮, 被守卫打断就重选重来" ===== -->
+  <BehaviorTree ID="MainTree">
+    <RetryUntilSuccessful num_attempts="-1">
+      <ReactiveSequence>
+        <MatchStartEdgeGuard node="{node}"
+                             red_topic="/AT_R2/red_start_cmd"
+                             red_trigger_value="0"
+                             blue_topic="/AT_R2/blue_start_cmd"
+                             blue_trigger_value="1"
+                             edge_window="1.0"/>
+        <IfThenElse>
+          <ScriptCondition code="is_retry == 1"/>
+          <SubTree ID="PickRetryByX" _autoremap="true"/>
+          <SubTree ID="NormalRun"    _autoremap="true"/>
+        </IfThenElse>
+      </ReactiveSequence>
+    </RetryUntilSuccessful>
+  </BehaviorTree>
+
+</root>

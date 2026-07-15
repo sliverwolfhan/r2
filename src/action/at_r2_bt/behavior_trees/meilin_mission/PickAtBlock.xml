@@ -19,9 +19,26 @@
           <IsPrepSkippable node="{node}"
                            target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
                            x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
-          <PublishGoal node="{node}"
-                       x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
+          <Sequence>
+            <!-- 与上一次 prep_yaw 相差 ≥ 0.26rad (~15°)：先回 from 中心 pivot -->
+            <Fallback>
+              <Sequence>
+                <ScriptCondition code="prep_yaw - last_prep_yaw &lt; 0.26"/>
+                <ScriptCondition code="prep_yaw - last_prep_yaw &gt; -0.26"/>
+              </Sequence>
+              <Sequence>
+                <GetBlockCenter block_id="{from_id}" block_yaml="{block_yaml}"
+                                center_x="{center_x}" center_y="{center_y}"/>
+                <PublishGoal node="{node}"
+                             x="{center_x}" y="{center_y}" yaw="{prep_yaw}"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Sequence>
+            </Fallback>
+            <PublishGoal node="{node}"
+                         x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                         frame_id="map" goal="{nav_goal}"/>
+            <Script code="last_prep_yaw := prep_yaw"/>
+          </Sequence>
         </Fallback>
         <Sequence>
           <DelayMs delay_msec="500"><AlwaysSuccess/></DelayMs>

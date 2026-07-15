@@ -56,8 +56,11 @@ add_library(${PROJECT_NAME} SHARED
   src/select_weapon_params_action.cpp
   src/select_kfs_params_action.cpp
   src/select_place_slot_action.cpp
+  src/get_block_center_action.cpp
   src/is_prep_skippable_condition.cpp
+  src/is_x_below_condition.cpp
   src/check_retry_topic_condition.cpp
+  src/match_start_edge_guard_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/grasp_pressed_by_distance_condition.cpp
   src/distance_servo_align_action.cpp
@@ -123,8 +126,11 @@ add_executable(simple_bt_runner
   src/select_weapon_params_action.cpp
   src/select_kfs_params_action.cpp
   src/select_place_slot_action.cpp
+  src/get_block_center_action.cpp
   src/is_prep_skippable_condition.cpp
+  src/is_x_below_condition.cpp
   src/check_retry_topic_condition.cpp
+  src/match_start_edge_guard_condition.cpp
   src/grasp_ready_by_pose_distance_condition.cpp
   src/grasp_pressed_by_distance_condition.cpp
   src/distance_servo_align_action.cpp

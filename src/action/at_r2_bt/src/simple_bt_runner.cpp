@@ -27,6 +27,7 @@
 #include "nav2_bt_publish_goal/pop_next_step_action.hpp"
 #include "nav2_bt_publish_goal/peek_next_step_action.hpp"
 #include "nav2_bt_publish_goal/select_arm_prep_name_action.hpp"
+#include "nav2_bt_publish_goal/get_block_center_action.hpp"
 #include "nav2_bt_publish_goal/select_weapon_params_action.hpp"
 #include "nav2_bt_publish_goal/select_kfs_params_action.hpp"
 #include "nav2_bt_publish_goal/select_place_slot_action.hpp"
@@ -35,7 +36,9 @@
 #include "nav2_bt_publish_goal/arm_move_named_async_action.hpp"
 #include "nav2_bt_publish_goal/wait_arm_idle_action.hpp"
 #include "nav2_bt_publish_goal/is_prep_skippable_condition.hpp"
+#include "nav2_bt_publish_goal/is_x_below_condition.hpp"
 #include "nav2_bt_publish_goal/check_retry_topic_condition.hpp"
+#include "nav2_bt_publish_goal/match_start_edge_guard_condition.hpp"
 #include "nav2_bt_publish_goal/grasp_ready_by_pose_distance_condition.hpp"
 #include "nav2_bt_publish_goal/grasp_pressed_by_distance_condition.hpp"
 #include "nav2_bt_publish_goal/distance_servo_align_action.hpp"
@@ -116,11 +119,14 @@ int main(int argc, char** argv)
   factory.registerNodeType<nav2_bt_publish_goal::PopNextStepAction>("PopNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::PeekNextStepAction>("PeekNextStep");
   factory.registerNodeType<nav2_bt_publish_goal::SelectArmPrepNameAction>("SelectArmPrepName");
+  factory.registerNodeType<nav2_bt_publish_goal::GetBlockCenterAction>("GetBlockCenter");
   factory.registerNodeType<nav2_bt_publish_goal::SelectWeaponParamsAction>("SelectWeaponParams");
   factory.registerNodeType<nav2_bt_publish_goal::SelectKfsParamsAction>("SelectKfsParams");
   factory.registerNodeType<nav2_bt_publish_goal::SelectPlaceSlotAction>("SelectPlaceSlot");
   factory.registerNodeType<nav2_bt_publish_goal::IsPrepSkippableCondition>("IsPrepSkippable");
+  factory.registerNodeType<nav2_bt_publish_goal::IsXBelowCondition>("IsXBelow");
   factory.registerNodeType<nav2_bt_publish_goal::CheckRetryTopicCondition>("CheckRetryTopic");
+  factory.registerNodeType<nav2_bt_publish_goal::MatchStartEdgeGuardCondition>("MatchStartEdgeGuard");
   factory.registerNodeType<nav2_bt_publish_goal::GraspReadyByPoseDistanceCondition>("GraspReadyByPoseDistance");
   factory.registerNodeType<nav2_bt_publish_goal::GraspPressedByDistanceCondition>("GraspPressedByDistance");
   factory.registerNodeType<nav2_bt_publish_goal::DistanceServoAlignAction>("DistanceServoAlign");
@@ -152,6 +158,7 @@ int main(int argc, char** argv)
   RCLCPP_INFO(node->get_logger(), "✓ PopNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ PeekNextStep 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectArmPrepName 节点已注册");
+  RCLCPP_INFO(node->get_logger(), "✓ GetBlockCenter 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectKfsParams 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ SelectPlaceSlot 节点已注册");
   RCLCPP_INFO(node->get_logger(), "✓ IsPrepSkippable 节点已注册");
@@ -199,6 +206,10 @@ int main(int argc, char** argv)
   blackboard->set("node", node);
   blackboard->set("tf_buffer", tf_buffer);
   blackboard->set("arm_runner", arm_runner);
+
+  // 比赛"中途重来"标志: 首跑=0 走正常流程, NormalRun 入口置 1, 之后被中断重来走重试树。
+  // (仅 r2_bt_red_retry.xml 用; 其它树不引用, 预置为 0 无副作用)
+  blackboard->set("is_retry", 0);
 
   // 分区块坐标 yaml: 红区 block_red.yaml / 蓝区 block_blue.yaml, 由 launch 传入。
   // SelectArmPrepName 通过黑板键 block_yaml 读取; 未设置时该节点内部仍回退默认值。

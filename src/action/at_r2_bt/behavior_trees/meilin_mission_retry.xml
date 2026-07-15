@@ -1,5 +1,13 @@
 <?xml version="1.0"?>
-<root BTCPP_format="4" main_tree_to_execute="MeilinMission">
+<root BTCPP_format="4" main_tree_to_execute="MeilinMissionRetry">
+
+  <!-- ================== 梅林任务 (重试版) ==================
+       与 meilin_mission.xml 一致, 但去掉了子树内部的启动等待:
+         - 删掉等 /AT_R2/meilin_mission_start 的 WaitForStart;
+         - 删掉已注释的 WaitForEnter。
+       因为重试时由外层 r2_bt_red_retry 统一等 /AT_R2/red_start_cmd 放行,
+       进入本子树后直接开始连续抓取, 不再二次等待。
+       BehaviorTree ID = MeilinMissionRetry (避免与原 MeilinMission 重名)。 -->
 
   <!-- 子树拆分：每棵树一个文件，include 路径相对当前文件 -->
   <include path="meilin_mission/MoveBetweenBlocks.xml"/>
@@ -9,7 +17,7 @@
   <!-- ================== 主树 ==================
        每轮：先 Pop 出当前步，再 Peek 偷看下一步（写到 next_* 黑板键），
        然后路由到 MOVE/PICK/PUSH 子树。 -->
-  <BehaviorTree ID="MeilinMission">
+  <BehaviorTree ID="MeilinMissionRetry">
     <Sequence>
       <SetMppiParams node="{node}"
                 controller_node="/AT_R2/controller_server"
@@ -20,22 +28,14 @@
                 pathalign_use_path_orientations="false"
                 pathalign_threshold="3.0"
                 pathalign_offset_from_furthest="15"
-                wz_std="0.25"
-                vx_std="0.35"
-                vy_std="0.4"
-                wz_max="1.5"
-                costcritic_weight="20.0"
-                costcritic_consider_footprint="true"
-                pathfollow_weight="14.0"/>
-      <!--      wz_std="0.45"
-                vx_std="0.35"
-                vy_std="0.4" -->
-
+                wz_std="0.45"
+                vx_std="0.45"
+                vy_std="0.30"/>
       <SetCostmapInflation node="{node}"
-                local_radius="0.05"
+                local_radius="0.1"
                 global_radius="0.15"
                 local_cost_scaling_factor="1.0"
-                global_cost_scaling_factor="1.0"/>
+                global_cost_scaling_factor="4.0"/>
       <!-- <PublishHeadCmd node="{node}" command="8"
                             topic="/AT_R2/head_gripper_cmd"
                             wait_done="false"/> -->
@@ -43,14 +43,7 @@
                             topic="/AT_R2/head_gripper_cmd"
                             wait_done="false"/>
 
-      <WaitForStart node="{node}"
-                    prompt="参数已设置完成，按 Enter 或发布 /AT_R2/start_cmd 开始连续抓取武器头"
-                    start_topic="/AT_R2/meilin_mission_start"
-                    start_value="1"
-                    enable_topic="true"
-                    clear_buffer="true"
-                    timeout="0.0"/>
-
+      <!-- (重试版已去掉等 /AT_R2/meilin_mission_start 的 WaitForStart) -->
 
       <!-- <PublishGoal node="{node}" x="2.3" y="3.0" yaw="0.0" frame_id="map" goal="{goal}"/> -->
 
@@ -73,15 +66,8 @@
         <Script code="arm_prep_queued := 0"/>
         <!-- 循环迭代计数：仅在第一次迭代完成后设置一次导航参数 -->
         <Script code="loop_idx := 0"/>
-        <!-- 上一次发出去的 prep_yaw；用于判断是否需要先回 from 中心 pivot。
-             机器人入场朝向 +x (0 rad)，首次差值为 0，天然不 pivot。 -->
-        <Script code="last_prep_yaw := 0.0"/>
 
-        <!-- <WaitForEnter node="{node}"
-                      prompt="参数已设置完成，按 Enter 开始导航"
-                      require_tty="false"
-                      clear_buffer="true"
-                      timeout="0.0"/> -->
+        <!-- (重试版已去掉等 Enter 开始导航的 WaitForEnter) -->
 
         <Repeat num_cycles="{num_steps}">
           <Sequence>
@@ -136,10 +122,10 @@
                           plugin_prefix="FollowPath"
                           goal_angle_weight="6.0"
                           wait_after_set="0.3"
-                          goal_angle_threshold="0.5"
-                          wz_std="0.4"
-                          vx_std="0.4"
-                          vy_std="0.5"/>
+                          goal_angle_threshold="2.0"
+                          wz_std="0.45"
+                          vx_std="0.45"
+                          vy_std="0.35"/>
                 <SetCostmapInflation node="{node}"
                           local_radius="0.25"
                           global_radius="0.25"

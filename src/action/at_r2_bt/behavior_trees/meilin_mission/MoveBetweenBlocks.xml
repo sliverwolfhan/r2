@@ -21,9 +21,27 @@
                              target_x="{prep_x}" target_y="{prep_y}" target_yaw="{prep_yaw}"
                              x_tolerance="0.15" y_tolerance="0.15" yaw_tolerance="0.1"/>
           </Sequence>
-          <PublishGoal node="{node}"
-                       x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
+          <Sequence>
+            <!-- 与上一次 prep_yaw 相差 ≥ 0.26rad (~15°)：先回 from 中心 pivot，再平移到偏移 prep。
+                 相差不到阈值(两个 ScriptCondition 都通过)则跳过 pivot Sequence。 -->
+            <Fallback>
+              <Sequence>
+                <ScriptCondition code="prep_yaw - last_prep_yaw &lt; 0.26"/>
+                <ScriptCondition code="prep_yaw - last_prep_yaw &gt; -0.26"/>
+              </Sequence>
+              <Sequence>
+                <GetBlockCenter block_id="{from_id}" block_yaml="{block_yaml}"
+                                center_x="{center_x}" center_y="{center_y}"/>
+                <PublishGoal node="{node}"
+                             x="{center_x}" y="{center_y}" yaw="{prep_yaw}"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Sequence>
+            </Fallback>
+            <PublishGoal node="{node}"
+                         x="{prep_x}" y="{prep_y}" yaw="{prep_yaw}"
+                         frame_id="map" goal="{nav_goal}"/>
+            <Script code="last_prep_yaw := prep_yaw"/>
+          </Sequence>
         </Fallback>
         <ForceSuccess>
           <Switch3 variable="{need_finish}" case_1="1" case_2="2" case_3="0">
@@ -137,9 +155,26 @@
                 <IsPrepSkippable node="{node}"
                                  target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
                                  x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
-                <PublishGoal node="{node}"
-                             x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                             frame_id="map" goal="{nav_goal}"/>
+                <Sequence>
+                  <!-- 与上一次 prep_yaw 相差 ≥ 0.26rad (~15°)：先回 next_from 中心 pivot -->
+                  <Fallback>
+                    <Sequence>
+                      <ScriptCondition code="next_prep_yaw - last_prep_yaw &lt; 0.26"/>
+                      <ScriptCondition code="next_prep_yaw - last_prep_yaw &gt; -0.26"/>
+                    </Sequence>
+                    <Sequence>
+                      <GetBlockCenter block_id="{next_from_id}" block_yaml="{block_yaml}"
+                                      center_x="{center_x}" center_y="{center_y}"/>
+                      <PublishGoal node="{node}"
+                                   x="{center_x}" y="{center_y}" yaw="{next_prep_yaw}"
+                                   frame_id="map" goal="{nav_goal}"/>
+                    </Sequence>
+                  </Fallback>
+                  <PublishGoal node="{node}"
+                               x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                               frame_id="map" goal="{nav_goal}"/>
+                  <Script code="last_prep_yaw := next_prep_yaw"/>
+                </Sequence>
               </Fallback>
               <ForceSuccess>
                 <Sequence>
@@ -154,9 +189,25 @@
                 <IsPrepSkippable node="{node}"
                                  target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
                                  x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
-                <PublishGoal node="{node}"
-                             x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                             frame_id="map" goal="{nav_goal}"/>
+                <Sequence>
+                  <Fallback>
+                    <Sequence>
+                      <ScriptCondition code="next_prep_yaw - last_prep_yaw &lt; 0.26"/>
+                      <ScriptCondition code="next_prep_yaw - last_prep_yaw &gt; -0.26"/>
+                    </Sequence>
+                    <Sequence>
+                      <GetBlockCenter block_id="{next_from_id}" block_yaml="{block_yaml}"
+                                      center_x="{center_x}" center_y="{center_y}"/>
+                      <PublishGoal node="{node}"
+                                   x="{center_x}" y="{center_y}" yaw="{next_prep_yaw}"
+                                   frame_id="map" goal="{nav_goal}"/>
+                    </Sequence>
+                  </Fallback>
+                  <PublishGoal node="{node}"
+                               x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                               frame_id="map" goal="{nav_goal}"/>
+                  <Script code="last_prep_yaw := next_prep_yaw"/>
+                </Sequence>
               </Fallback>
               <ForceSuccess>
                 <Sequence>
@@ -172,9 +223,25 @@
           <IsPrepSkippable node="{node}"
                            target_x="{next_prep_x}" target_y="{next_prep_y}" target_yaw="{next_prep_yaw}"
                            x_tolerance="0.05" y_tolerance="0.05" yaw_tolerance="0.1"/>
-          <PublishGoal node="{node}"
-                       x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
-                       frame_id="map" goal="{nav_goal}"/>
+          <Sequence>
+            <Fallback>
+              <Sequence>
+                <ScriptCondition code="next_prep_yaw - last_prep_yaw &lt; 0.26"/>
+                <ScriptCondition code="next_prep_yaw - last_prep_yaw &gt; -0.26"/>
+              </Sequence>
+              <Sequence>
+                <GetBlockCenter block_id="{next_from_id}" block_yaml="{block_yaml}"
+                                center_x="{center_x}" center_y="{center_y}"/>
+                <PublishGoal node="{node}"
+                             x="{center_x}" y="{center_y}" yaw="{next_prep_yaw}"
+                             frame_id="map" goal="{nav_goal}"/>
+              </Sequence>
+            </Fallback>
+            <PublishGoal node="{node}"
+                         x="{next_prep_x}" y="{next_prep_y}" yaw="{next_prep_yaw}"
+                         frame_id="map" goal="{nav_goal}"/>
+            <Script code="last_prep_yaw := next_prep_yaw"/>
+          </Sequence>
         </Fallback>
         <!-- ===== never / default: 不做事 ===== -->
         <AlwaysSuccess/>
