@@ -120,9 +120,7 @@
                       task_id="1"
                       duration="2.0"/>
       </ParallelAll>
-      <!-- 底盘放气 -->
-      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
-      
+      <!-- 底盘放气 -->      
       <!-- 导航到放置准备点(P1) || 摆放置姿态, 两者都必须成功 -->
       <ParallelAll max_failures="1">
         <PublishGoal node="{node}"
@@ -171,6 +169,11 @@
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
+          <ArmMoveNamed node="{node}"
+                    pose_name="lift_block_2"
+                    server_name="robotic_task"
+                    task_id="1"
+                    duration="2.0"/>
           <ArmMoveNamed node="{node}"
                         pose_name="place_grid_blue_1"
                         server_name="robotic_task"
@@ -296,7 +299,7 @@
                             server_name="robotic_task"
                             task_id="1"
                             duration="2.0"/>
-              <ForceSuccess _skipIf="retry_val != 2">place_grid_bluplace_grid_blue_1_1e_1_1
+              <ForceSuccess _skipIf="retry_val != 2">
                 <DockToWall node="{node}"
                             vx="0.0"
                             vy="0.15"
@@ -391,7 +394,8 @@
             <AlwaysSuccess/>
           </DelayMs>
           <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
-          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="1.0"/>
+          <ArmMoveNamedAsync pose_name="lift_block2_2" task_id="1" duration="2.0"/>
           <ArmMoveNamedAsync pose_name="hold_block_blue" task_id="1" duration="3.0"/>
           <WaitArmIdle timeout="20.0"/>
         </Sequence>
