@@ -118,6 +118,11 @@
                       task_id="1"
                       duration="2.0"/>  
       </ParallelAll>
+      
+      <!--底盘气泵开 -->
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
+      <PublishPumpCmd node="{node}" command="0" topic="/AT_R2/chassis_pump_cmd"/>
+      
       <!-- 导航到放置准备点(P1) || 摆放置姿态, 两者都必须成功 -->
       <ParallelAll max_failures="1">
         <PublishGoal node="{node}"
@@ -382,6 +387,9 @@
           <WaitArmIdle timeout="20.0"/>
           <!-- 机械臂顶端气泵吸住底盘块 -->
           <PublishPumpCmd node="{node}" command="1" topic="/AT_R2/pump_cmd"/>
+          <DelayMs delay_msec="1000">
+            <AlwaysSuccess/>
+          </DelayMs>
           <DelayMs delay_msec="500">
             <AlwaysSuccess/>
           </DelayMs>
@@ -666,13 +674,13 @@
             <DelayMs delay_msec="1000">
               <AlwaysSuccess/>
             </DelayMs>
-            <PublishLiftCmd node="{node}" command="3"/>
+            <ArmMoveNamed node="{node}"
+                          pose_name="three_layer_arm_3_red"
+                          server_name="robotic_task"
+                          task_id="1"
+                          duration="2.0"/>
           </Sequence>
-          <ArmMoveNamed node="{node}"
-                        pose_name="three_layer_arm_3_red"
-                        server_name="robotic_task"
-                        task_id="1"
-                        duration="2.0"/>
+          <PublishLiftCmd node="{node}" command="3"/>
         </ParallelAll>
         <DelayMs delay_msec="2000">
           <AlwaysSuccess/>
@@ -723,7 +731,7 @@
         <!-- 发 lift command=1 (发指令 || 摆臂, 两者都必须成功) -->
         <ParallelAll max_failures="1">
           <Sequence>
-            <DelayMs delay_msec="1000">
+            <DelayMs delay_msec="3000">
               <AlwaysSuccess/>
             </DelayMs>
             <PublishLiftCmd node="{node}" command="1"/>
@@ -752,13 +760,13 @@
             <DelayMs delay_msec="1000">
               <AlwaysSuccess/>
             </DelayMs>
-            <PublishLiftCmd node="{node}" command="3"/>
+            <ArmMoveNamed node="{node}"
+                          pose_name="three_layer_arm_3_red"
+                          server_name="robotic_task"
+                          task_id="1"
+                          duration="2.0"/>
           </Sequence>
-          <ArmMoveNamed node="{node}"
-                        pose_name="three_layer_arm_3_red"
-                        server_name="robotic_task"
-                        task_id="1"
-                        duration="2.0"/>
+          <PublishLiftCmd node="{node}" command="3"/>
         </ParallelAll>
         <DelayMs delay_msec="2000">
           <AlwaysSuccess/>

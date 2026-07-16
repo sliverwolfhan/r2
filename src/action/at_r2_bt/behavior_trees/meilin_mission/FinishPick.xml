@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4">
+
+  <!-- ================== FinishPick 子树（PICK→PICK 就地收尾）==================
+       正常情况下 PICK 的收尾（lift/stow/place/关泵）是搬到紧跟的 MOVE 子树里、
+       与爬楼梯并行执行的（见 MoveBetweenBlocks.xml 段A/段B 的 need_finish==1 分支）。
+       但当一次 PICK 的下一步还是 PICK 时，中间没有 MOVE，收尾就没人做。
+       本子树在这种场景下于原地（还在 prep 位）串行补齐收尾：无台阶可并行，
+       所以把 MOVE 段A + 段B 的收尾臂动作前后串起来跑。
+
+       ⚠ 收尾动作序列与 MoveBetweenBlocks.xml 段A/段B 的 need_finish==1 分支语义一致，
+         区别仅在于此处串行、MOVE 处并行。若调整收尾姿态序列，两处需同步。
+
+       - pick_count==1：第1块，放置到车上 -> lift/stow/place/关泵，再 stow/lift/ready
+       - pick_count==2：第2块，举着     -> lift2/stow2/place2，再 place2/ready
+       收尾完成后清 need_finish := 0（与 MOVE 段C 末尾一致）。 -->
+  <BehaviorTree ID="FinishPick">
+    <Sequence>
+      <Switch2 variable="{pick_count}" case_1="1" case_2="2">
+        <!-- ===== 第1块：放置到车上 ===== -->
+        <Sequence>
+          <!-- 段A：lift -> stow -> place -> 等落定 -> 关泵 -->
+          <PublishHeadCmd node="{node}" command="10"
+                  topic="/AT_R2/head_gripper_cmd"
+                  wait_done="false"/>
+          <ArmMoveNamedAsync pose_name="lift_block"  task_id="1" duration="-1.0"/>
+          <ArmMoveNamedAsync pose_name="stow_block"  task_id="1" duration="1.2"/>
+          <ArmMoveNamedAsync pose_name="place_block" task_id="1" duration="0.8"/>
+          <WaitArmIdle timeout="20.0"/>
+          <PublishPumpCmd node="{node}" command="0"/>
+          <!-- 段B：放稳后 stow -> lift -> ready -->
+          <ArmMoveNamedAsync pose_name="stow_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="lift_block" task_id="1" duration="0.8"/>
+          <ArmMoveNamedAsync pose_name="ready"      task_id="1" duration="0.8"/>
+          <WaitArmIdle timeout="20.0"/>
+        </Sequence>
+        <!-- ===== 第2块：举着 ===== -->
+        <Sequence>
+          <!-- 段A：lift2 -> 等抬升到位 -> stow2 -> place2 -->
+          <ArmMoveNamedAsync pose_name="lift_block2" task_id="1" duration="-1.0"/>
+          <WaitArmIdle timeout="20.0"/>
+          <ArmMoveNamedAsync pose_name="stow_block2"  task_id="1" duration="1.2"/>
+          <ArmMoveNamedAsync pose_name="place_block2" task_id="1" duration="1.0"/>
+          <!-- 段B：place2 -> ready -->
+          <ArmMoveNamedAsync pose_name="place_block2" task_id="1" duration="1.0"/>
+          <ArmMoveNamedAsync pose_name="ready"        task_id="1" duration="1.5"/>
+          <WaitArmIdle timeout="20.0"/>
+        </Sequence>
+        <!-- 默认分支：pick_count 正常只会是 1/2，兜底不动臂。
+             （BT.CPP 要求 Switch2 恰好 3 个子节点：2 case + 1 default） -->
+        <AlwaysSuccess/>
+      </Switch2>
+
+      <!-- 收尾完成，消费掉标志 -->
+      <Script code="need_finish := 0"/>
+    </Sequence>
+  </BehaviorTree>
+
+</root>

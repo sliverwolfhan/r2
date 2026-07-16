@@ -5,6 +5,7 @@
   <include path="meilin_mission/MoveBetweenBlocks.xml"/>
   <include path="meilin_mission/PickAtBlock.xml"/>
   <include path="meilin_mission/PushAtBlock.xml"/>
+  <include path="meilin_mission/FinishPick.xml"/>
 
   <!-- ================== 主树 ==================
        每轮：先 Pop 出当前步，再 Peek 偷看下一步（写到 next_* 黑板键），
@@ -120,6 +121,18 @@
               </DelayMs>
               <AlwaysFailure/>
             </Switch4>
+
+            <!-- PICK→PICK：下一步没有 MOVE 来消费 need_finish，就地补一次收尾
+                 （lift/stow/place/关泵）。next_step_type 用 Switch 路由（与全局风格一致），
+                 再用 need_finish==1 保证只有刚 PICK 完才收尾。PICK→MOVE 时不命中 PICK 分支，
+                 need_finish 仍留给 MOVE，行为不变。 -->
+            <Switch2 variable="{next_step_type}" case_1="PICK" case_2="__never__">
+              <Precondition if="need_finish == 1" else="SUCCESS">
+                <SubTree ID="FinishPick" _autoremap="true"/>
+              </Precondition>
+              <AlwaysSuccess/>
+              <AlwaysSuccess/>
+            </Switch2>
 
             <!-- 本次迭代计数 +1，仅在第一次迭代完成后设置一次导航参数 -->
             <Script code="loop_idx += 1"/>
